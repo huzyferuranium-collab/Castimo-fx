@@ -1,0 +1,126 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User profile with role, email, and preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique identifier" },
+        "email": { "type": "string", "description": "User email address" },
+        "displayName": { "type": "string", "description": "Full name or alias" },
+        "role": { "type": "string", "enum": ["client", "admin"], "description": "User authorization role" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Subscription": {
+      "title": "Subscription",
+      "description": "Client trading subscription plan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Subscription ID" },
+        "userId": { "type": "string", "description": "User ID" },
+        "planId": { "type": "string", "enum": ["weekly", "monthly"], "description": "Plan identifier" },
+        "planName": { "type": "string", "description": "Plan display name" },
+        "priceUsdt": { "type": "number", "description": "Price in TRC20 USDT" },
+        "status": {
+          "type": "string",
+          "enum": ["pending_payment", "payment_submitted", "payment_confirming", "active", "expiring", "expired", "suspended", "cancelled"],
+          "description": "Subscription status"
+        },
+        "txHash": { "type": "string", "description": "TRC20 Transaction hash" },
+        "confirmations": { "type": "number", "description": "Block confirmations" },
+        "startDate": { "type": "string", "description": "Start timestamp" },
+        "expiresAt": { "type": "string", "description": "Expiration timestamp" },
+        "createdAt": { "type": "string", "description": "Creation timestamp" }
+      },
+      "required": ["id", "userId", "planId", "status"]
+    },
+    "Mt5Account": {
+      "title": "MT5 Account",
+      "description": "Client MT5 connection state without storing raw credentials",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Account ID" },
+        "userId": { "type": "string", "description": "Owner user ID" },
+        "accountNumber": { "type": "string", "description": "MT5 Account Number" },
+        "brokerServer": { "type": "string", "description": "Broker server name" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "connecting", "connected", "copying", "connection_failed", "disconnect_requested", "closing_positions", "disconnected", "disconnect_failed", "blocked"],
+          "description": "Current MT5 bridge state"
+        },
+        "balance": { "type": "number", "description": "Current balance in USD" },
+        "equity": { "type": "number", "description": "Current equity in USD" },
+        "freeMargin": { "type": "number", "description": "Current free margin in USD" },
+        "marginLevel": { "type": "number", "description": "Margin level percentage" },
+        "leverage": { "type": "number", "description": "Account leverage" },
+        "riskStatus": { "type": "string", "enum": ["normal", "warning", "blocked"], "description": "Risk engine assessment" },
+        "blockedReason": { "type": "string", "description": "Reason for trade blocking" },
+        "lastPing": { "type": "string", "description": "Last heartbeat from bridge" },
+        "createdAt": { "type": "string", "description": "Connection date" }
+      },
+      "required": ["id", "userId", "accountNumber", "brokerServer", "status"]
+    },
+    "WithdrawalRequest": {
+      "title": "Withdrawal Request",
+      "description": "Client withdrawal request with safety locks",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Withdrawal request ID" },
+        "userId": { "type": "string", "description": "Client ID" },
+        "amount": { "type": "number", "description": "Requested amount in USDT" },
+        "destinationAddress": { "type": "string", "description": "TRC20 USDT payout address" },
+        "status": {
+          "type": "string",
+          "enum": ["requested", "blocked", "reserved", "approved", "processing", "paid", "rejected", "cancelled"],
+          "description": "Withdrawal lifecycle status"
+        },
+        "estimatedWithdrawableAtRequest": { "type": "number", "description": "Snapshot of calculated withdrawable at submission" },
+        "hasOpenTrades": { "type": "boolean", "description": "Whether open positions existed at request time" },
+        "rejectionReason": { "type": "string", "description": "Rejection note if any" },
+        "createdAt": { "type": "string", "description": "Request timestamp" }
+      },
+      "required": ["id", "userId", "amount", "destinationAddress", "status"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "Security and financial audit record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Log entry ID" },
+        "userId": { "type": "string", "description": "Actor user ID" },
+        "action": { "type": "string", "description": "Action performed" },
+        "category": { "type": "string", "description": "Category (AUTH, MT5, RISK, WITHDRAWAL, PAYMENT, SETTLEMENT)" },
+        "details": { "type": "string", "description": "Sanitized description" },
+        "ip": { "type": "string", "description": "Origin IP address" },
+        "timestamp": { "type": "string", "description": "UTC timestamp" },
+        "status": { "type": "string", "description": "SUCCESS or FAILURE" }
+      },
+      "required": ["id", "action", "category", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile data keyed by user UID"
+    },
+    "/subscriptions/{subscriptionId}": {
+      "schema": { "$ref": "#/entities/Subscription" },
+      "description": "Trading subscription records"
+    },
+    "/mt5_accounts/{accountId}": {
+      "schema": { "$ref": "#/entities/Mt5Account" },
+      "description": "MT5 account states and equity monitoring"
+    },
+    "/withdrawals/{withdrawalId}": {
+      "schema": { "$ref": "#/entities/WithdrawalRequest" },
+      "description": "Client withdrawal requests and reservations"
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable security and activity audit records"
+    }
+  }
+}

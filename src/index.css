@@ -1,0 +1,746 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: dark light;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  background-color: #0b1120;
+}
+
+.font-mono,
+code,
+kbd,
+samp {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Mobile-friendly touch scrolling and tap highlight */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hide scrollbar for clean horizontal swipe on mobile */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+html.light {
+  color-scheme: light;
+}
+
+/* ========================================================
+   LIGHT / WHITE THEME HARMONIZATION SYSTEM
+   Balances backgrounds, cards, borders, text, and financial
+   accents (emerald/rose/amber/purple) for crisp WCAG contrast.
+   Eliminates all dark muddy areas and unreadable dark text.
+   ======================================================== */
+
+html.light body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* 1. Surfaces & Cards in White Theme */
+html.light .bg-slate-950,
+html.light [class*="bg-slate-950"] {
+  background-color: #f8fafc !important;
+  color: #0f172a;
+}
+
+html.light .bg-slate-900,
+html.light [class*="bg-slate-900"] {
+  background-color: #ffffff !important;
+  color: #0f172a;
+}
+
+html.light .bg-slate-800,
+html.light [class*="bg-slate-800"] {
+  background-color: #f1f5f9 !important;
+  color: #1e293b;
+}
+
+/* Hover States on Light Theme */
+html.light [class*="hover:bg-slate-800"]:hover {
+  background-color: #e2e8f0 !important;
+}
+
+html.light [class*="hover:bg-slate-700"]:hover {
+  background-color: #cbd5e1 !important;
+}
+
+html.light [class*="hover:bg-slate-900"]:hover {
+  background-color: #f8fafc !important;
+}
+
+/* Table Headers & Table Rows */
+html.light thead,
+html.light thead tr,
+html.light thead th {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light tr[class*="hover:bg-slate-800"]:hover,
+html.light div[class*="hover:bg-slate-800"]:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* 2. Borders in White Theme */
+html.light [class*="border-slate-8"],
+html.light [class*="border-slate-9"] {
+  border-color: #e2e8f0 !important;
+}
+
+html.light [class*="border-slate-7"] {
+  border-color: #cbd5e1 !important;
+}
+
+html.light [class*="divide-slate-8"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e2e8f0 !important;
+}
+
+/* 3. Eradicate Dark Gradient Patches on Cards & Dialog Headers */
+html.light [class*="from-emerald-9"],
+html.light [class*="from-emerald-8"] {
+  --tw-gradient-from: #ecfdf5 !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #ffffff, #ffffff !important;
+}
+
+html.light [class*="from-purple-9"],
+html.light [class*="from-purple-8"] {
+  --tw-gradient-from: #f5f3ff !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #ffffff, #ffffff !important;
+}
+
+html.light [class*="from-blue-9"],
+html.light [class*="from-blue-8"],
+html.light [class*="from-blue-6"] {
+  --tw-gradient-from: #eff6ff !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #ffffff, #ffffff !important;
+}
+
+html.light [class*="from-amber-9"],
+html.light [class*="from-amber-8"],
+html.light [class*="from-amber-6"] {
+  --tw-gradient-from: #fffbeb !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #ffffff, #ffffff !important;
+}
+
+html.light [class*="from-slate-8"],
+html.light [class*="from-slate-9"],
+html.light [class*="from-slate-950"] {
+  --tw-gradient-from: #f8fafc !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #ffffff, #ffffff !important;
+}
+
+html.light [class*="via-slate-8"],
+html.light [class*="via-slate-9"] {
+  --tw-gradient-via: #ffffff !important;
+}
+
+html.light [class*="to-slate-8"],
+html.light [class*="to-slate-9"] {
+  --tw-gradient-to: #ffffff !important;
+}
+
+/* 4. Dark Accent Badge Backgrounds Converted to Luminous Pastels */
+html.light [class*="bg-purple-950"],
+html.light [class*="bg-purple-900"] {
+  background-color: #f5f3ff !important;
+  color: #6b21a8 !important;
+}
+
+html.light [class*="bg-emerald-950"],
+html.light [class*="bg-emerald-900"] {
+  background-color: #ecfdf5 !important;
+  color: #065f46 !important;
+}
+
+html.light [class*="bg-amber-950"],
+html.light [class*="bg-amber-900"] {
+  background-color: #fffbeb !important;
+  color: #92400e !important;
+}
+
+html.light [class*="bg-rose-950"],
+html.light [class*="bg-rose-900"],
+html.light [class*="bg-red-950"],
+html.light [class*="bg-red-900"] {
+  background-color: #fff1f2 !important;
+  color: #9f1239 !important;
+}
+
+html.light [class*="border-purple-8"],
+html.light [class*="border-purple-9"] {
+  border-color: #ddd6fe !important;
+}
+
+html.light [class*="border-emerald-8"],
+html.light [class*="border-emerald-9"] {
+  border-color: #a7f3d0 !important;
+}
+
+html.light [class*="border-amber-8"],
+html.light [class*="border-amber-9"] {
+  border-color: #fde68a !important;
+}
+
+html.light [class*="border-rose-8"],
+html.light [class*="border-rose-9"] {
+  border-color: #fecdd3 !important;
+}
+
+/* 5. Typography Contrast in White Theme */
+html.light .text-white,
+html.light [class*="text-white"] {
+  color: #0f172a !important;
+}
+
+html.light .text-slate-900,
+html.light [class*="text-slate-900"] {
+  color: #0f172a !important;
+}
+
+html.light .text-slate-800,
+html.light [class*="text-slate-800"] {
+  color: #1e293b !important;
+}
+
+html.light .text-slate-700,
+html.light [class*="text-slate-700"] {
+  color: #334155 !important;
+}
+
+html.light .text-slate-600,
+html.light [class*="text-slate-600"] {
+  color: #475569 !important;
+}
+
+html.light .text-slate-500,
+html.light [class*="text-slate-500"] {
+  color: #475569 !important;
+}
+
+html.light .text-slate-400,
+html.light [class*="text-slate-400"] {
+  color: #475569 !important;
+}
+
+html.light .text-slate-300,
+html.light [class*="text-slate-300"] {
+  color: #334155 !important;
+}
+
+html.light .text-slate-200,
+html.light [class*="text-slate-200"] {
+  color: #1e293b !important;
+}
+
+html.light .text-slate-100,
+html.light [class*="text-slate-100"] {
+  color: #0f172a !important;
+}
+
+/* High-contrast colored status accents for light mode */
+html.light .text-emerald-400,
+html.light .text-emerald-300 {
+  color: #059669 !important; /* emerald-600 */
+}
+
+html.light .bg-emerald-500\/10,
+html.light .bg-emerald-500\/15,
+html.light .bg-emerald-500\/20 {
+  background-color: #ecfdf5 !important; /* emerald-50 */
+}
+
+html.light .border-emerald-500\/20,
+html.light .border-emerald-500\/30,
+html.light .border-emerald-500\/40 {
+  border-color: #a7f3d0 !important; /* emerald-200 */
+}
+
+html.light .text-rose-400,
+html.light .text-rose-300,
+html.light .text-red-400,
+html.light .text-red-300 {
+  color: #e11d48 !important; /* rose-600 */
+}
+
+html.light .text-rose-200,
+html.light .text-rose-200\/90 {
+  color: #881337 !important; /* rose-900 */
+}
+
+html.light .bg-rose-500\/10,
+html.light .bg-rose-500\/15,
+html.light .bg-rose-500\/20,
+html.light .bg-red-600\/30 {
+  background-color: #fff1f2 !important; /* rose-50 */
+}
+
+html.light .border-rose-500\/20,
+html.light .border-rose-500\/30,
+html.light .border-rose-500\/40,
+html.light .border-red-500\/40 {
+  border-color: #fecdd3 !important; /* rose-200 */
+}
+
+html.light .text-amber-400,
+html.light .text-amber-300 {
+  color: #b45309 !important; /* amber-700 */
+}
+
+html.light .text-amber-200,
+html.light .text-amber-200\/90 {
+  color: #78350f !important; /* amber-900 */
+}
+
+html.light .bg-amber-500\/10,
+html.light .bg-amber-500\/15,
+html.light .bg-amber-500\/20 {
+  background-color: #fffbeb !important; /* amber-50 */
+}
+
+html.light .border-amber-500\/20,
+html.light .border-amber-500\/30,
+html.light .border-amber-500\/40 {
+  border-color: #fde68a !important; /* amber-200 */
+}
+
+html.light .text-purple-400,
+html.light .text-purple-300,
+html.light .text-purple-200 {
+  color: #7c3aed !important; /* purple-600 */
+}
+
+html.light .bg-purple-500\/10,
+html.light .bg-purple-500\/15,
+html.light .bg-purple-500\/20 {
+  background-color: #f5f3ff !important; /* purple-50 */
+}
+
+html.light .border-purple-500\/40,
+html.light .border-purple-500\/30 {
+  border-color: #ddd6fe !important; /* purple-200 */
+}
+
+html.light .text-blue-400,
+html.light .text-blue-300 {
+  color: #2563eb !important; /* blue-600 */
+}
+
+html.light .bg-blue-500\/10,
+html.light .bg-blue-500\/15,
+html.light .bg-blue-500\/20 {
+  background-color: #eff6ff !important; /* blue-50 */
+}
+
+html.light .border-blue-500\/20,
+html.light .border-blue-500\/30,
+html.light .border-blue-500\/40 {
+  border-color: #bfdbfe !important; /* blue-200 */
+}
+
+/* High-contrast Cyan Accents for Light Theme */
+html.light .text-cyan-400,
+html.light .text-cyan-300,
+html.light .text-cyan-200 {
+  color: #0e7490 !important; /* cyan-700: deep, clear, high-contrast readable */
+}
+
+html.light .bg-cyan-500\/10,
+html.light .bg-cyan-500\/15,
+html.light .bg-cyan-500\/20 {
+  background-color: #ecfeff !important; /* cyan-50 */
+}
+
+html.light .border-cyan-500\/20,
+html.light .border-cyan-500\/30,
+html.light .border-cyan-500\/40,
+html.light .border-cyan-400\/70,
+html.light .border-cyan-500\/60 {
+  border-color: #a5f3fc !important; /* cyan-200 */
+}
+
+/* Eradicate hardcoded dark palette & white border in Light Theme */
+html.light .bg-\[\#090D16\],
+html.light [class*="bg-[#090D16]"],
+html.light [class*="bg-[#090d16]"] {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light [class*="border-white"] {
+  border-color: #e2e8f0 !important;
+}
+
+/* 6. Preserve White Text on Solid Color Buttons & Badges */
+html.light button.bg-purple-600,
+html.light button.bg-purple-500,
+html.light button.bg-blue-600,
+html.light button.bg-blue-500,
+html.light button.bg-emerald-600,
+html.light button.bg-indigo-600,
+html.light [class*="bg-purple-600"] .text-white,
+html.light [class*="bg-blue-600"] .text-white,
+html.light [class*="bg-emerald-600"] .text-white,
+html.light [class*="bg-indigo-600"] .text-white,
+html.light button[class*="from-purple"] .text-white,
+html.light button[class*="from-blue"] .text-white,
+html.light button[class*="from-emerald"] .text-white {
+  color: #ffffff !important;
+}
+
+/* 7. Soft Shadows in White Theme */
+html.light [class*="shadow-purple-9"],
+html.light [class*="shadow-emerald-9"],
+html.light [class*="shadow-rose-9"],
+html.light [class*="shadow-amber-9"] {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .shadow-xl,
+html.light .shadow-2xl {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* 8. Inputs & Form Elements in White Theme */
+html.light input:not([type="checkbox"]):not([type="radio"]),
+html.light select,
+html.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.light input:focus,
+html.light select:focus,
+html.light textarea:focus {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15) !important;
+}
+
+/* 9. Modals & Backdrops in White Theme */
+html.light .bg-black\/80,
+html.light .bg-black\/75,
+html.light .bg-black\/60,
+html.light .bg-slate-950\/80,
+html.light .bg-slate-950\/90 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+/* Custom Scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ========================================================
+   COMPACT FUTURISTIC AI ROBOT SIMULATION ANIMATIONS
+   ======================================================== */
+
+@keyframes robot-float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(0.8deg);
+  }
+}
+
+@keyframes robot-eyes-scan {
+  0%, 100% {
+    transform: translateX(-5px);
+  }
+  50% {
+    transform: translateX(5px);
+  }
+}
+
+@keyframes radar-sweep {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes candle-drift {
+  0%, 100% {
+    transform: translateY(0px) scale(0.98);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(-8px) scale(1.02);
+    opacity: 1;
+  }
+}
+
+@keyframes beacon-pulse {
+  0%, 100% {
+    transform: scale(0.9);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+@keyframes data-particle {
+  0% {
+    transform: translateY(12px) scale(0.6);
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-16px) scale(1);
+    opacity: 0;
+  }
+}
+
+.animate-robot-float {
+  animation: robot-float 4s ease-in-out infinite;
+}
+
+.animate-robot-eyes {
+  animation: robot-eyes-scan 2.8s ease-in-out infinite alternate;
+}
+
+.animate-radar-sweep {
+  animation: radar-sweep 5s linear infinite;
+}
+
+.animate-candle-drift {
+  animation: candle-drift 3.5s ease-in-out infinite;
+}
+
+.animate-beacon-pulse {
+  animation: beacon-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes humanoid-head-pan {
+  0%, 100% {
+    transform: rotate(0deg) translateX(0px);
+  }
+  25% {
+    transform: rotate(-3.5deg) translateX(-3px) translateY(-1px);
+  }
+  50% {
+    transform: rotate(0.5deg) translateX(1px);
+  }
+  75% {
+    transform: rotate(4deg) translateX(4px) translateY(-1px);
+  }
+}
+
+@keyframes humanoid-optic-scan {
+  0%, 100% {
+    transform: translateX(-12px);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateX(12px);
+    opacity: 1;
+  }
+}
+
+@keyframes humanoid-left-hand {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-5px) rotate(-1.5deg);
+  }
+  60% {
+    transform: translateY(2px) rotate(1deg);
+  }
+  85% {
+    transform: translateY(-3px) rotate(-0.5deg);
+  }
+}
+
+@keyframes humanoid-right-hand {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  20% {
+    transform: translateY(3px) rotate(1.5deg);
+  }
+  55% {
+    transform: translateY(-4px) rotate(-1deg);
+  }
+  80% {
+    transform: translateY(-2px) rotate(0.5deg);
+  }
+}
+
+@keyframes humanoid-core-pulse {
+  0%, 100% {
+    box-shadow: 0 0 14px rgba(6, 182, 212, 0.4), inset 0 0 10px rgba(6, 182, 212, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(6, 182, 212, 0.85), inset 0 0 18px rgba(6, 182, 212, 0.95);
+  }
+}
+
+@keyframes holo-scan-line {
+  0% {
+    top: 0%;
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.9;
+  }
+  85% {
+    opacity: 0.9;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes holo-data-stream {
+  0% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.8;
+  }
+  80% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+}
+
+.animate-humanoid-head {
+  animation: humanoid-head-pan 9s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+
+.animate-humanoid-optic {
+  animation: humanoid-optic-scan 3.2s ease-in-out infinite;
+}
+
+.animate-humanoid-left-hand {
+  animation: humanoid-left-hand 4.8s ease-in-out infinite;
+  transform-origin: 30% 20%;
+}
+
+.animate-humanoid-right-hand {
+  animation: humanoid-right-hand 5.2s ease-in-out infinite;
+  transform-origin: 70% 20%;
+}
+
+.animate-humanoid-core {
+  animation: humanoid-core-pulse 3s ease-in-out infinite;
+}
+
+.animate-holo-scan {
+  animation: holo-scan-line 3.5s linear infinite;
+}
+
+.animate-holo-stream {
+  animation: holo-data-stream 4s linear infinite;
+}
+
+@keyframes assistant-head-bob {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-2px) rotate(1.2deg);
+  }
+}
+
+@keyframes assistant-visor-sweep {
+  0%, 100% {
+    transform: translateX(-16px);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateX(16px);
+    opacity: 1;
+  }
+}
+
+@keyframes assistant-core-pulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+.animate-assistant-head {
+  animation: assistant-head-bob 4.5s ease-in-out infinite;
+  transform-origin: 50% 85%;
+}
+
+.animate-assistant-visor {
+  animation: assistant-visor-sweep 2.4s ease-in-out infinite;
+}
+
+.animate-assistant-core {
+  animation: assistant-core-pulse 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-robot-float,
+  .animate-robot-eyes,
+  .animate-radar-sweep,
+  .animate-candle-drift,
+  .animate-beacon-pulse,
+  .animate-humanoid-head,
+  .animate-humanoid-optic,
+  .animate-humanoid-left-hand,
+  .animate-humanoid-right-hand,
+  .animate-humanoid-core,
+  .animate-holo-scan,
+  .animate-holo-stream,
+  .animate-assistant-head,
+  .animate-assistant-visor,
+  .animate-assistant-core {
+    animation: none !important;
+  }
+}
