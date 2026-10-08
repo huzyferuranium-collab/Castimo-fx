@@ -44,7 +44,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [role, setRole] = useState<UserRole>('client');
+  // New accounts are always clients. Admin rights can only be granted in Firebase.
+  const role: UserRole = 'client';
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
 
@@ -133,14 +134,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             >
               <User className="w-3 h-3" />
               <span>Client Demo</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDemo('admin')}
-              className="py-1 px-2.5 text-[11px] font-semibold rounded-lg bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 transition flex items-center gap-1 cursor-pointer"
-            >
-              <KeyRound className="w-3 h-3" />
-              <span>Admin Demo</span>
             </button>
           </div>
         </div>
@@ -268,33 +261,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Account Role</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setRole('client')}
-                      className={`py-1.5 px-3 text-xs rounded-lg border font-medium transition ${
-                        role === 'client'
-                          ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
-                          : 'border-slate-800 bg-slate-950/40 text-slate-400'
-                      }`}
-                    >
-                      Client Trader
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRole('admin')}
-                      className={`py-1.5 px-3 text-xs rounded-lg border font-medium transition ${
-                        role === 'admin'
-                          ? 'border-purple-500 bg-purple-500/10 text-purple-300'
-                          : 'border-slate-800 bg-slate-950/40 text-slate-400'
-                      }`}
-                    >
-                      Admin / Risk Lead
-                    </button>
-                  </div>
-                </div>
               </>
             )}
 
