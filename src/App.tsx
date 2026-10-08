@@ -48,12 +48,12 @@ const TickerBar: React.FC = () => {
 type ActivePortalTab = 'client' | 'referrals' | 'admin';
 
 const MainContent: React.FC = () => {
-  const { userProfile, loading, isDemoUser, demoLogin, switchRole } = useAuth();
+  const { userProfile, loading, isDemoUser, isDirectSession, demoLogin, switchRole } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [adminGateOpen, setAdminGateOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActivePortalTab>('client');
 
-  const isAdmin = userProfile?.role === 'admin';
+  const isAdmin = userProfile?.role === 'admin' && !isDemoUser && !isDirectSession;
 
   // Synchronize tab with user role when loaded
   React.useEffect(() => {

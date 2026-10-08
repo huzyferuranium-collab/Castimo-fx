@@ -47,14 +47,6 @@ const DEMO_CLIENT: UserProfile = {
   createdAt: new Date().toISOString(),
 };
 
-const DEMO_ADMIN: UserProfile = {
-  uid: 'demo-admin-castimo-999',
-  email: 'admin@castimofx.com',
-  displayName: 'Castimo Admin Ops',
-  role: 'admin',
-  createdAt: new Date().toISOString(),
-};
-
 function createMockUser(uid: string, email: string, displayName: string): User {
   return {
     uid,
@@ -141,7 +133,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const parsed = JSON.parse(stored);
         if (parsed?.uid && parsed?.email) {
           console.log('🔄 [Auth Session] Restoring persistent local session for:', parsed.email, `(Role: ${parsed.role})`);
-          setUserProfile(parsed);
+          // Stored sessions are local only and can never carry admin rights.
+          setUserProfile({ ...parsed, role: 'client' });
           setUser(createMockUser(parsed.uid, parsed.email, parsed.displayName || 'Trader'));
           setIsDirectSession(true);
           setLoading(false);
@@ -222,7 +215,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       uid,
       email: cleanEmail,
       displayName: cleanName,
-      role,
+      role: 'client',
       createdAt: new Date().toISOString(),
     };
 
@@ -328,7 +321,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         uid: createdUser.uid,
         email: createdUser.email || email,
         displayName: displayName || 'Trader',
-        role,
+        role: 'client',
         createdAt: new Date().toISOString(),
       };
 
@@ -473,31 +466,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  // View-only switch (admins previewing the client screen). Never saved anywhere,
+  // and it cannot grant admin rights: reloading restores the role stored in Firebase.
   const switchRole = async (newRole: UserRole) => {
     if (!userProfile) return;
-    const updated = { ...userProfile, role: newRole };
-    setUserProfile(updated);
-    console.log('🔄 [Auth] Switched role to:', newRole);
-
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-    } catch (e) {
-      // Ignored
-    }
-
-    if (!isDemoUser && !isDirectSession && user) {
-      try {
-        await setDoc(doc(db, 'users', user.uid), { role: newRole }, { merge: true });
-      } catch (e) {
-        console.warn('Role update notice:', e);
-      }
-    }
+    setUserProfile({ ...userProfile, role: newRole === 'admin' ? userProfile.role : newRole });
   };
 
-  const demoLogin = (role: UserRole) => {
+  const demoLogin = (_role?: UserRole) => {
     setIsDemoUser(true);
     setIsDirectSession(false);
-    const demoProfile = role === 'admin' ? DEMO_ADMIN : DEMO_CLIENT;
+    const demoProfile = DEMO_CLIENT; // demo sessions are always plain clients
     console.log('🎮 [Demo Mode] Activating demo session:', demoProfile);
     setUserProfile(demoProfile);
     try {
