@@ -1,0 +1,64 @@
+name: CI
+
+# Builds and tests every push. Nothing here deploys anything or touches secrets.
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bash ci/annotate.sh "npm install" npm install --no-audit --no-fund
+
+      - name: Typecheck app
+        if: always()
+        run: ANNOTATE_MODE=head bash ci/annotate.sh "Typecheck (app)" npx tsc --noEmit --pretty false
+
+      - name: Typecheck backend worker
+        if: always()
+        run: |
+          if [ -f worker/tsconfig.json ]; then
+            ANNOTATE_MODE=head bash ci/annotate.sh "Typecheck (worker)" npx tsc -p worker/tsconfig.json --pretty false
+          else
+            echo "no worker yet"
+          fi
+
+      - name: Backend tests
+        if: always()
+        run: |
+          if [ -d worker/test ]; then
+            bash ci/annotate.sh "Backend tests" bun test worker/test
+          else
+            echo "no worker tests yet"
+          fi
+
+      - name: Production build
+        if: always()
+        run: bash ci/annotate.sh "vite build" npm run build
+
+      - name: Worker bundle check (dry run, no deploy)
+        if: always()
+        run: |
+          if [ -f wrangler.jsonc ]; then
+            bash ci/annotate.sh "wrangler dry-run" npx --yes wrangler@4 deploy --dry-run --outdir .wrangler-dry
+          else
+            echo "no wrangler.jsonc yet"
+          fi
