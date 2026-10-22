@@ -99,6 +99,21 @@
         "status": { "type": "string", "description": "SUCCESS or FAILURE" }
       },
       "required": ["id", "action", "category", "timestamp"]
+    },
+    "EmailVerification": {
+      "title": "Email Verification",
+      "description": "Email verification OTP code record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Verification ID or encoded email" },
+        "email": { "type": "string", "description": "Target email address" },
+        "code": { "type": "string", "description": "6-digit verification code" },
+        "expiresAt": { "type": "string", "description": "Expiration ISO timestamp" },
+        "createdAt": { "type": "string", "description": "Creation ISO timestamp" },
+        "verified": { "type": "boolean", "description": "Verification status" },
+        "attempts": { "type": "number", "description": "Number of validation attempts" }
+      },
+      "required": ["id", "email", "code", "expiresAt", "verified"]
     }
   },
   "firestore": {
@@ -121,6 +136,10 @@
     "/audit_logs/{logId}": {
       "schema": { "$ref": "#/entities/AuditLog" },
       "description": "Immutable security and activity audit records"
+    },
+    "/email_verifications/{verificationId}": {
+      "schema": { "$ref": "#/entities/EmailVerification" },
+      "description": "Email OTP verification records"
     }
   }
 }

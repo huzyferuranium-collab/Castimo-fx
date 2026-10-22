@@ -76,52 +76,11 @@ const INITIAL_MARKETS: MarketItem[] = [
   },
 ];
 
-const INITIAL_RECENT_SIGNALS: AiSignal[] = [
-  {
-    id: 'sig-1',
-    symbol: 'XAU/USD',
-    direction: 'BUY',
-    confidence: 84,
-    timeframe: '15M',
-    analysis: 'Institutional Liquidity Sweep & Bullish Order Block Rejection',
-    timestamp: '12:45',
-    entryPrice: 2648.5,
-    stopLoss: 2638.0,
-    takeProfit: 2670.0,
-  },
-  {
-    id: 'sig-2',
-    symbol: 'XAU/USD',
-    direction: 'BUY',
-    confidence: 79,
-    timeframe: '15M',
-    analysis: 'Fair Value Gap (FVG) Retest with Delta Volume Absorption',
-    timestamp: '11:22',
-    entryPrice: 2642.0,
-    stopLoss: 2632.5,
-    takeProfit: 2662.0,
-  },
-  {
-    id: 'sig-3',
-    symbol: 'XAU/USD',
-    direction: 'SELL',
-    confidence: 74,
-    timeframe: '1H',
-    analysis: 'Asian Session High Sweep & Bearish Market Structure Shift',
-    timestamp: '10:15',
-    entryPrice: 2658.0,
-    stopLoss: 2666.5,
-    takeProfit: 2641.0,
-  },
-];
+const INITIAL_RECENT_SIGNALS: AiSignal[] = [];
 
 const INITIAL_LOGS: ActivityLogEntry[] = [
-  { id: 'l1', time: '12:45:10', text: 'Scanning XAU/USD order book depth & liquidity pools...', type: 'scan' },
-  { id: 'l2', time: '12:44:52', text: 'Analyzing XAU/USD institutional market structure...', type: 'analyze' },
-  { id: 'l3', time: '12:44:30', text: 'Checking momentum & RSI divergence on XAU/USD 15M...', type: 'analyze' },
-  { id: 'l4', time: '12:44:12', text: 'XAU/USD signal confidence: 84% (High Probability)', type: 'signal' },
-  { id: 'l5', time: '12:43:55', text: 'Confirming algorithmic risk parameters on XAU/USD...', type: 'analyze' },
-  { id: 'l6', time: '12:43:40', text: 'Castimo Neural Engine online • MT5 Bridge Connected to Gold Desk', type: 'system' },
+  { id: 'l1', time: '12:00:00', text: 'Castimo Neural Engine online • MT5 Bridge Standby', type: 'system' },
+  { id: 'l2', time: '12:00:05', text: 'Scanning XAU/USD order book depth & liquidity pools...', type: 'scan' },
 ];
 
 // Audio synthesizer for optional, subtle futuristic feedback
@@ -213,21 +172,21 @@ class AiRobotEngine {
       currentTask: 'Scanning XAU/USD order book depth & liquidity pools...',
       currentMarket: 'XAU/USD',
       timeframe: '15M',
-      progress: 45,
-      confidence: 84,
+      progress: 0,
+      confidence: 0,
       isOnline: true,
       metrics: {
-        rsi: 62,
-        macd: 'POSITIVE',
-        trend: 'BULLISH',
-        momentum: 'STRONG',
-        volume: 'HIGH',
+        rsi: 50,
+        macd: 'NEUTRAL',
+        trend: 'NEUTRAL',
+        momentum: 'MODERATE',
+        volume: 'NORMAL',
         liquidity: 'OPTIMAL',
         volatility: 'MODERATE',
       },
       markets: INITIAL_MARKETS,
-      currentSignal: INITIAL_RECENT_SIGNALS[0],
-      recentSignals: INITIAL_RECENT_SIGNALS,
+      currentSignal: null,
+      recentSignals: [],
       logs: INITIAL_LOGS,
       soundEnabled: false,
     };

@@ -7,6 +7,19 @@ export interface UserProfile {
   role: UserRole;
   createdAt: string;
   photoURL?: string;
+  emailVerified?: boolean;
+  nationalId?: string;
+  nationalIdVerified?: boolean;
+}
+
+export interface EmailVerificationRecord {
+  id: string;
+  email: string;
+  code: string;
+  expiresAt: string;
+  createdAt: string;
+  verified: boolean;
+  attempts?: number;
 }
 
 export type SubscriptionStatus =
@@ -92,6 +105,12 @@ export interface Mt5Account {
   createdAt: string;
   copiedFromMasterAccount?: string;
   masterAccountName?: string;
+  accountHolderName?: string;
+  brokerName?: string;
+  isBrokerVerified?: boolean;
+  tradeAllowed?: boolean;
+  investorMode?: boolean;
+  verificationTimestamp?: string;
 }
 
 export interface MasterMt5Account {
@@ -103,6 +122,7 @@ export interface MasterMt5Account {
   balance: number;
   equity: number;
   freeMargin: number;
+  floatingPL?: number;
   marginLevel: number;
   leverage: number;
   latencyMs: number;
@@ -112,6 +132,8 @@ export interface MasterMt5Account {
   lastPing: string;
   connectedAt: string;
   openTradesCount: number;
+  activeTrades?: CopiedTrade[];
+  tradeHistory?: CopiedTrade[];
 }
 
 export interface CopiedTrade {

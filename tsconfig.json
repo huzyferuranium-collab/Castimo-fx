@@ -19,6 +19,12 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@metaapi/metaapi-javascript-sdk": [
+        "./node_modules/metaapi.cloud-sdk/dist/index.d.ts"
+      ],
+      "@metaapi/metaapi-javascript-sdk/*": [
+        "./node_modules/metaapi.cloud-sdk/dist/*"
       ]
     },
     "allowImportingTsExtensions": true,

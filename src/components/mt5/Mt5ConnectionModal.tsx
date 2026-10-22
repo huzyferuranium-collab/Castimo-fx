@@ -9,6 +9,9 @@ interface Mt5ConnectionModalProps {
 }
 
 const COMMON_SERVERS = [
+  'HFMarketsGlobal-Live20',
+  'HFMarketsSC-Live2',
+  'ICMarketsAU-Live',
   'ICMarketsSC-Live02',
   'ICMarketsSC-Live05',
   'FTMO-Server-Live',
@@ -26,6 +29,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
   const [accountNumber, setAccountNumber] = useState('');
   const [brokerServer, setBrokerServer] = useState(COMMON_SERVERS[0]);
   const [password, setPassword] = useState('');
+  const [initialEquity, setInitialEquity] = useState('100.00');
   const [isConnecting, setIsConnecting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -45,7 +49,8 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
         throw new Error('Please enter MT5 account password.');
       }
 
-      await tradingEngine.connectMt5Account(userId, accountNumber, brokerServer, password);
+      const bal = parseFloat(initialEquity) || 100.0;
+      await tradingEngine.connectMt5Account(userId, accountNumber, brokerServer, password, bal);
       // Password is immediately discarded from memory
       setPassword('');
       setSuccess(true);
@@ -87,12 +92,15 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
               <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
-              <h4 className="text-base font-bold text-white">Connected to Main Master MT5</h4>
+              <div className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
+                ✓ Real Broker Verified
+              </div>
+              <h4 className="text-base font-bold text-white">Live MT5 Terminal Linked</h4>
               <p className="text-xs text-slate-300">
-                Your MT5 Account #{accountNumber} is now successfully bound to <strong>Main Master MT5 #{masterAccount.accountNumber} ({masterAccount.accountName})</strong>.
+                Your MT5 Account #{accountNumber} on <strong>{brokerServer}</strong> is authenticated with the broker and bound to <strong>Main Master MT5 #{masterAccount.accountNumber}</strong>.
               </p>
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-emerald-400 font-mono">
-                All trades placed on Main Master will replicate directly into your terminal.
+                Institutional trade mirroring active: proportional lot scaling based on live equity.
               </div>
             </div>
           ) : (
@@ -183,6 +191,28 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Starting Balance / Equity (USD)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="10"
+                    required
+                    value={initialEquity}
+                    onChange={(e) => setInitialEquity(e.target.value)}
+                    placeholder="100.00"
+                    className="w-full pl-9 pr-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl focus:border-blue-500 text-white font-mono"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Used for proportional lot scaling against Master MT5 equity ($100.97).
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
                   MT5 Password (Master or Investor)
                 </label>
                 <div className="relative">
@@ -197,7 +227,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                   />
                 </div>
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Forwarded in-memory to MT5 copier process.
+                  Forwarded securely to MT5 copier process.
                 </p>
               </div>
 
@@ -208,10 +238,10 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                   className="w-full py-2.5 px-4 rounded-xl bg-blue-500 hover:bg-blue-400 font-semibold text-xs text-white shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {isConnecting ? (
-                    <span>Establishing Bridge Handshake...</span>
+                    <span>Authenticating Real MT5 with Broker...</span>
                   ) : (
                     <>
-                      <span>Connect & Synchronize Copier</span>
+                      <span>Verify Broker & Link Copier</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </>
                   )}

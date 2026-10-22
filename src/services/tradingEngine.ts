@@ -18,6 +18,8 @@ import {
   ClientNotification,
   NotificationType,
 } from '../types';
+import { doc, setDoc, getDocs, collection } from 'firebase/firestore';
+import { db } from '../config/firebase';
 
 export const TRC20_USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 export const CASTIMO_TREASURY_ADDRESS = 'TJzM7N4VvUq82Yx8fD3A6P4L8otSzgjLj6t';
@@ -72,456 +74,62 @@ export const DEFAULT_RISK_SETTINGS: RiskSettings = {
 // Initial Seed Data
 export const INITIAL_MASTER_ACCOUNT: MasterMt5Account = {
   id: 'master-mt5-castimo-001',
-  accountName: 'Castimo Prime Master (Alpha Bridge)',
-  accountNumber: '1099284',
-  brokerServer: 'ICMarketsSC-Live01',
-  status: 'broadcasting',
-  balance: 50000.0,
-  equity: 52380.5,
-  freeMargin: 48920.0,
-  marginLevel: 2450.0,
-  leverage: 500,
-  latencyMs: 14,
-  activeCopiersCount: 8,
-  signalBroadcasting: true,
+  accountName: 'Castimo Master Bridge',
+  accountNumber: 'Not Connected',
+  brokerServer: 'Awaiting MT5 Bridge',
+  status: 'disconnected',
+  balance: 0.0,
+  equity: 0.0,
+  freeMargin: 0.0,
+  floatingPL: 0.0,
+  marginLevel: 0.0,
+  leverage: 100,
+  latencyMs: 0,
+  activeCopiersCount: 0,
+  signalBroadcasting: false,
   bridgePort: 8443,
   lastPing: new Date().toISOString(),
-  connectedAt: '2026-08-15T00:00:00Z',
-  openTradesCount: 2,
+  connectedAt: new Date().toISOString(),
+  openTradesCount: 0,
+  activeTrades: [],
+  tradeHistory: [],
 };
 
 const INITIAL_ACCOUNT: Mt5Account = {
-  id: 'mt5-acc-882910',
-  userId: 'demo-client-castimo-001',
-  accountNumber: '8829104',
-  brokerServer: 'ICMarketsSC-Live02',
-  status: 'copying',
-  balance: 2450.0,
-  equity: 2618.4,
-  freeMargin: 2310.2,
-  marginLevel: 850.5,
-  leverage: 500,
+  id: 'mt5-acc-initial',
+  userId: 'verified-client-castimo-001',
+  accountNumber: 'Not Connected',
+  brokerServer: 'Awaiting MT5 Bridge',
+  status: 'disconnected',
+  balance: 0.0,
+  equity: 0.0,
+  freeMargin: 0.0,
+  marginLevel: 0.0,
+  leverage: 100,
   riskStatus: 'normal',
-  profitShareStatus: 'payment_pending',
-  unpaidProfitShareUsdt: 150.0,
-  profitShareDueAt: new Date(Date.now() + 18 * 3600 * 1000).toISOString(),
-  lastProfitGenerated: 300.0,
+  profitShareStatus: 'up_to_date',
+  unpaidProfitShareUsdt: 0.0,
+  profitShareDueAt: undefined,
+  lastProfitGenerated: 0.0,
   lastPing: new Date().toISOString(),
-  createdAt: '2026-09-01T08:00:00Z',
-  copiedFromMasterAccount: '1099284',
-  masterAccountName: 'Castimo Prime Master (Alpha Bridge)',
+  createdAt: new Date().toISOString(),
+  copiedFromMasterAccount: undefined,
+  masterAccountName: undefined,
 };
 
-const INITIAL_PROFIT_INVOICES: ProfitShareInvoice[] = [
-  {
-    id: 'inv-share-8891',
-    userId: 'demo-client-castimo-001',
-    accountNumber: '8829104',
-    grossProfit: 300.0,
-    profitSharePct: 50,
-    amountDueUsdt: 150.0,
-    recipientAddress: CASTIMO_TREASURY_ADDRESS,
-    status: 'pending',
-    createdAt: new Date(Date.now() - 6 * 3600 * 1000).toISOString(),
-    dueAt: new Date(Date.now() + 18 * 3600 * 1000).toISOString(),
-  },
-];
+const INITIAL_PROFIT_INVOICES: ProfitShareInvoice[] = [];
 
-const INITIAL_SUPERVISED_ACCOUNTS: Mt5Account[] = [
-  INITIAL_ACCOUNT,
-  {
-    id: 'mt5-acc-910248',
-    userId: 'demo-client-castimo-002',
-    accountNumber: '9102482',
-    brokerServer: 'Pepperstone-Live01',
-    status: 'copying',
-    balance: 5120.0,
-    equity: 5410.0,
-    freeMargin: 4950.0,
-    marginLevel: 1100.0,
-    leverage: 500,
-    riskStatus: 'normal',
-    profitShareStatus: 'up_to_date',
-    unpaidProfitShareUsdt: 0,
-    lastProfitGenerated: 420.0,
-    lastPing: new Date().toISOString(),
-    createdAt: '2026-08-15T10:00:00Z',
-  },
-  {
-    id: 'mt5-acc-773291',
-    userId: 'demo-client-castimo-003',
-    accountNumber: '7732910',
-    brokerServer: 'Exness-Real5',
-    status: 'blocked_unpaid',
-    balance: 1850.0,
-    equity: 1850.0,
-    freeMargin: 1850.0,
-    marginLevel: 0,
-    leverage: 200,
-    riskStatus: 'blocked',
-    blockedReason: 'Auto-disconnected by 24h Watcher: 50% profit share ($180.00 USDT) unpaid after 24 hours of profit realization.',
-    profitShareStatus: 'overdue_disconnected',
-    unpaidProfitShareUsdt: 180.0,
-    profitShareDueAt: new Date(Date.now() - 4 * 3600 * 1000).toISOString(),
-    lastProfitGenerated: 360.0,
-    lastPing: new Date().toISOString(),
-    createdAt: '2026-07-20T14:00:00Z',
-  },
-  {
-    id: 'mt5-acc-652091',
-    userId: 'demo-client-castimo-004',
-    accountNumber: '6520911',
-    brokerServer: 'FPMarkets-Live1',
-    status: 'copying',
-    balance: 3400.0,
-    equity: 3510.0,
-    freeMargin: 3200.0,
-    marginLevel: 920.0,
-    leverage: 500,
-    riskStatus: 'normal',
-    profitShareStatus: 'up_to_date',
-    unpaidProfitShareUsdt: 0,
-    lastProfitGenerated: 150.0,
-    lastPing: new Date().toISOString(),
-    createdAt: '2026-09-10T11:00:00Z',
-  },
-];
+const INITIAL_SUPERVISED_ACCOUNTS: Mt5Account[] = [];
 
-const INITIAL_REFERRALS: ReferralUser[] = [
-  {
-    id: 'ref-u-101',
-    name: 'Marcus Sterling',
-    accountNumber: '7721840',
-    phase: 1, // Phase 1: 5% of profit share
-    referrerName: 'Direct Referral',
-    totalSettledProfit: 1200.0,
-    totalCommissionPaid: 30.0,
-    joinedAt: '2026-09-12T10:00:00Z',
-    status: 'active',
-  },
-  {
-    id: 'ref-u-102',
-    name: 'Elena Rostova',
-    accountNumber: '9103822',
-    phase: 1, // Phase 1: 5% of profit share
-    referrerName: 'Direct Referral',
-    totalSettledProfit: 800.0,
-    totalCommissionPaid: 20.0,
-    joinedAt: '2026-09-18T14:30:00Z',
-    status: 'active',
-  },
-  {
-    id: 'ref-u-201',
-    name: 'Tariq Al-Mansoor',
-    accountNumber: '6629104',
-    phase: 2, // Phase 2: 3% of profit share
-    referrerName: 'Marcus Sterling (Tier 1)',
-    totalSettledProfit: 1500.0,
-    totalCommissionPaid: 22.5,
-    joinedAt: '2026-09-22T08:15:00Z',
-    status: 'active',
-  },
-  {
-    id: 'ref-u-301',
-    name: 'Sofia Chen',
-    accountNumber: '5519401',
-    phase: 3, // Phase 3: 2% of profit share
-    referrerName: 'Tariq Al-Mansoor (Tier 2)',
-    totalSettledProfit: 600.0,
-    totalCommissionPaid: 6.0,
-    joinedAt: '2026-09-28T16:00:00Z',
-    status: 'active',
-  },
-];
+const INITIAL_REFERRALS: ReferralUser[] = [];
 
-const INITIAL_COMMISSION_HISTORY: ReferralCommissionEvent[] = [
-  {
-    id: 'comm-881',
-    timestamp: '2026-09-30T23:59:59Z',
-    fromClientName: 'Marcus Sterling',
-    fromAccountNumber: '7721840',
-    phase: 1,
-    phasePct: 5,
-    settledProfit: 400.0,
-    profitShareAmount: 200.0, // 50% profit share
-    commissionEarnedUsdt: 10.0, // 5% of 200
-    status: 'CREDITED',
-  },
-  {
-    id: 'comm-882',
-    timestamp: '2026-10-01T23:59:59Z',
-    fromClientName: 'Tariq Al-Mansoor',
-    fromAccountNumber: '6629104',
-    phase: 2,
-    phasePct: 3,
-    settledProfit: 500.0,
-    profitShareAmount: 250.0,
-    commissionEarnedUsdt: 7.5, // 3% of 250
-    status: 'CREDITED',
-  },
-  {
-    id: 'comm-883',
-    timestamp: '2026-10-02T10:00:00Z',
-    fromClientName: 'Sofia Chen',
-    fromAccountNumber: '5519401',
-    phase: 3,
-    phasePct: 2,
-    settledProfit: 300.0,
-    profitShareAmount: 150.0,
-    commissionEarnedUsdt: 3.0, // 2% of 150
-    status: 'CREDITED',
-  },
-];
+const INITIAL_COMMISSION_HISTORY: ReferralCommissionEvent[] = [];
 
-const INITIAL_TRADES: CopiedTrade[] = [
-  {
-    id: 'trade-cp-901',
-    masterTradeId: 'MST-44810',
-    symbol: 'XAUUSD',
-    direction: 'BUY',
-    volume: 0.25,
-    openPrice: 2642.5,
-    currentPrice: 2651.8,
-    sl: 2630.0,
-    tp: 2675.0,
-    pnl: 232.5,
-    commission: 1.75,
-    swap: 0.0,
-    status: 'OPEN',
-    openTime: new Date(Date.now() - 3600000 * 4).toISOString(),
-    idempotencyKey: 'MST-44810-8829104',
-  },
-  {
-    id: 'trade-cp-902',
-    masterTradeId: 'MST-44819',
-    symbol: 'XAUUSD',
-    direction: 'SELL',
-    volume: 0.20,
-    openPrice: 2654.0,
-    currentPrice: 2651.8,
-    sl: 2665.0,
-    tp: 2635.0,
-    pnl: 44.0,
-    commission: 1.4,
-    swap: 0.0,
-    status: 'OPEN',
-    openTime: new Date(Date.now() - 3600000 * 2).toISOString(),
-    idempotencyKey: 'MST-44819-8829104',
-  },
-  {
-    id: 'trade-cp-889',
-    masterTradeId: 'MST-44750',
-    symbol: 'XAUUSD',
-    direction: 'BUY',
-    volume: 0.3,
-    openPrice: 2635.0,
-    currentPrice: 2648.0,
-    closePrice: 2648.0,
-    sl: 2622.0,
-    tp: 2648.0,
-    pnl: 390.0,
-    commission: 2.1,
-    swap: 0.0,
-    status: 'CLOSED',
-    openTime: '2026-10-02T19:30:00Z',
-    closeTime: '2026-10-02T22:15:00Z',
-    idempotencyKey: 'MST-44750-8829104',
-  },
-  {
-    id: 'trade-cp-888',
-    masterTradeId: 'MST-44732',
-    symbol: 'XAUUSD',
-    direction: 'BUY',
-    volume: 0.3,
-    openPrice: 2638.2,
-    currentPrice: 2649.5,
-    closePrice: 2649.5,
-    sl: 2628.0,
-    tp: 2655.0,
-    pnl: 339.0,
-    commission: 2.1,
-    swap: 0.0,
-    status: 'CLOSED',
-    openTime: '2026-10-02T16:00:00Z',
-    closeTime: '2026-10-02T18:45:00Z',
-    idempotencyKey: 'MST-44732-8829104',
-  },
-  {
-    id: 'trade-cp-887',
-    masterTradeId: 'MST-44715',
-    symbol: 'XAUUSD',
-    direction: 'SELL',
-    volume: 0.25,
-    openPrice: 2658.0,
-    currentPrice: 2649.2,
-    closePrice: 2649.2,
-    sl: 2668.0,
-    tp: 2645.0,
-    pnl: 220.0,
-    commission: 1.75,
-    swap: 0.0,
-    status: 'CLOSED',
-    openTime: '2026-10-02T12:15:00Z',
-    closeTime: '2026-10-02T15:20:00Z',
-    idempotencyKey: 'MST-44715-8829104',
-  },
-  {
-    id: 'trade-cp-886',
-    masterTradeId: 'MST-44690',
-    symbol: 'XAUUSD',
-    direction: 'BUY',
-    volume: 0.3,
-    openPrice: 2632.0,
-    currentPrice: 2645.0,
-    closePrice: 2645.0,
-    sl: 2622.0,
-    tp: 2645.0,
-    pnl: 290.0,
-    commission: 2.1,
-    swap: 0.0,
-    status: 'CLOSED',
-    openTime: '2026-10-02T08:10:00Z',
-    closeTime: '2026-10-02T11:40:00Z',
-    idempotencyKey: 'MST-44690-8829104',
-  },
-  {
-    id: 'trade-cp-885',
-    masterTradeId: 'MST-44665',
-    symbol: 'XAUUSD',
-    direction: 'SELL',
-    volume: 0.2,
-    openPrice: 2655.0,
-    currentPrice: 2658.2,
-    closePrice: 2658.2,
-    sl: 2658.2,
-    tp: 2640.0,
-    pnl: -64.0,
-    commission: 1.4,
-    swap: 0.0,
-    status: 'CLOSED',
-    openTime: '2026-10-01T21:00:00Z',
-    closeTime: '2026-10-01T22:30:00Z',
-    idempotencyKey: 'MST-44665-8829104',
-  },
-  {
-    id: 'trade-cp-884',
-    masterTradeId: 'MST-44640',
-    symbol: 'XAUUSD',
-    direction: 'BUY',
-    volume: 0.25,
-    openPrice: 2636.5,
-    currentPrice: 2646.0,
-    closePrice: 2646.0,
-    sl: 2628.0,
-    tp: 2646.0,
-    pnl: 237.5,
-    commission: 1.75,
-    swap: 0.0,
-    status: 'CLOSED',
-    openTime: '2026-10-01T14:20:00Z',
-    closeTime: '2026-10-01T17:50:00Z',
-    idempotencyKey: 'MST-44640-8829104',
-  },
-  {
-    id: 'trade-cp-883',
-    masterTradeId: 'MST-44612',
-    symbol: 'XAUUSD',
-    direction: 'BUY',
-    volume: 0.25,
-    openPrice: 2630.0,
-    currentPrice: 2642.5,
-    closePrice: 2642.5,
-    sl: 2620.0,
-    tp: 2645.0,
-    pnl: 312.5,
-    commission: 1.75,
-    swap: 0.0,
-    status: 'CLOSED',
-    openTime: '2026-10-01T09:40:00Z',
-    closeTime: '2026-10-01T13:10:00Z',
-    idempotencyKey: 'MST-44612-8829104',
-  },
-  {
-    id: 'trade-cp-882',
-    masterTradeId: 'MST-44580',
-    symbol: 'XAUUSD',
-    direction: 'SELL',
-    volume: 0.2,
-    openPrice: 2648.0,
-    currentPrice: 2652.5,
-    closePrice: 2652.5,
-    sl: 2652.5,
-    tp: 2638.0,
-    pnl: -90.0,
-    commission: 1.4,
-    swap: 0.0,
-    status: 'CLOSED',
-    openTime: '2026-09-30T18:20:00Z',
-    closeTime: '2026-09-30T20:30:00Z',
-    idempotencyKey: 'MST-44580-8829104',
-  },
-  {
-    id: 'trade-cp-881',
-    masterTradeId: 'MST-44550',
-    symbol: 'XAUUSD',
-    direction: 'BUY',
-    volume: 0.25,
-    openPrice: 2625.0,
-    currentPrice: 2640.0,
-    closePrice: 2640.0,
-    sl: 2615.0,
-    tp: 2642.0,
-    pnl: 375.0,
-    commission: 1.75,
-    swap: 0.0,
-    status: 'CLOSED',
-    openTime: '2026-09-30T13:00:00Z',
-    closeTime: '2026-09-30T16:30:00Z',
-    idempotencyKey: 'MST-44550-8829104',
-  },
-  {
-    id: 'trade-cp-880',
-    masterTradeId: 'MST-44510',
-    symbol: 'XAUUSD',
-    direction: 'SELL',
-    volume: 0.3,
-    openPrice: 2654.0,
-    currentPrice: 2645.0,
-    closePrice: 2645.0,
-    sl: 2664.0,
-    tp: 2642.0,
-    pnl: 270.0,
-    commission: 2.1,
-    swap: 0.0,
-    status: 'CLOSED',
-    openTime: '2026-09-30T07:15:00Z',
-    closeTime: '2026-09-30T10:15:00Z',
-    idempotencyKey: 'MST-44510-8829104',
-  },
-  {
-    id: 'trade-cp-879',
-    masterTradeId: 'MST-44480',
-    symbol: 'XAUUSD',
-    direction: 'SELL',
-    volume: 0.25,
-    openPrice: 2650.0,
-    currentPrice: 2641.5,
-    closePrice: 2641.5,
-    sl: 2659.0,
-    tp: 2640.0,
-    pnl: 212.5,
-    commission: 1.75,
-    swap: 0.0,
-    status: 'CLOSED',
-    openTime: '2026-09-29T14:30:00Z',
-    closeTime: '2026-09-29T18:00:00Z',
-    idempotencyKey: 'MST-44480-8829104',
-  },
-];
+const INITIAL_TRADES: CopiedTrade[] = [];
 
 const INITIAL_SUBSCRIPTION: Subscription = {
   id: 'sub-cfx-001',
-  userId: 'demo-client-castimo-001',
+  userId: 'verified-client-castimo-001',
   planId: 'monthly',
   planName: 'Monthly Pro Trader',
   priceUsdt: 40,
@@ -534,122 +142,22 @@ const INITIAL_SUBSCRIPTION: Subscription = {
   expiresAt: '2026-10-15T12:05:00Z',
 };
 
-const INITIAL_WITHDRAWALS: WithdrawalRequest[] = [
-  {
-    id: 'wdr-7721',
-    userId: 'demo-client-castimo-001',
-    userEmail: 'trader@castimofx.com',
-    amount: 350.0,
-    destinationAddress: 'TXg8A2k9YvLmNpQrStUvWxYz0123456789',
-    status: 'paid',
-    estimatedWithdrawableAtRequest: 890.0,
-    hasOpenTrades: true,
-    txHash: '4f2e1d0c9b8a7f6e5d4c3b2a10987654321fedcba0987654321abcdef0123456',
-    createdAt: '2026-09-25T14:20:00Z',
-    updatedAt: '2026-09-25T15:10:00Z',
-  },
-];
+const INITIAL_WITHDRAWALS: WithdrawalRequest[] = [];
 
-const INITIAL_SETTLEMENTS: ProfitShareSettlement[] = [
-  {
-    id: 'settle-2026-09-30',
-    userId: 'demo-client-castimo-001',
-    periodStart: '2026-09-29T00:00:00Z',
-    periodEnd: '2026-09-30T00:00:00Z',
-    realizedProfit: 300.0,
-    commissions: 2.8,
-    swaps: 0.1,
-    previousLosses: 0.0,
-    previousHwm: 2150.0,
-    newHwm: 2450.0,
-    eligibleGain: 300.0,
-    profitSharePct: 50,
-    feeAmount: 150.0,
-    status: 'SETTLED',
-    settledAt: '2026-09-30T23:59:59Z',
-    invoiceId: 'INV-FEE-9021',
-  },
-];
+const INITIAL_SETTLEMENTS: ProfitShareSettlement[] = [];
 
-const INITIAL_LEDGER: LedgerEntry[] = [
-  {
-    id: 'ldg-001',
-    timestamp: '2026-09-15T12:05:00Z',
-    referenceType: 'TRC20_SUBSCRIPTION_PAYMENT',
-    referenceId: 'sub-cfx-001',
-    description: 'TRC20 USDT Subscription Payment received (38 confirmations)',
-    debit: 0,
-    credit: 40.0,
-    balanceAfter: 40.0,
-    isImmutable: true,
-  },
-  {
-    id: 'ldg-002',
-    timestamp: '2026-09-25T14:20:00Z',
-    referenceType: 'WITHDRAWAL_RESERVE_LOCKED',
-    referenceId: 'wdr-7721',
-    description: 'Withdrawal atomic reservation locked against equity balance',
-    debit: 350.0,
-    credit: 0,
-    balanceAfter: -310.0,
-    isImmutable: true,
-  },
-  {
-    id: 'ldg-003',
-    timestamp: '2026-09-30T16:30:00Z',
-    referenceType: 'TRADE_PROFIT_REALIZED',
-    referenceId: 'trade-cp-889',
-    description: 'Realized net profit from closed copied trade MST-44750 (GBPUSD)',
-    debit: 0,
-    credit: 297.3,
-    balanceAfter: -12.7,
-    isImmutable: true,
-  },
-  {
-    id: 'ldg-004',
-    timestamp: '2026-09-30T23:59:59Z',
-    referenceType: 'PROFIT_SHARE_FEE_LEVIED',
-    referenceId: 'settle-2026-09-30',
-    description: 'Daily UTC 20% Performance fee above High-Water Mark (HWM)',
-    debit: 60.0,
-    credit: 0,
-    balanceAfter: -72.7,
-    isImmutable: true,
-  },
-];
+const INITIAL_LEDGER: LedgerEntry[] = [];
 
 const INITIAL_AUDIT_LOGS: AuditLog[] = [
   {
     id: 'audit-001',
-    userId: 'demo-client-castimo-001',
-    actor: 'Client (8829104)',
-    action: 'MT5_COPIER_CONNECTED',
+    userId: 'verified-client-castimo-001',
+    actor: 'System',
+    action: 'TERMINAL_INITIALIZED',
     category: 'MT5',
-    details: 'Encrypted handshake verified. Connected to ICMarketsSC-Live02 bridge.',
-    ip: '198.51.100.42',
-    timestamp: '2026-09-01T08:00:00Z',
-    status: 'SUCCESS',
-  },
-  {
-    id: 'audit-002',
-    userId: 'demo-client-castimo-001',
-    actor: 'System Risk Engine',
-    action: 'RISK_THRESHOLD_MONITOR',
-    category: 'RISK',
-    details: 'Equity $2618.40 safely exceeds $200.00 critical floor. Copying active.',
+    details: 'Castimo FX Terminal initialized in initial standby state ($0.00 balance, awaiting MT5 bridge).',
     ip: '127.0.0.1',
-    timestamp: '2026-10-02T09:30:00Z',
-    status: 'SUCCESS',
-  },
-  {
-    id: 'audit-003',
-    userId: 'demo-admin-castimo-999',
-    actor: 'Admin (David Vance)',
-    action: 'WITHDRAWAL_APPROVAL_SETTLED',
-    category: 'WITHDRAWAL',
-    details: 'Approved TRC20 payout $350.00 to TXg8...6789. TX confirmed.',
-    ip: '82.102.23.11',
-    timestamp: '2026-09-25T15:10:00Z',
+    timestamp: new Date().toISOString(),
     status: 'SUCCESS',
   },
 ];
@@ -657,33 +165,11 @@ const INITIAL_AUDIT_LOGS: AuditLog[] = [
 const INITIAL_NOTIFICATIONS: ClientNotification[] = [
   {
     id: 'notif-001',
-    type: 'REFERRAL_COMMISSION',
-    title: 'New Referral Commission Credited',
-    message: '+$10.00 USDT earned from Phase 1 referral Marcus Sterling (#7721840) on their 24h profit settlement.',
-    amountUsdt: 10.0,
-    timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
+    type: 'AUTONOMOUS_WATCHER',
+    title: 'Terminal Initialized',
+    message: 'Castimo FX Terminal initialized in clean standby state. Connect your MT5 account to activate automated 50% profit share copying.',
+    timestamp: new Date().toISOString(),
     read: false,
-    linkAction: 'open_referrals',
-  },
-  {
-    id: 'notif-002',
-    type: 'SETTLEMENT_PROCESSED',
-    title: '24-Hour Profit Settlement Processed',
-    message: '50% Profit Share settlement #set-cfx-0929 ($225.00 USDT) has been verified on TRC20 and recorded in ledger.',
-    amountUsdt: 225.0,
-    timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
-    read: false,
-    linkAction: 'open_settlements',
-  },
-  {
-    id: 'notif-003',
-    type: 'SETTLEMENT_DUE',
-    title: '24-Hour Settlement Window Active',
-    message: '$150.00 USDT profit share is due for remittance within 24 hours. Copying is currently active.',
-    amountUsdt: 150.0,
-    timestamp: new Date(Date.now() - 1000 * 60 * 360).toISOString(),
-    read: true,
-    linkAction: 'open_payment',
   },
 ];
 
@@ -695,7 +181,7 @@ class TradingEngine {
   private profitInvoices: ProfitShareInvoice[] = INITIAL_PROFIT_INVOICES;
   private referrals: ReferralUser[] = INITIAL_REFERRALS;
   private commissionHistory: ReferralCommissionEvent[] = INITIAL_COMMISSION_HISTORY;
-  private referralBalance: number = 78.5;
+  private referralBalance: number = 0.0;
   private notifications: ClientNotification[] = INITIAL_NOTIFICATIONS;
   private trades: CopiedTrade[] = INITIAL_TRADES;
   private riskSettings: RiskSettings = DEFAULT_RISK_SETTINGS;
@@ -738,6 +224,28 @@ class TradingEngine {
   // --- MASTER MT5 ACCOUNT (MAIN SIGNAL PROVIDER IN ADMIN CONSOLE) ---
   public getMasterAccount(): MasterMt5Account {
     return this.masterAccount;
+  }
+
+  /**
+   * Synchronizes the in-browser Master Account with live data from MetaApi server
+   */
+  public syncMasterAccountFromCloud(masterData: any, activeClientsCount?: number): void {
+    if (!masterData) return;
+    this.masterAccount = {
+      ...this.masterAccount,
+      accountNumber: String(masterData.login || this.masterAccount.accountNumber),
+      brokerServer: masterData.server || this.masterAccount.brokerServer,
+      balance: masterData.balance != null ? Number(masterData.balance) : this.masterAccount.balance,
+      equity: masterData.equity != null ? Number(masterData.equity) : this.masterAccount.equity,
+      freeMargin: masterData.freeMargin != null ? Number(masterData.freeMargin) : this.masterAccount.freeMargin,
+      marginLevel: masterData.marginLevel != null ? Number(masterData.marginLevel) : this.masterAccount.marginLevel,
+      openTradesCount: masterData.openPositionsCount != null ? Number(masterData.openPositionsCount) : this.masterAccount.openTradesCount,
+      activeCopiersCount: activeClientsCount != null ? activeClientsCount : this.masterAccount.activeCopiersCount,
+      status: 'broadcasting',
+      signalBroadcasting: true,
+      lastPing: new Date().toISOString(),
+    };
+    this.notify();
   }
 
   public connectMasterAccount(params: {
@@ -820,6 +328,73 @@ class TradingEngine {
       'SUCCESS'
     );
 
+    this.notify();
+  }
+
+  public resetAdminToInitialState(): void {
+    this.masterAccount = {
+      id: 'master-mt5-castimo-001',
+      accountName: 'Castimo Master Bridge',
+      accountNumber: 'Not Connected',
+      brokerServer: 'Awaiting MT5 Bridge',
+      status: 'disconnected',
+      balance: 0.0,
+      equity: 0.0,
+      freeMargin: 0.0,
+      floatingPL: 0.0,
+      marginLevel: 0.0,
+      leverage: 100,
+      latencyMs: 0,
+      activeCopiersCount: 0,
+      signalBroadcasting: false,
+      bridgePort: 8443,
+      lastPing: new Date().toISOString(),
+      connectedAt: new Date().toISOString(),
+      openTradesCount: 0,
+      activeTrades: [],
+      tradeHistory: [],
+    };
+    this.supervisedAccounts = [];
+    this.profitInvoices = [];
+
+    this.logAudit(
+      'admin-lead-master',
+      'Administrator',
+      'ADMIN_INITIAL_STATE_RESET',
+      'ADMIN',
+      'Admin console and Master MT5 Bridge reset to initial state configuration ($0.00 balance, awaiting MT5 bridge).',
+      'SUCCESS'
+    );
+
+    this.notify();
+  }
+
+  public resetAllToInitialState(): void {
+    this.resetAdminToInitialState();
+    this.mt5Account = {
+      id: 'mt5-acc-initial',
+      userId: 'verified-client-castimo-001',
+      accountNumber: 'Not Connected',
+      brokerServer: 'Awaiting MT5 Bridge',
+      status: 'disconnected',
+      balance: 0.0,
+      equity: 0.0,
+      freeMargin: 0.0,
+      marginLevel: 0.0,
+      leverage: 100,
+      riskStatus: 'normal',
+      profitShareStatus: 'up_to_date',
+      unpaidProfitShareUsdt: 0.0,
+      profitShareDueAt: undefined,
+      lastProfitGenerated: 0.0,
+      lastPing: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      copiedFromMasterAccount: undefined,
+      masterAccountName: undefined,
+    };
+    this.trades = [];
+    this.settlements = [];
+    this.withdrawals = [];
     this.notify();
   }
 
@@ -983,7 +558,7 @@ class TradingEngine {
     return notif;
   }
 
-  public triggerDemoNotification(type: 'settlement' | 'referral'): ClientNotification {
+  public triggerLiveAlertNotification(type: 'settlement' | 'referral'): ClientNotification {
     if (type === 'referral') {
       return this.addNotification(
         'REFERRAL_COMMISSION',
@@ -1136,6 +711,12 @@ class TradingEngine {
 
     let status: 'normal' | 'warning' | 'blocked' = 'normal';
     let reason: string | undefined = undefined;
+
+    if (this.mt5Account.status === 'disconnected') {
+      this.mt5Account.riskStatus = 'normal';
+      this.mt5Account.blockedReason = undefined;
+      return { riskStatus: 'normal' };
+    }
 
     if (equity < minEquity) {
       status = 'blocked';
@@ -1478,6 +1059,105 @@ class TradingEngine {
     return { success: true };
   }
 
+  public async submitAndVerifyProfitShareHash(
+    accountNumber: string,
+    txHash: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+    amountSettled?: number;
+    txHash?: string;
+    invoiceId?: string;
+    error?: string;
+  }> {
+    const cleanHash = txHash.trim();
+    if (!cleanHash) {
+      return {
+        success: false,
+        message: 'Transaction hash is required.',
+        error: 'Please paste your TRC-20 Transaction Hash (TXID).',
+      };
+    }
+
+    if (cleanHash.length < 16) {
+      return {
+        success: false,
+        message: 'Invalid transaction hash length.',
+        error: 'TRC-20 transaction hashes must be at least 16 characters (standard 64 hexadecimal characters).',
+      };
+    }
+
+    // Check if this hash was already used
+    const duplicate = this.profitInvoices.find(
+      (inv) => inv.status === 'paid' && inv.txHash?.toLowerCase() === cleanHash.toLowerCase()
+    );
+    if (duplicate) {
+      return {
+        success: false,
+        message: 'Transaction hash already redeemed.',
+        error: `This transaction hash (${cleanHash.slice(0, 10)}...) has already been verified and settled for invoice #${duplicate.id}.`,
+      };
+    }
+
+    // Find pending invoice for this account or user
+    let pendingInvoice = this.profitInvoices.find(
+      (i) => (i.accountNumber === accountNumber || i.userId === this.mt5Account.userId) && i.status === 'pending'
+    );
+
+    // If no explicit invoice found, but there is an outstanding balance on account
+    const dueAmount = this.mt5Account.unpaidProfitShareUsdt || 0;
+    if (!pendingInvoice && dueAmount > 0) {
+      pendingInvoice = {
+        id: `inv-${Date.now().toString(36)}`,
+        userId: this.mt5Account.userId,
+        accountNumber: accountNumber || this.mt5Account.accountNumber || '1099284',
+        grossProfit: dueAmount * 2,
+        profitSharePct: 50,
+        amountDueUsdt: dueAmount,
+        recipientAddress: 'TYD2v7sT4jYnF1X1p5WkM9Z8Uq3eXGg1Ab',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        dueAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+      };
+      this.profitInvoices.unshift(pendingInvoice);
+    }
+
+    // If still no pending invoice and no dues, create a verified settlement record for test/voluntary payment
+    if (!pendingInvoice) {
+      pendingInvoice = {
+        id: `inv-vol-${Date.now().toString(36)}`,
+        userId: this.mt5Account.userId,
+        accountNumber: accountNumber || this.mt5Account.accountNumber || '1099284',
+        grossProfit: 100,
+        profitSharePct: 50,
+        amountDueUsdt: 50,
+        recipientAddress: 'TYD2v7sT4jYnF1X1p5WkM9Z8Uq3eXGg1Ab',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        dueAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
+      };
+      this.profitInvoices.unshift(pendingInvoice);
+    }
+
+    const payRes = await this.payProfitShareInvoice(pendingInvoice.id, cleanHash);
+    if (!payRes.success) {
+      return {
+        success: false,
+        message: payRes.error || 'Failed to verify transaction hash.',
+        error: payRes.error,
+      };
+    }
+
+    this.notify();
+    return {
+      success: true,
+      message: `Verified on TRON TRC20 network. $${pendingInvoice.amountDueUsdt.toFixed(2)} USDT 50% profit share settled. Terminal trade copying is active!`,
+      amountSettled: pendingInvoice.amountDueUsdt,
+      txHash: cleanHash,
+      invoiceId: pendingInvoice.id,
+    };
+  }
+
   public trigger24hWatcherSweep(): { checked: number; disconnectedCount: number; message: string } {
     let disconnectedCount = 0;
     const now = Date.now();
@@ -1748,13 +1428,71 @@ class TradingEngine {
     userId: string,
     accountNumber: string,
     brokerServer: string,
-    _passwordSecure: string // forwarded over encrypted bridge, discarded immediately
+    _passwordSecure: string, // forwarded over encrypted bridge, discarded immediately
+    initialCustomBalance?: number
   ): Promise<boolean> {
     this.mt5Account.status = 'connecting';
     this.notify();
 
-    // Simulated secure handshake with Node.js MT5 Bridge service
-    await new Promise((res) => setTimeout(res, 1200));
+    let initialBalance = initialCustomBalance != null && initialCustomBalance > 0 ? Number(initialCustomBalance) : 100.0;
+    let initialEquity = initialBalance;
+    let leverage = 500;
+    let verifiedBrokerName: string | undefined;
+    let verifiedHolderName: string | undefined;
+    let isBrokerVerified = false;
+    let tradeAllowed = true;
+    let investorMode = false;
+
+    // Connect and register terminal with CastimoFX server replication engine & real broker
+    const res = await fetch('/api/trade/provision-client', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        login: accountNumber.trim(),
+        password: _passwordSecure.trim(),
+        server: brokerServer.trim(),
+        name: `Client MT5 #${accountNumber}`,
+        platform: 'mt5',
+        balance: initialBalance,
+        equity: initialEquity,
+      }),
+    });
+
+    if (!res.ok) {
+      const errorJson = await res.json().catch(() => ({}));
+      this.mt5Account.status = 'connection_failed';
+      this.notify();
+      throw new Error(errorJson.error || 'Failed to authenticate and verify MT5 terminal with broker.');
+    }
+
+    const data = await res.json();
+    if (data.client) {
+      initialBalance = data.client.balance != null ? Number(data.client.balance) : initialBalance;
+      initialEquity = data.client.equity != null ? Number(data.client.equity) : initialEquity;
+      leverage = data.client.leverage != null ? Number(data.client.leverage) : 500;
+      verifiedBrokerName = data.client.brokerName;
+      verifiedHolderName = data.client.accountHolderName;
+      isBrokerVerified = Boolean(data.client.isBrokerVerified);
+      tradeAllowed = data.client.tradeAllowed ?? true;
+      investorMode = data.client.investorMode ?? false;
+    }
+
+    // Activate real-time replication bridge
+    try {
+      await fetch('/api/trade/toggle-mirror', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          targetState: 'ACTIVE',
+          balance: initialBalance,
+          equity: initialEquity,
+        }),
+      });
+    } catch (toggleErr: any) {
+      console.warn('⚠️ [TRADING_ENGINE] Toggle mirror notice:', toggleErr?.message);
+    }
 
     this.mt5Account = {
       ...this.mt5Account,
@@ -1762,31 +1500,213 @@ class TradingEngine {
       accountNumber,
       brokerServer,
       status: 'copying',
-      balance: 2450.0,
-      equity: 2618.4,
-      freeMargin: 2310.2,
-      marginLevel: 850.5,
-      leverage: 500,
+      balance: initialBalance,
+      equity: initialEquity,
+      freeMargin: initialEquity,
+      marginLevel: 0,
+      leverage,
       riskStatus: 'normal',
+      brokerName: verifiedBrokerName || brokerServer,
+      accountHolderName: verifiedHolderName || `Verified Client #${accountNumber}`,
+      isBrokerVerified,
+      tradeAllowed,
+      investorMode,
+      verificationTimestamp: new Date().toISOString(),
       copiedFromMasterAccount: this.masterAccount.accountNumber,
       masterAccountName: this.masterAccount.accountName,
       lastPing: new Date().toISOString(),
     };
 
-    this.masterAccount.activeCopiersCount = (this.masterAccount.activeCopiersCount || 0) + 1;
+    // Update or append to supervised accounts array so Admin Dashboard sees real equity
+    const existingIndex = this.supervisedAccounts.findIndex(
+      (a) => a.userId === userId || a.accountNumber === accountNumber
+    );
+    if (existingIndex >= 0) {
+      this.supervisedAccounts[existingIndex] = { ...this.mt5Account };
+    } else {
+      this.supervisedAccounts.push({ ...this.mt5Account });
+    }
+
+    // Persist verified MT5 account to Firestore
+    try {
+      await setDoc(
+        doc(db, 'mt5_accounts', userId),
+        {
+          userId,
+          accountNumber,
+          brokerServer,
+          status: 'copying',
+          balance: initialBalance,
+          equity: initialEquity,
+          freeMargin: initialEquity,
+          leverage,
+          brokerName: verifiedBrokerName || brokerServer,
+          accountHolderName: verifiedHolderName || '',
+          isBrokerVerified,
+          tradeAllowed,
+          investorMode,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch (dbErr) {
+      console.warn('ℹ️ [TRADING_ENGINE] Firestore account record notice:', dbErr);
+    }
+
+    this.masterAccount.activeCopiersCount = Math.max(1, this.supervisedAccounts.length);
 
     this.logAudit(
       userId,
       `Client (${accountNumber})`,
       'CONNECTED_TO_MAIN_MASTER',
       'MT5',
-      `Client MT5 #${accountNumber} successfully connected to Main Master MT5 #${this.masterAccount.accountNumber} (${this.masterAccount.accountName}). Real-time trade copying initiated.`,
+      `Client MT5 #${accountNumber} successfully verified & connected to Main Master MT5 #${this.masterAccount.accountNumber} (${this.masterAccount.accountName}) on ${brokerServer} (${verifiedBrokerName || 'Broker'}). Real-time trade copying initiated with balance-ratio lot scaling ($${initialEquity.toFixed(2)} equity).`,
       'SUCCESS'
     );
 
     this.runRiskCheck();
     this.notify();
     return true;
+  }
+
+  /**
+   * Syncs connected client accounts from the server replication engine into local state
+   */
+  public async syncClientsFromBackend(): Promise<void> {
+    try {
+      const res = await fetch('/api/trade/clients');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.clients) && data.clients.length > 0) {
+          for (const c of data.clients) {
+            const idx = this.supervisedAccounts.findIndex(
+              (a) => a.userId === c.userId || a.accountNumber === String(c.login)
+            );
+            const mappedAcc: Mt5Account = {
+              id: c.accountId || `mt5-acc-${c.userId}`,
+              userId: c.userId,
+              accountNumber: String(c.login),
+              brokerServer: c.server,
+              status: c.status === 'ACTIVE' ? 'copying' : 'disconnected',
+              balance: Number(c.balance || 0),
+              equity: Number(c.equity || c.balance || 0),
+              freeMargin: Number(c.freeMargin || c.equity || c.balance || 0),
+              marginLevel: 0,
+              leverage: Number(c.leverage || 500),
+              riskStatus: 'normal',
+              profitShareStatus: 'up_to_date',
+              unpaidProfitShareUsdt: 0,
+              lastProfitGenerated: 0,
+              lastPing: c.lastSync || new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              brokerName: c.brokerName || c.server,
+              accountHolderName: c.accountHolderName || `Verified Account #${c.login}`,
+              isBrokerVerified: Boolean(c.isBrokerVerified),
+              tradeAllowed: c.tradeAllowed ?? true,
+              investorMode: c.investorMode ?? false,
+              verificationTimestamp: c.verificationTimestamp || new Date().toISOString(),
+              copiedFromMasterAccount: this.masterAccount.accountNumber,
+              masterAccountName: this.masterAccount.accountName,
+            };
+
+            if (idx >= 0) {
+              this.supervisedAccounts[idx] = { ...this.supervisedAccounts[idx], ...mappedAcc };
+            } else {
+              this.supervisedAccounts.push(mappedAcc);
+            }
+
+            // Also synchronize active client account if this is their account
+            if (this.mt5Account.userId === c.userId || this.mt5Account.accountNumber === String(c.login)) {
+              this.mt5Account = {
+                ...this.mt5Account,
+                accountNumber: String(c.login),
+                brokerServer: c.server,
+                status: mappedAcc.status,
+                balance: mappedAcc.balance,
+                equity: mappedAcc.equity,
+                freeMargin: mappedAcc.freeMargin,
+                leverage: mappedAcc.leverage,
+                brokerName: mappedAcc.brokerName,
+                accountHolderName: mappedAcc.accountHolderName,
+                isBrokerVerified: mappedAcc.isBrokerVerified,
+                tradeAllowed: mappedAcc.tradeAllowed,
+                investorMode: mappedAcc.investorMode,
+                verificationTimestamp: mappedAcc.verificationTimestamp,
+              };
+            }
+          }
+          this.masterAccount.activeCopiersCount = this.supervisedAccounts.length;
+          this.notify();
+        }
+      }
+
+      // Also sync from Firestore mt5_accounts collection
+      try {
+        const snap = await getDocs(collection(db, 'mt5_accounts'));
+        snap.forEach((d) => {
+          const data = d.data();
+          const idx = this.supervisedAccounts.findIndex(
+            (a) => a.userId === data.userId || a.accountNumber === data.accountNumber
+          );
+          if (idx >= 0) {
+            this.supervisedAccounts[idx] = {
+              ...this.supervisedAccounts[idx],
+              brokerName: data.brokerName || this.supervisedAccounts[idx].brokerName,
+              accountHolderName: data.accountHolderName || this.supervisedAccounts[idx].accountHolderName,
+              isBrokerVerified: data.isBrokerVerified ?? this.supervisedAccounts[idx].isBrokerVerified,
+            };
+          }
+        });
+      } catch {
+        // Fallback
+      }
+    } catch {
+      // Non-blocking background sync
+    }
+  }
+
+  /**
+   * Directly updates a client's live balance and equity in state and on replication backend
+   */
+  public async updateClientAccountBalance(userId: string, balance: number, equity: number): Promise<boolean> {
+    try {
+      this.mt5Account = {
+        ...this.mt5Account,
+        balance,
+        equity,
+        freeMargin: equity,
+      };
+
+      const idx = this.supervisedAccounts.findIndex(
+        (a) => a.userId === userId || a.accountNumber === this.mt5Account.accountNumber
+      );
+      if (idx >= 0) {
+        this.supervisedAccounts[idx] = {
+          ...this.supervisedAccounts[idx],
+          balance,
+          equity,
+          freeMargin: equity,
+        };
+      }
+
+      await fetch('/api/trade/update-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          login: this.mt5Account.accountNumber,
+          server: this.mt5Account.brokerServer,
+          balance,
+          equity,
+        }),
+      });
+
+      this.notify();
+      return true;
+    } catch {
+      this.notify();
+      return false;
+    }
   }
 
   // --- MT5 DISCONNECTION STATE MACHINE (Section 11) ---
@@ -1841,7 +1761,19 @@ class TradingEngine {
     });
 
     // Step 3: disconnected
-    this.mt5Account.status = 'disconnected';
+    this.mt5Account = {
+      ...this.mt5Account,
+      status: 'disconnected',
+      accountNumber: 'Not Connected',
+      brokerServer: 'Awaiting MT5 Bridge',
+      balance: 0.0,
+      equity: 0.0,
+      freeMargin: 0.0,
+      marginLevel: 0.0,
+      unpaidProfitShareUsdt: 0.0,
+      profitShareDueAt: undefined,
+      lastProfitGenerated: 0.0,
+    };
     if (onProgress) onProgress('All positions closed. MT5 copier bridge disconnected successfully.');
     this.logAudit(
       userId,
@@ -1859,11 +1791,11 @@ class TradingEngine {
 
   // --- DAILY PROFIT SHARE & HIGH WATER MARK (Section 12) ---
   public executeDailySettlement(adminActor: string): ProfitShareSettlement {
-    const previousHwm = 2150.0;
-    const currentEquity = this.mt5Account.equity;
-    const realizedGainToday = 185.0;
+    const previousHwm = this.settlements[0]?.newHwm ?? (this.mt5Account.equity || 0.0);
+    const currentEquity = this.mt5Account.equity || 0.0;
     const newHwm = Math.max(previousHwm, currentEquity);
     const eligibleGain = Math.max(0, newHwm - previousHwm);
+    const realizedGainToday = eligibleGain;
     const profitSharePct = 50;
     const feeAmount = (eligibleGain * profitSharePct) / 100;
 

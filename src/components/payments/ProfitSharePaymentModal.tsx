@@ -220,24 +220,14 @@ export const ProfitSharePaymentModal: React.FC<ProfitSharePaymentModalProps> = (
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                <div className="pt-1">
                   <button
                     type="submit"
                     disabled={isVerifying}
                     className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 font-bold text-xs text-slate-950 shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     <CheckCircle2 className="w-4 h-4" />
-                    <span>{isVerifying ? 'Verifying...' : 'Confirm Remittance'}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleVerify()}
-                    disabled={isVerifying}
-                    className="w-full py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 font-semibold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Instant Demo Settle</span>
+                    <span>{isVerifying ? 'Verifying On-Chain TRC20...' : 'Confirm Remittance'}</span>
                   </button>
                 </div>
               </form>

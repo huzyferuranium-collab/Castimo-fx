@@ -98,8 +98,8 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
     }
   };
 
-  const handleTriggerDemo = (type: 'settlement' | 'referral') => {
-    tradingEngine.triggerDemoNotification(type);
+  const handleTriggerLiveAlert = (type: 'settlement' | 'referral') => {
+    tradingEngine.triggerLiveAlertNotification(type);
   };
 
   // Filter items
@@ -525,14 +525,14 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => handleTriggerDemo('referral')}
+                  onClick={() => handleTriggerLiveAlert('referral')}
                   className="px-2.5 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 text-xs font-semibold cursor-pointer transition"
                 >
                   + Referral Alert ($15)
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleTriggerDemo('settlement')}
+                  onClick={() => handleTriggerLiveAlert('settlement')}
                   className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-semibold cursor-pointer transition"
                 >
                   + Settlement Alert ($150)

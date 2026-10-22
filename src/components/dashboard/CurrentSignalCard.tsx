@@ -16,9 +16,11 @@ export const CurrentSignalCard: React.FC<CurrentSignalCardProps> = ({
   if (!signal) {
     return (
       <div
-        className={`rounded-md bg-[#090D16] border border-white/5 p-3 shadow-sm flex items-center justify-center text-center text-slate-500 font-mono text-[11px] select-none ${className}`}
+        className={`rounded-md bg-[#090D16] border border-white/5 p-4 shadow-sm flex flex-col items-center justify-center text-center font-mono text-[11px] select-none min-h-[140px] space-y-1.5 ${className}`}
       >
-        <span>Awaiting algorithmic market signal...</span>
+        <Zap className="w-4 h-4 text-cyan-400/60 animate-pulse" />
+        <span className="font-bold text-slate-300 text-xs">Awaiting Algorithmic Signal</span>
+        <span className="text-[10px] text-slate-500">Continuous 24h scanning active on XAU/USD...</span>
       </div>
     );
   }

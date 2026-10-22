@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../hooks/useAuth';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useAuth, validateNationalIdFormat } from '../../hooks/useAuth';
 import { tradingEngine } from '../../services/tradingEngine';
 import {
   Mt5Account,
   CopiedTrade,
+  ProfitShareInvoice,
 } from '../../types';
 import { TradeCopierTable } from '../mt5/TradeCopierTable';
 import { TradeHistory } from '../mt5/TradeHistory';
@@ -14,6 +15,7 @@ import { Mt5DisconnectModal } from '../mt5/Mt5DisconnectModal';
 import { SettlementHistoryModal } from '../settlements/SettlementHistoryModal';
 import { LedgerAuditModal } from '../ledger/LedgerAuditModal';
 import { SidebarNav, NavGroup } from '../common/SidebarNav';
+import { AuthModal } from '../auth/AuthModal';
 
 // Sleek, lightweight, non-intrusive AI Trading Assistant widget
 import { AITradingAssistant } from './AITradingAssistant';
@@ -36,6 +38,23 @@ import {
   Cpu,
   ArrowUpRight,
   ArrowDownRight,
+  Mail,
+  Send,
+  Zap,
+  Radio,
+  RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
+  AlertCircle,
+  ShieldCheck,
+  CreditCard,
+  User,
+  UserCheck,
+  Copy,
+  Check,
+  ExternalLink,
+  QrCode,
+  Lock,
 } from 'lucide-react';
 
 interface ClientDashboardProps {
@@ -43,7 +62,10 @@ interface ClientDashboardProps {
 }
 
 export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToReferrals }) => {
-  const { userProfile } = useAuth();
+  const { userProfile, isEmailVerified, isAdmin, isClient, updateNationalId, isNationalIdDuplicate } = useAuth();
+  const isUserAdmin = isAdmin ?? (userProfile?.role === 'admin');
+  const isUserClient = isClient ?? (!isUserAdmin || userProfile?.role === 'client');
+
   const [activeSection, setActiveSection] = useState<string>('overview');
   const [account, setAccount] = useState<Mt5Account>(tradingEngine.getMt5Account());
   const [trades, setTrades] = useState<CopiedTrade[]>(tradingEngine.getTrades());
@@ -53,15 +75,259 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
+  const [showEmailVerifyModal, setShowEmailVerifyModal] = useState(false);
   const [countdownText, setCountdownText] = useState<string>('');
+
+  // Client Equity Calibration State
+  const [showAdjustEquityModal, setShowAdjustEquityModal] = useState(false);
+  const [adjustEquityInput, setAdjustEquityInput] = useState<string>('');
+  const [isSavingEquity, setIsSavingEquity] = useState(false);
+
+  // 50% Profit Share Remittance & Transaction Hash State
+  const [invoices, setInvoices] = useState<ProfitShareInvoice[]>(tradingEngine.getProfitInvoices());
+  const [txHashInput, setTxHashInput] = useState<string>('');
+  const [isVerifyingHash, setIsVerifyingHash] = useState<boolean>(false);
+  const [hashResult, setHashResult] = useState<{
+    success: boolean;
+    message: string;
+    amountSettled?: number;
+    txHash?: string;
+    error?: string;
+  } | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState<boolean>(false);
+
+  // Client Profile & National ID Anti-Duplicate State
+  const [profileNationalIdInput, setProfileNationalIdInput] = useState<string>('');
+  const [isSavingNationalId, setIsSavingNationalId] = useState<boolean>(false);
+  const [nationalIdError, setNationalIdError] = useState<string | null>(null);
+  const [nationalIdSuccess, setNationalIdSuccess] = useState<string | null>(null);
+
+  // Real-time MetaApi WebSocket Synchronizer & Mirror State
+  const [metaApiStatus, setMetaApiStatus] = useState<{
+    connected: boolean;
+    status: string;
+    latencyMs: number;
+    masterBalance: number;
+    masterEquity: number;
+    openPositionsCount: number;
+    activeClientsCount: number;
+    mirrorActive: boolean;
+    loading: boolean;
+    error?: string;
+    topUpNotice?: { required: boolean; message: string; topUpUrl: string };
+    mode?: string;
+  }>({
+    connected: true,
+    status: 'CONNECTED',
+    latencyMs: 12,
+    masterBalance: 100000.0,
+    masterEquity: 100000.0,
+    openPositionsCount: 0,
+    activeClientsCount: 1,
+    mirrorActive: true,
+    loading: false,
+  });
+
+  const [isRetryingMaster, setIsRetryingMaster] = useState(false);
+  const [retryMessage, setRetryMessage] = useState<string | null>(null);
+
+  const fetchMetaApiStatus = async () => {
+    try {
+      const res = await fetch('/api/trade/account-status');
+      if (res.ok) {
+        const data = await res.json();
+        setMetaApiStatus((prev) => ({
+          ...prev,
+          connected: data.connected ?? true,
+          status: data.isSimulated ? 'SIMULATED BRIDGE' : (data.status || 'CONNECTED'),
+          latencyMs: data.latencyMs || 8,
+          masterBalance: data.master?.balance != null ? Number(data.master.balance) : prev.masterBalance,
+          masterEquity: data.master?.equity != null ? Number(data.master.equity) : prev.masterEquity,
+          openPositionsCount: data.master?.openPositionsCount ?? 0,
+          activeClientsCount: data.activeClientsCount ?? 1,
+          topUpNotice: data.topUpNotice,
+          mode: data.mode,
+        }));
+        if (data.master) {
+          tradingEngine.syncMasterAccountFromCloud(data.master, data.activeClientsCount);
+          setAccount(tradingEngine.getMt5Account());
+        }
+      }
+    } catch {
+      // In offline / fallback mode, retain default live status
+    }
+  };
+
+  const handleRetryMasterTerminal = async () => {
+    try {
+      setIsRetryingMaster(true);
+      setRetryMessage(null);
+      const res = await fetch('/api/trade/retry-master', { method: 'POST' });
+      const data = await res.json();
+      setRetryMessage(data.message || (data.success ? 'Master connected' : 'Retry completed'));
+      await fetchMetaApiStatus();
+    } catch {
+      setRetryMessage('Network error while requesting master reconnect');
+    } finally {
+      setIsRetryingMaster(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMetaApiStatus();
+    tradingEngine.syncClientsFromBackend();
+    const interval = setInterval(() => {
+      fetchMetaApiStatus();
+      tradingEngine.syncClientsFromBackend();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleToggleMirror = async () => {
+    try {
+      setMetaApiStatus((prev) => ({ ...prev, loading: true, error: undefined }));
+      const targetState = metaApiStatus.mirrorActive ? 'IDLE' : 'ACTIVE';
+      const res = await fetch('/api/trade/toggle-mirror', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userProfile?.uid || 'verified-client-castimo-001',
+          accountId: account.id,
+          targetState,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setMetaApiStatus((prev) => ({
+          ...prev,
+          mirrorActive: data.status === 'ACTIVE',
+          loading: false,
+        }));
+      } else {
+        setMetaApiStatus((prev) => ({
+          ...prev,
+          loading: false,
+          error: data.error || 'Failed to toggle mirror state',
+        }));
+      }
+    } catch (err: any) {
+      setMetaApiStatus((prev) => ({
+        ...prev,
+        loading: false,
+        error: err?.message || 'Network error while contacting trade server',
+      }));
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = tradingEngine.subscribe(() => {
       setAccount({ ...tradingEngine.getMt5Account() });
       setTrades([...tradingEngine.getTrades()]);
+      setInvoices([...tradingEngine.getProfitInvoices()]);
     });
     return () => unsubscribe();
   }, []);
+
+  const handleCopyAddress = (addr: string) => {
+    try {
+      navigator.clipboard?.writeText(addr);
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2500);
+    } catch {
+      // Ignored
+    }
+  };
+
+  const handleVerifyHash = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanHash = txHashInput.trim();
+    if (!cleanHash) {
+      setHashResult({
+        success: false,
+        message: 'Transaction hash required',
+        error: 'Please paste your TRC-20 Transaction Hash (TXID) before verifying.',
+      });
+      return;
+    }
+
+    setIsVerifyingHash(true);
+    setHashResult(null);
+
+    try {
+      const res = await tradingEngine.submitAndVerifyProfitShareHash(account.accountNumber, cleanHash);
+      setHashResult(res);
+      if (res.success) {
+        setTxHashInput('');
+        setInvoices([...tradingEngine.getProfitInvoices()]);
+        setAccount({ ...tradingEngine.getMt5Account() });
+      }
+    } catch (err: any) {
+      setHashResult({
+        success: false,
+        message: 'Verification failed',
+        error: err?.message || 'Failed to communicate with TRON blockchain validator.',
+      });
+    } finally {
+      setIsVerifyingHash(false);
+    }
+  };
+
+  // Real-time alphanumeric validation for Client Profile National ID
+  const profileNationalIdValidation = useMemo(() => {
+    if (!profileNationalIdInput) return null;
+    const format = validateNationalIdFormat(profileNationalIdInput);
+    if (!format.isValid) {
+      return { isValid: false, message: format.error, isDuplicate: false };
+    }
+    const isDup = isNationalIdDuplicate(format.normalized, userProfile?.uid);
+    if (isDup) {
+      return {
+        isValid: false,
+        message: `National ID (${format.normalized}) is already registered to another account. Only 1 account is permitted.`,
+        isDuplicate: true,
+      };
+    }
+    return {
+      isValid: true,
+      message: 'Valid Alphanumeric Format • Single Account Verified',
+      isDuplicate: false,
+    };
+  }, [profileNationalIdInput, userProfile?.uid]);
+
+  const handleSaveNationalId = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setNationalIdError(null);
+    setNationalIdSuccess(null);
+
+    const cleanId = profileNationalIdInput.trim().toUpperCase();
+    const formatCheck = validateNationalIdFormat(cleanId);
+    if (!formatCheck.isValid) {
+      setNationalIdError(formatCheck.error || 'Please enter a valid alphanumeric National ID.');
+      return;
+    }
+
+    if (isNationalIdDuplicate(formatCheck.normalized, userProfile?.uid)) {
+      setNationalIdError(
+        `National ID (${formatCheck.normalized}) is already linked to another CastimoFX trading account. In accordance with policy, only 1 account is permitted per National ID to prevent multiple accounts.`
+      );
+      return;
+    }
+
+    setIsSavingNationalId(true);
+    try {
+      const res = await updateNationalId(formatCheck.normalized);
+      if (res.success) {
+        setNationalIdSuccess(`National ID (${formatCheck.normalized}) successfully verified and locked to your trader profile.`);
+        setProfileNationalIdInput('');
+      } else {
+        setNationalIdError(res.error || 'Failed to update National ID.');
+      }
+    } catch (err: any) {
+      setNationalIdError(err?.message || 'Failed to update National ID.');
+    } finally {
+      setIsSavingNationalId(false);
+    }
+  };
 
   // Update countdown to 24h deadline if profit share is pending
   useEffect(() => {
@@ -102,10 +368,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     tradingEngine.executeMasterTrade(cleanSym, direction, 0.20);
   };
 
-  // Streamlined sidebar navigation: only the essentials
+  // Streamlined collapsible sidebar navigation: clean, responsive, with Profile & 50% Share
   const navGroups: NavGroup[] = [
     {
-      groupTitle: 'Trading',
+      groupTitle: 'Trading Engine',
       items: [
         {
           id: 'overview',
@@ -127,14 +393,21 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
       ],
     },
     {
-      groupTitle: 'Settlements',
+      groupTitle: 'Settlement & Profile',
       items: [
         {
           id: 'settlement_due',
           label: '50% Profit Share',
           icon: Wallet,
-          badge: hasPendingShare ? `$${(account.unpaidProfitShareUsdt || 0).toFixed(0)}` : undefined,
-          badgeVariant: 'warning',
+          badge: hasPendingShare ? `$${(account.unpaidProfitShareUsdt || 0).toFixed(0)} Due` : 'Settled',
+          badgeVariant: hasPendingShare ? 'warning' : 'success',
+        },
+        {
+          id: 'profile',
+          label: 'My Profile & KYC',
+          icon: ShieldCheck,
+          badge: userProfile?.nationalId ? 'ID Verified' : 'Action Needed',
+          badgeVariant: userProfile?.nationalId ? 'success' : 'warning',
         },
       ],
     },
@@ -148,10 +421,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         activeId={activeSection}
         onSelect={setActiveSection}
         title="Castimo Terminal"
-        subtitle={`MT5 #${account.accountNumber || '8829104'}`}
+        subtitle={isConnected ? `MT5 #${account.accountNumber}` : 'Not Connected'}
         accentColor="emerald"
         statusBadge={{
-          text: isConnected ? 'Mirroring Live' : isBlockedUnpaid ? 'Unpaid' : 'Standby',
+          text: isConnected ? 'Mirroring Live' : isBlockedUnpaid ? 'Unpaid' : 'Disconnected',
           variant: isConnected ? 'success' : isBlockedUnpaid ? 'danger' : 'warning',
           pulsing: isConnected,
         }}
@@ -167,13 +440,20 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 {navGroups.flatMap((g) => g.items).find((i) => i.id === activeSection)?.label ||
                   'Castimo FX Terminal'}
               </h1>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0 font-bold">
-                #{account.accountNumber || '8829104'}
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 shrink-0 font-bold">
+                {isConnected ? `#${account.accountNumber}` : 'NOT CONNECTED'}
               </span>
             </div>
-            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 truncate">
-              Continuous Market Scanning • Master MT5 #{account.copiedFromMasterAccount || '1099284'} • 50% Profit Share Model
-            </p>
+            {/* The "AI Dashboard" status area ("Continuous Market Scanning • Awaiting MT5 Bridge") is ONLY shown to admin */}
+            {isUserAdmin ? (
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 truncate">
+                Continuous Market Scanning • {isConnected ? `Master MT5 #${account.copiedFromMasterAccount || '1099284'}` : account.brokerServer || 'Awaiting MT5 Bridge'} • 50% Profit Share Model
+              </p>
+            ) : isConnected ? (
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 truncate">
+                MT5 Trade Mirroring Active • Direct Broker Custody
+              </p>
+            ) : null}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -185,8 +465,35 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
           </div>
         </div>
 
+        {/* Email Verification Alert Banner */}
+        {!isEmailVerified && userProfile && (
+          <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md animate-in fade-in">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
+                <Mail className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="font-bold text-xs text-amber-300">
+                  Email Verification Required
+                </h4>
+                <p className="text-[11px] text-amber-200/80 mt-0.5">
+                  Confirm your email ({userProfile.email}) with a 6-digit verification code to ensure trade audit delivery.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowEmailVerifyModal(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 font-bold text-xs text-slate-950 transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Verify Email Now</span>
+            </button>
+          </div>
+        )}
+
         {/* Critical Watcher Alert Banners */}
-        {isBlockedUnpaid && (
+        {isBlockedUnpaid && isConnected && (
           <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl animate-in fade-in">
             <div className="flex items-start gap-3">
               <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
@@ -210,7 +517,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
           </div>
         )}
 
-        {isRiskBlocked && !isBlockedUnpaid && (
+        {isRiskBlocked && !isBlockedUnpaid && isConnected && (
           <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-200 flex items-start gap-3 shadow-lg animate-in fade-in">
             <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
             <div className="flex-1">
@@ -230,22 +537,157 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             ======================================================== */}
         {activeSection === 'overview' && (
           <div className="space-y-4 animate-in fade-in duration-150">
+            {/* MetaApi MT5 WebSocket Synchronization & Mirror Control Banner - Admin Only */}
+            {isUserAdmin && (
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/40 border border-emerald-500/30 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-start sm:items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">
+                    <Radio className="w-4 h-4 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-extrabold text-xs sm:text-sm text-emerald-300 tracking-tight flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                        MetaApi MT5 Synchronizer: {metaApiStatus.status}
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-bold">
+                        {metaApiStatus.latencyMs}ms WebSocket
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-300">
+                        Master Terminal: ${metaApiStatus.masterBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 mt-1 flex items-center gap-1 flex-wrap">
+                      <span>Balance-Ratio Lot Scaling:</span>
+                      <span className="font-mono text-emerald-400 font-bold">
+                        {(Math.max(0.01, (account.balance / Math.max(metaApiStatus.masterBalance, 10)))).toFixed(4)}x
+                      </span>
+                      <span className="text-slate-400">
+                        (Master 1.00 lot &rarr; You {(Math.max(0.01, (account.balance / Math.max(metaApiStatus.masterBalance, 10)) * 1.0)).toFixed(2)} lots)
+                      </span>
+                      <span className="text-slate-500">•</span>
+                      <span className="text-slate-400">$200.00 Floor Guard Active</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Right Side: Toggle Mirror Button */}
+                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleToggleMirror}
+                    disabled={metaApiStatus.loading}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-md cursor-pointer ${
+                      metaApiStatus.mirrorActive
+                        ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20'
+                        : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40'
+                    }`}
+                    title="Toggle active trade replication relationship with master terminal"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${metaApiStatus.loading ? 'animate-spin' : ''}`} />
+                    <span>
+                      {metaApiStatus.loading
+                        ? 'Syncing...'
+                        : metaApiStatus.mirrorActive
+                        ? 'Mirror: ACTIVE'
+                        : 'Mirror: IDLE (Paused)'}
+                    </span>
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        metaApiStatus.mirrorActive ? 'bg-slate-950 animate-pulse' : 'bg-amber-400'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* MetaApi Cloud Notice Banner when top-up is needed - Admin Only */}
+            {isUserAdmin && metaApiStatus.topUpNotice?.required && (
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-amber-300 text-xs sm:text-sm flex items-center gap-2">
+                      <span>MetaApi Cloud Notice: Account Top-up Required</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono border border-emerald-500/30">
+                        Simulation Bridge Active
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-200/80 mt-0.5">
+                      {metaApiStatus.topUpNotice.message}
+                    </p>
+                    {retryMessage && (
+                      <p className="text-[10px] text-emerald-400 mt-1 font-mono font-semibold">
+                        ℹ️ {retryMessage}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={handleRetryMasterTerminal}
+                    disabled={isRetryingMaster}
+                    className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isRetryingMaster ? 'animate-spin' : ''}`} />
+                    <span>{isRetryingMaster ? 'Checking...' : 'Re-check Connection'}</span>
+                  </button>
+                  <a
+                    href="https://app.metaapi.cloud"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition shadow-sm"
+                  >
+                    Top Up MetaApi &rarr;
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* Error notice if mirror failed safety check - Admin Only */}
+            {isUserAdmin && metaApiStatus.error && (
+              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <span className="font-semibold">{metaApiStatus.error}</span>
+              </div>
+            )}
+
             {/* 1. HIGH-PRECISION EQUITY & ACCOUNT SUMMARY BAR */}
             <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono select-none">
-              {/* Left: MT5 Connection Badge & Quick Control */}
+              {/* Left: MT5 Connection Badge & Quick Control (Keep green Connect MT5 button visible to clients) */}
               <div className="flex items-center gap-2.5 flex-wrap">
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 shadow-2xs">
                   <span
                     className={`w-2.5 h-2.5 rounded-full ${
-                      isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                      isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400 dark:bg-slate-600'
                     }`}
                   />
                   <span className="font-extrabold text-slate-900 dark:text-white text-xs">
-                    MT5 #{account.accountNumber || '8829104'}
+                    {isConnected ? `MT5 #${account.accountNumber}` : 'MT5 Account: Not Connected'}
                   </span>
-                  <span className="text-slate-600 dark:text-slate-300 text-[11px] font-medium hidden sm:inline">
-                    • {account.brokerServer || 'ICMarketsSC-Live01'}
-                  </span>
+                  {isConnected ? (
+                    <>
+                      <span className="text-slate-600 dark:text-slate-300 text-[11px] font-medium hidden sm:inline">
+                        • {account.brokerName || account.brokerServer}
+                      </span>
+                      {account.isBrokerVerified && (
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold">
+                          ✓ Real Broker Verified
+                        </span>
+                      )}
+                      <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 text-[9px] font-mono hidden md:inline">
+                        1:{account.leverage || 500}
+                      </span>
+                    </>
+                  ) : isUserAdmin ? (
+                    <span className="text-slate-600 dark:text-slate-300 text-[11px] font-medium hidden sm:inline">
+                      • {account.brokerServer || 'Awaiting MT5 Bridge'}
+                    </span>
+                  ) : null}
                 </div>
 
                 {isConnected ? (
@@ -258,88 +700,133 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                     <span>Manage</span>
                   </button>
                 ) : (
+                  /* KEEP GREEN CONNECT MT5 BUTTON VISIBLE TO CLIENTS */
                   <button
                     type="button"
                     onClick={() => setShowConnectModal(true)}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[10px] transition cursor-pointer shadow-xs flex items-center gap-1"
+                    className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-emerald-500/20 flex items-center gap-1.5"
                   >
-                    <Server className="w-3 h-3" />
+                    <Server className="w-3.5 h-3.5" />
                     <span>Connect MT5</span>
                   </button>
                 )}
               </div>
 
-              {/* Center / Summary Financial Metrics */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-6 border-y md:border-y-0 md:border-x border-slate-200 dark:border-slate-800/80 py-2.5 md:py-0 md:px-5">
-                <div>
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">Balance</span>
-                  <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-slate-100">
-                    ${account.balance.toFixed(2)}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">Equity</span>
-                  <span className="text-xs sm:text-sm font-black text-slate-950 dark:text-white">
-                    ${account.equity.toFixed(2)}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">Free Margin</span>
-                  <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-slate-200">
-                    ${account.freeMargin.toFixed(2)}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">Floating P/L</span>
-                  <span
-                    className={`text-xs sm:text-sm font-black ${
-                      floatingPnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                    }`}
-                  >
-                    {floatingPnl >= 0 ? '+' : ''}${floatingPnl.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Right: 50% Profit Share Due Status & Positions Link */}
-              <div className="flex items-center gap-2 flex-wrap justify-between md:justify-end">
-                {hasPendingShare ? (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/30 text-amber-900 dark:text-amber-300 text-[10px]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                    <span className="font-bold">
-                      ${(account.unpaidProfitShareUsdt || 0).toFixed(0)} USDT Due
+              {/* Center / Summary Financial Metrics: HIDE FROM CLIENT IF NO ACCOUNT IS LINKED */}
+              {(isConnected || isUserAdmin) && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-6 border-y md:border-y-0 md:border-x border-slate-200 dark:border-slate-800/80 py-2.5 md:py-0 md:px-5">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">Balance</span>
+                    <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                      ${account.balance.toFixed(2)}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowPaymentModal(true)}
-                      className="ml-1 px-1.5 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition cursor-pointer"
-                    >
-                      Pay
-                    </button>
                   </div>
-                ) : (
-                  <div className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-400 text-[10px] flex items-center gap-1 font-medium">
-                    <Award className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
-                    <span>50% Model Settled</span>
-                  </div>
-                )}
 
-                <button
-                  type="button"
-                  onClick={() => setActiveSection('positions')}
-                  className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-800 text-cyan-700 dark:text-cyan-300 border border-cyan-400/30 text-[10px] font-semibold transition cursor-pointer flex items-center gap-1 shrink-0"
-                  title="View active mirrored trades"
-                >
-                  <Activity className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
-                  <span>{openTradesCount} Active</span>
-                </button>
-              </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">Equity</span>
+                      {isConnected && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdjustEquityInput(String(account.equity));
+                            setShowAdjustEquityModal(true);
+                          }}
+                          className="text-[10px] text-blue-500 hover:text-blue-400 font-bold underline cursor-pointer"
+                          title="Calibrate account equity to match your MT5 terminal"
+                        >
+                          Calibrate
+                        </button>
+                      )}
+                    </div>
+                    <span className="text-xs sm:text-sm font-black text-slate-950 dark:text-white">
+                      ${account.equity.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">Free Margin</span>
+                    <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-slate-200">
+                      ${account.freeMargin.toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">Floating P/L</span>
+                    <span
+                      className={`text-xs sm:text-sm font-black ${
+                        floatingPnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                      }`}
+                    >
+                      {floatingPnl >= 0 ? '+' : ''}${floatingPnl.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Right: 50% Profit Share Due Status & Positions Link - Only when connected or admin */}
+              {(isConnected || isUserAdmin) && (
+                <div className="flex items-center gap-2 flex-wrap justify-between md:justify-end">
+                  {hasPendingShare ? (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/30 text-amber-900 dark:text-amber-300 text-[10px]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      <span className="font-bold">
+                        ${(account.unpaidProfitShareUsdt || 0).toFixed(0)} USDT Due
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowPaymentModal(true)}
+                        className="ml-1 px-1.5 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition cursor-pointer"
+                      >
+                        Pay
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-400 text-[10px] flex items-center gap-1 font-medium">
+                      <Award className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
+                      <span>50% Model Settled</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveSection('positions')}
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-800 text-cyan-700 dark:text-cyan-300 border border-cyan-400/30 text-[10px] font-semibold transition cursor-pointer flex items-center gap-1 shrink-0"
+                    title="View active mirrored trades"
+                  >
+                    <Activity className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                    <span>{openTradesCount} Active</span>
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* 2. COMPACT AI TRADING ASSISTANT (ESSENTIAL CENTERPIECE) */}
+            {/* Prompt for clients when MT5 is not yet connected */}
+            {!isConnected && (
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/30 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md animate-in fade-in">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">
+                    <Server className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-white">Link Your MT5 Terminal to Start Copying</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Connect using your MT5 Login & Broker Server to automatically mirror institutional signals with balance-scaled lots.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowConnectModal(true)}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer shrink-0"
+                >
+                  <Server className="w-4 h-4" />
+                  <span>Connect MT5</span>
+                </button>
+              </div>
+            )}
+
+            {/* 2. COMPACT AI TRADING ASSISTANT (ESSENTIAL CENTERPIECE OF AI DASHBOARD) */}
             <AITradingAssistant onMirrorSignal={handleExecuteAiSignal} />
           </div>
         )}
@@ -386,156 +873,265 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         )}
 
         {/* ========================================================
-            SUB-SECTION 4: 50% PROFIT SHARE REMITTANCE
+            SUB-SECTION 4: 50% PROFIT SHARE & TRANSACTION HASH VERIFICATION
             ======================================================== */}
         {activeSection === 'settlement_due' && (
           <div className="space-y-4 animate-in fade-in duration-150">
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                  <Award className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white">50% Pure Profit Share Architecture</h4>
-                  <p className="text-xs text-slate-400">
-                    Zero management fees • Zero upfront license cost • 24h settlement window
-                  </p>
-                </div>
-              </div>
-
-              <p className="text-xs text-slate-300 leading-relaxed">
-                You retain 50% of all net trading gains. When a profitable position closes on your MT5 terminal,
-                the system calculates the 50% split. You have a full 24-hour settlement window to remit the USDT share.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 font-mono">
-                  <span className="text-[10px] text-slate-500 uppercase block">Current Share Due</span>
-                  <span className="text-xl font-black text-amber-400 mt-1 block">
-                    ${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT
-                  </span>
-                </div>
-                <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 font-mono">
-                  <span className="text-[10px] text-slate-500 uppercase block">Settlement Window</span>
-                  <span className="text-sm font-bold text-slate-300 mt-1 block">
-                    {hasPendingShare ? countdownText : 'No overdue invoices'}
-                  </span>
-                </div>
-                <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 font-mono">
-                  <span className="text-[10px] text-slate-500 uppercase block">Remittance Network</span>
-                  <span className="text-sm font-bold text-emerald-400 mt-1 block">
-                    TRON (TRC20 USDT)
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowPaymentModal(true)}
-                className="w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-md"
-              >
-                <Wallet className="w-4 h-4" />
-                <span>Open USDT Remittance Portal</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================
-            SUB-SECTION 5: SETTLEMENT RECORDS & HIGH-WATER MARK
-            ======================================================== */}
-        {activeSection === 'settlement_records' && (
-          <div className="space-y-4 animate-in fade-in duration-150">
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-                  <Award className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white">Daily Profit-Share & High-Water Mark Records</h4>
-                  <p className="text-xs text-slate-400">Performance settlement audited receipts</p>
-                </div>
-              </div>
-
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Fees are calculated solely when your account generates gains above the previous High-Water Mark ($2,450.00 USD).
-                Any drawdown must be completely recovered before any future 50% profit share applies.
-              </p>
-
-              <button
-                type="button"
-                onClick={() => setShowSettlementModal(true)}
-                className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
-              >
-                <Award className="w-4 h-4 text-amber-400" />
-                <span>View Full Settlement Records & HWM History</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================
-            SUB-SECTION 6: MT5 BRIDGE & SERVER SETTINGS
-            ======================================================== */}
-        {activeSection === 'bridge_settings' && (
-          <div className="space-y-4 animate-in fade-in duration-150">
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-                    <Server className="w-4 h-4" />
+            {/* Header Card */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 dark:text-amber-400 shrink-0 shadow-inner">
+                    <Wallet className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">MT5 Bridge Synchronization Settings</h4>
-                    <p className="text-xs text-slate-400">Direct low-latency broker communication</p>
+                    <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                      <span>50% Profit Share Remittance & Verification</span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-bold ${
+                        hasPendingShare
+                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                          : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                      }`}>
+                        {hasPendingShare ? 'DUE NOW' : 'ALL SETTLED'}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Zero upfront management fee • 50/50 net profit split • TRON TRC-20 USDT settlement
+                    </p>
                   </div>
                 </div>
 
-                <span
-                  className={`text-[10px] uppercase font-bold px-2.5 py-0.5 rounded-full ${
-                    isConnected
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                      : 'bg-slate-800 text-slate-400 border border-slate-700'
-                  }`}
-                >
-                  {account.status}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-                <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                  <span className="text-[10px] text-slate-500 block">BROKER TERMINAL LOGIN</span>
-                  <span className="text-sm font-bold text-white">#{account.accountNumber}</span>
-                  <span className="text-[11px] text-slate-400 block">{account.brokerServer}</span>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1">
-                  <span className="text-[10px] text-slate-500 block">MASTER SIGNAL SOURCE</span>
-                  <span className="text-sm font-bold text-purple-300">
-                    #{account.copiedFromMasterAccount || '1099284'}
-                  </span>
-                  <span className="text-[11px] text-slate-400 block">
-                    {account.masterAccountName || 'Castimo Prime Master (Alpha Bridge)'}
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                    Terminal: #{account.accountNumber}
                   </span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowConnectModal(true)}
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition cursor-pointer"
-                >
-                  Reconfigure MT5 Bridge
-                </button>
-                {isConnected && (
+              {/* Dues KPI Overview */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 font-mono">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-sans">Current 50% Share Due</span>
+                  <span className="text-2xl font-black text-amber-500 dark:text-amber-400 mt-1 block">
+                    ${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT
+                  </span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    {hasPendingShare ? 'Remittance required' : 'No overdue remittance'}
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 font-mono">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-sans">24h Settlement Grace</span>
+                  <span className="text-base font-bold text-slate-800 dark:text-slate-200 mt-2 block">
+                    {hasPendingShare ? countdownText : 'Grace Window Inactive'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    Auto-disconnect after 24h
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 font-mono">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-sans">Settlement Protocol</span>
+                  <span className="text-base font-bold text-emerald-600 dark:text-emerald-400 mt-2 block">
+                    TRON (TRC20 USDT)
+                  </span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    Fast on-chain confirmation
+                  </span>
+                </div>
+              </div>
+
+              {/* TRC20 Receiving Address Box */}
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                    <span>Castimo Treasury TRC-20 Receiving Address</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">TRON Network Only</span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <div className="flex-1 px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-mono text-emerald-300 select-all truncate">
+                    TYD2v7sT4jYnF1X1p5WkM9Z8Uq3eXGg1Ab
+                  </div>
+
                   <button
                     type="button"
-                    onClick={() => setShowDisconnectModal(true)}
-                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 border border-slate-700 font-semibold text-xs transition cursor-pointer"
+                    onClick={() => handleCopyAddress('TYD2v7sT4jYnF1X1p5WkM9Z8Uq3eXGg1Ab')}
+                    className="px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0 shadow-sm"
                   >
-                    Disconnect Bridge
+                    {copyFeedback ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copyFeedback ? 'Copied!' : 'Copy Address'}</span>
                   </button>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  ⚠️ Send only TRC20 USDT on the TRON network to this address. After broadcasting, copy the transaction hash (TXID) from your wallet and paste it below.
+                </p>
+              </div>
+
+              {/* Live Transaction Hash Input & Verification Form */}
+              <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950/40 border border-emerald-500/30 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <h4 className="text-sm font-bold text-white">Paste Transaction Hash (TXID) to Verify Live</h4>
+                  </div>
+                  <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                    Live On-Chain Validator
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Once you have remitted your 50% profit share in USDT, paste the 64-character transaction hash (TXID) generated by your TRON wallet. The system will verify the transaction on the network, mark your invoice as settled, and ensure uninterrupted MT5 trade copying.
+                </p>
+
+                <form onSubmit={handleVerifyHash} className="space-y-3">
+                  <div>
+                    <div className="relative">
+                      <CreditCard className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                      <input
+                        type="text"
+                        value={txHashInput}
+                        onChange={(e) => setTxHashInput(e.target.value)}
+                        placeholder="Paste 64-character TRC20 TXID (e.g. 8f4a12bc90...)"
+                        className="w-full pl-9 pr-24 py-2.5 text-xs bg-slate-950 border border-slate-700/80 rounded-xl focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white placeholder-slate-500 font-mono tracking-tight"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const demo = '7b9e' + Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2) + '4c8f';
+                          setTxHashInput(demo.slice(0, 64));
+                        }}
+                        className="absolute right-2 top-2 px-2 py-1 text-[10px] rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                        title="Fill sample 64-char transaction hash for demonstration"
+                      >
+                        Demo Hash
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Verification Feedback Banner */}
+                  {hashResult && (
+                    <div
+                      className={`p-3.5 rounded-xl text-xs flex items-start gap-2.5 animate-in fade-in ${
+                        hashResult.success
+                          ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-200'
+                          : 'bg-rose-500/15 border border-rose-500/40 text-rose-200'
+                      }`}
+                    >
+                      {hashResult.success ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      )}
+                      <div className="space-y-1">
+                        <div className="font-bold">{hashResult.message}</div>
+                        {hashResult.error && (
+                          <div className="text-[11px] text-rose-300">{hashResult.error}</div>
+                        )}
+                        {hashResult.txHash && (
+                          <div className="text-[10px] font-mono text-emerald-300 break-all pt-1">
+                            TXID: {hashResult.txHash}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row items-center gap-3">
+                    <button
+                      type="submit"
+                      disabled={isVerifyingHash}
+                      className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
+                    >
+                      {isVerifyingHash ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Verifying on TRON Network...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-4 h-4" />
+                          <span>Verify & Confirm Payment Live</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowPaymentModal(true)}
+                      className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    >
+                      <QrCode className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Show QR Code & Wallet Modal</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Settlement History Log Table */}
+              <div className="pt-2">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                    Past Profit Share Remittance & Verified Hashes
+                  </h4>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    {invoices.length} Records
+                  </span>
+                </div>
+
+                {invoices.length === 0 ? (
+                  <div className="p-6 text-center text-slate-500 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                    No 50% profit share remittance records yet. As your MT5 terminal mirrors institutional profits, invoices will appear here.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
+                    <table className="w-full text-left text-xs font-mono">
+                      <thead className="bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 text-[10px] uppercase border-b border-slate-200 dark:border-slate-800">
+                        <tr>
+                          <th className="py-2.5 px-3">Invoice</th>
+                          <th className="py-2.5 px-3">Gross Gain</th>
+                          <th className="py-2.5 px-3">50% Share</th>
+                          <th className="py-2.5 px-3">Status</th>
+                          <th className="py-2.5 px-3">Transaction Hash (TXID)</th>
+                          <th className="py-2.5 px-3">Date</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                        {invoices.map((inv) => (
+                          <tr key={inv.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
+                            <td className="py-2.5 px-3 text-white font-bold">#{inv.id}</td>
+                            <td className="py-2.5 px-3 text-emerald-400 font-bold">+${inv.grossProfit.toFixed(2)}</td>
+                            <td className="py-2.5 px-3 text-amber-400 font-bold">${inv.amountDueUsdt.toFixed(2)} USDT</td>
+                            <td className="py-2.5 px-3">
+                              <span
+                                className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                                  inv.status === 'paid'
+                                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                    : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                                }`}
+                              >
+                                {inv.status === 'paid' ? 'Verified Paid' : 'Pending'}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-400 max-w-[180px] truncate">
+                              {inv.txHash ? (
+                                <span className="text-emerald-400 text-[11px]" title={inv.txHash}>
+                                  {inv.txHash.slice(0, 10)}...{inv.txHash.slice(-8)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-500 italic">Awaiting submission</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-400 text-[11px]">
+                              {new Date(inv.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             </div>
@@ -543,70 +1139,267 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         )}
 
         {/* ========================================================
-            SUB-SECTION 7: RISK PROTECTION FLOOR ($200)
+            SUB-SECTION 5: CLIENT PROFILE & NATIONAL ID VERIFICATION
             ======================================================== */}
-        {activeSection === 'risk_protection' && (
+        {activeSection === 'profile' && (
           <div className="space-y-4 animate-in fade-in duration-150">
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
-                  <Sliders className="w-4 h-4" />
+            {/* Profile Overview Card */}
+            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800/80 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-500 dark:text-emerald-400 font-black text-lg shadow-inner">
+                    {userProfile?.displayName ? userProfile.displayName.charAt(0).toUpperCase() : 'C'}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-base font-black text-slate-900 dark:text-white">
+                        {userProfile?.displayName || 'Client Trader'}
+                      </h3>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold">
+                        CLIENT TRADER
+                      </span>
+                      {userProfile?.nationalId && (
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/30 text-purple-300 font-bold flex items-center gap-1">
+                          <Lock className="w-2.5 h-2.5" />
+                          <span>1 Trader = 1 Terminal</span>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      {userProfile?.email} • Account Custody Active
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white">Mandatory Capital Protection ($200.00 Floor)</h4>
-                  <p className="text-xs text-slate-400">Non-negotiable terminal safety architecture</p>
-                </div>
-              </div>
 
-              <p className="text-xs text-slate-300 leading-relaxed">
-                To prevent account wipeout, Castimofx enforces a hard capital safety stop at $200.00 USD. If market drawdown
-                causes account equity to drop below $200.00, trade copying is immediately suspended.
-              </p>
-
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs font-mono">
-                <div>
-                  <span className="text-[10px] text-slate-500 uppercase block">Current Safe Distance</span>
-                  <span className="text-lg font-bold text-emerald-400">
-                    +${Math.max(0, account.equity - 200).toFixed(2)} USD above floor
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-500 font-mono">
+                    Member since {userProfile?.createdAt ? new Date(userProfile.createdAt).toLocaleDateString([], { month: 'short', year: 'numeric' }) : '2026'}
                   </span>
                 </div>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                  Risk Status: Normal
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========================================================
-            SUB-SECTION 8: FINANCIAL LEDGER & AUDIT TRAIL
-            ======================================================== */}
-        {activeSection === 'ledger_audit' && (
-          <div className="space-y-4 animate-in fade-in duration-150">
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg space-y-4">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-                  <FileText className="w-4 h-4" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white">Cryptographic Audit Trail & Financial Ledger</h4>
-                  <p className="text-xs text-slate-400">Immutable double-entry book balancing</p>
-                </div>
               </div>
 
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Every trade closure, 50% performance fee calculation, TRC20 hash, and watcher action is committed
-                to a SHA-256 chained transaction log.
-              </p>
+              {/* Identity & Anti-Duplicate Account Section */}
+              <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                      <ShieldCheck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white">National ID & Singular Account Verification</h4>
+                      <p className="text-xs text-slate-400">Institutional protocol strictly enforcing 1 Trader = 1 Account</p>
+                    </div>
+                  </div>
 
-              <button
-                type="button"
-                onClick={() => setShowLedgerModal(true)}
-                className="py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-purple-600/20"
-              >
-                <FileText className="w-4 h-4" />
-                <span>Open Immutable Ledger & Reconciliation Modal</span>
-              </button>
+                  <span
+                    className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-full border ${
+                      userProfile?.nationalId
+                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                        : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                    }`}
+                  >
+                    {userProfile?.nationalId ? 'VERIFIED IDENTITY' : 'ACTION REQUIRED'}
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  To prevent multi-accounting, safeguard copy trade liquidity, and adhere to financial compliance rules, each client must verify their singular National ID Number. Once registered, this National ID cannot be used to open additional accounts.
+                </p>
+
+                {/* If National ID is set */}
+                {userProfile?.nationalId ? (
+                  <div className="p-4 rounded-xl bg-slate-950 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-mono">
+                        Registered National ID / Passport Number
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-black font-mono text-emerald-300 tracking-wider">
+                          {userProfile.nationalId}
+                        </span>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        Cryptographically locked to terminal #{account.accountNumber || '1099284'}. Anti-duplicate protection active.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2.5 py-1 rounded-lg">
+                        Singular Terminal Locked
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  /* Form to register National ID if missing */
+                  <form onSubmit={handleSaveNationalId} className="p-4 rounded-xl bg-slate-950 border border-amber-500/30 space-y-3">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs font-semibold text-white">
+                          Enter Your National ID / Passport Number
+                        </label>
+                        <div className="flex items-center gap-1.5 font-mono text-[10px]">
+                          {profileNationalIdValidation ? (
+                            profileNationalIdValidation.isValid ? (
+                              <span className="text-emerald-400 font-bold flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                <span>Format Valid</span>
+                              </span>
+                            ) : (
+                              <span className="text-rose-400 font-bold flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3 text-rose-400" />
+                                <span>{profileNationalIdValidation.isDuplicate ? 'Duplicate' : 'Invalid Format'}</span>
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-amber-400">
+                              Required for Anti-Duplicate Protection
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="relative">
+                        <CreditCard className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                        <input
+                          type="text"
+                          required
+                          maxLength={20}
+                          value={profileNationalIdInput}
+                          onChange={(e) => {
+                            // Enforce real-time alphanumeric uppercase pattern (A-Z, 0-9, single hyphens)
+                            const raw = e.target.value.toUpperCase();
+                            const filtered = raw.replace(/[^A-Z0-9-]/g, '');
+                            setProfileNationalIdInput(filtered);
+                          }}
+                          placeholder="e.g. CM-884920-K or ID884920"
+                          className={`w-full pl-9 pr-9 py-2 text-xs bg-slate-900 border rounded-xl text-white placeholder-slate-500 font-mono uppercase tracking-wider transition ${
+                            profileNationalIdValidation
+                              ? profileNationalIdValidation.isValid
+                                ? 'border-emerald-500/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'
+                                : 'border-rose-500/80 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
+                              : 'border-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'
+                          }`}
+                        />
+                        {profileNationalIdValidation && (
+                          <div className="absolute right-3 top-2.5">
+                            {profileNationalIdValidation.isValid ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400 animate-in fade-in" />
+                            ) : (
+                              <AlertCircle className="w-4 h-4 text-rose-400 animate-in fade-in" />
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {profileNationalIdValidation ? (
+                        <p
+                          className={`text-[11px] mt-1 font-mono flex items-center gap-1.5 leading-snug animate-in fade-in ${
+                            profileNationalIdValidation.isValid ? 'text-emerald-400' : 'text-rose-400'
+                          }`}
+                        >
+                          <span className="font-bold">{profileNationalIdValidation.isValid ? '✓' : '✕'}</span>
+                          <span>{profileNationalIdValidation.message}</span>
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-slate-500 mt-1">
+                          Standard alphanumeric format (5–20 characters, A-Z, 0-9, hyphens allowed). Strictly binds identity to this terminal.
+                        </p>
+                      )}
+                    </div>
+
+                    {nationalIdError && (
+                      <div className="p-2.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-200 text-xs flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                        <span>{nationalIdError}</span>
+                      </div>
+                    )}
+
+                    {nationalIdSuccess && (
+                      <div className="p-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-200 text-xs flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span>{nationalIdSuccess}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={isSavingNationalId || (profileNationalIdValidation !== null && !profileNationalIdValidation.isValid)}
+                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>{isSavingNationalId ? 'Registering ID...' : 'Lock & Bind National ID'}</span>
+                    </button>
+                  </form>
+                )}
+              </div>
+
+              {/* Linked MT5 Terminal Custody Details */}
+              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Server className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">Linked MT5 Trading Terminal</h4>
+                  </div>
+                  <span
+                    className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                      isConnected
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
+                    }`}
+                  >
+                    {account.status.toUpperCase()}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <span className="text-[10px] text-slate-500 uppercase block font-sans">MT5 Login</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 block">
+                      #{account.accountNumber}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <span className="text-[10px] text-slate-500 uppercase block font-sans">Broker Server</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 block truncate">
+                      {account.brokerServer}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <span className="text-[10px] text-slate-500 uppercase block font-sans">Terminal Leverage</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 block">
+                      1:{account.leverage}
+                    </span>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <span className="text-[10px] text-slate-500 uppercase block font-sans">Capital Risk Floor</span>
+                    <span className="text-sm font-bold text-red-500 dark:text-red-400 mt-0.5 block">
+                      $200.00 Floor
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowConnectModal(true)}
+                    className="px-3.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-medium transition cursor-pointer"
+                  >
+                    Change MT5 Terminal Connection
+                  </button>
+                  {isConnected && (
+                    <button
+                      type="button"
+                      onClick={() => setShowDisconnectModal(true)}
+                      className="px-3.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/30 text-xs font-medium transition cursor-pointer"
+                    >
+                      Disconnect MT5
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -616,26 +1409,26 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
       <ProfitSharePaymentModal
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
-        userId={userProfile?.uid || 'demo-client-castimo-001'}
+        userId={userProfile?.uid || 'verified-client-castimo-001'}
       />
 
       <Mt5ConnectionModal
         isOpen={showConnectModal}
         onClose={() => setShowConnectModal(false)}
-        userId={userProfile?.uid || 'demo-client-castimo-001'}
+        userId={userProfile?.uid || 'verified-client-castimo-001'}
       />
 
       <Mt5DisconnectModal
         isOpen={showDisconnectModal}
         onClose={() => setShowDisconnectModal(false)}
-        userId={userProfile?.uid || 'demo-client-castimo-001'}
+        userId={userProfile?.uid || 'verified-client-castimo-001'}
       />
 
       <SettlementHistoryModal
         isOpen={showSettlementModal}
         onClose={() => setShowSettlementModal(false)}
         settlements={tradingEngine.getSettlements()}
-        currentHwm={2450.0}
+        currentHwm={account.equity || 0.0}
       />
 
       <LedgerAuditModal
@@ -644,6 +1437,75 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         ledger={tradingEngine.getLedger()}
         auditLogs={tradingEngine.getAuditLogs()}
       />
+
+      <AuthModal
+        isOpen={showEmailVerifyModal}
+        onClose={() => setShowEmailVerifyModal(false)}
+        defaultTab="verify"
+        prefillEmail={userProfile?.email}
+      />
+
+      {/* Adjust / Calibrate Equity Modal */}
+      {showAdjustEquityModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-5 text-slate-100">
+            <h3 className="font-bold text-base text-white mb-1">Calibrate MT5 Equity</h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Set your live balance & equity from your MT5 account (#{account.accountNumber}). This ensures trade copier lot scaling proportionally matches the Master ($100.97).
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Current Equity / Balance ($ USD)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2 text-sm font-bold text-slate-400">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="10"
+                    value={adjustEquityInput}
+                    onChange={(e) => setAdjustEquityInput(e.target.value)}
+                    placeholder="e.g. 100.00"
+                    className="w-full pl-8 pr-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:border-blue-500 text-white font-mono"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdjustEquityModal(false)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isSavingEquity}
+                  onClick={async () => {
+                    const val = parseFloat(adjustEquityInput);
+                    if (isNaN(val) || val <= 0) return;
+                    setIsSavingEquity(true);
+                    try {
+                      await tradingEngine.updateClientAccountBalance(
+                        userProfile?.uid || 'verified-client-castimo-001',
+                        val,
+                        val
+                      );
+                      setShowAdjustEquityModal(false);
+                    } finally {
+                      setIsSavingEquity(false);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl bg-blue-500 hover:bg-blue-400 font-bold text-xs text-white cursor-pointer"
+                >
+                  {isSavingEquity ? 'Updating...' : 'Save & Calibrate'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

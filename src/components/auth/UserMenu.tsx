@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../context/ThemeContext';
-import { User, LogOut, ShieldCheck, ChevronDown, Check, RefreshCw, Zap, Sparkles, Sun, Moon } from 'lucide-react';
+import { User, LogOut, ShieldCheck, ChevronDown, Check, RefreshCw, Zap, Sparkles, Sun, Moon, Mail } from 'lucide-react';
 import { UserRole } from '../../types';
 
 interface UserMenuProps {
@@ -10,7 +10,7 @@ interface UserMenuProps {
 }
 
 export const UserMenu: React.FC<UserMenuProps> = ({ onOpenAuth, onOpenAdminGate }) => {
-  const { userProfile, signOutUser, switchRole, isDirectSession, isDemoUser } = useAuth();
+  const { userProfile, signOutUser, switchRole, isDirectSession, isEmailVerified } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -72,22 +72,30 @@ export const UserMenu: React.FC<UserMenuProps> = ({ onOpenAuth, onOpenAdminGate 
           <div className="px-3 py-2 border-b border-slate-800/80">
             <p className="text-xs font-semibold text-white">{userProfile.displayName}</p>
             <p className="text-[11px] text-slate-400 truncate">{userProfile.email}</p>
-            <div className="mt-2 flex items-center gap-1.5 text-[10px] text-emerald-400">
-              {isDemoUser ? (
-                <>
-                  <Sparkles className="w-3 h-3 text-amber-400" />
-                  <span className="text-amber-300">Simulation Session Active</span>
-                </>
-              ) : isDirectSession ? (
-                <>
-                  <Zap className="w-3 h-3 text-emerald-400" />
-                  <span>Direct Session Active</span>
-                </>
+            <div className="mt-2 flex items-center justify-between text-[10px]">
+              <div className="flex items-center gap-1.5 text-emerald-400">
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <span className="font-semibold text-emerald-300">Live Authenticated Session</span>
+              </div>
+
+              {isEmailVerified ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  <Check className="w-2.5 h-2.5" />
+                  <span>Verified</span>
+                </span>
               ) : (
-                <>
-                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                  <span>Firebase Session Active</span>
-                </>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    onOpenAuth();
+                  }}
+                  className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 px-2 py-0.5 rounded-full border border-amber-500/30 transition cursor-pointer"
+                  title="Verify email with 6-digit confirmation code"
+                >
+                  <Mail className="w-2.5 h-2.5 text-amber-400" />
+                  <span>Verify Email</span>
+                </button>
               )}
             </div>
           </div>
@@ -108,19 +116,6 @@ export const UserMenu: React.FC<UserMenuProps> = ({ onOpenAuth, onOpenAdminGate 
                   <User className="w-3.5 h-3.5" />
                   Preview Client Trader View
                 </span>
-              </button>
-            </div>
-          ) : onOpenAdminGate ? (
-            <div className="py-1.5 border-b border-slate-800/80">
-              <button
-                onClick={() => {
-                  setDropdownOpen(false);
-                  onOpenAdminGate();
-                }}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-400 hover:text-purple-300 hover:bg-purple-950/30 rounded-lg transition"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
-                <span>Administrator Login</span>
               </button>
             </div>
           ) : null}
