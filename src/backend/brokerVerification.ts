@@ -1,0 +1,203 @@
+/**
+ * Broker verification rules (pure functions, no I/O, unit-tested).
+ *
+ * The one rule of this platform: an account is only "connected" if the BROKER itself
+ * answered for it. Nothing the browser sends (balance, equity, names, flags) is ever
+ * trusted. These helpers decide what counts as a real, usable broker account.
+ */
+
+export type BrokerErrorCode =
+  | 'BAD_INPUT'
+  | 'VERIFICATION_UNAVAILABLE'
+  | 'BROKER_SERVER_NOT_FOUND'
+  | 'BROKER_AUTH_FAILED'
+  | 'BROKER_UNREACHABLE'
+  | 'BAD_BROKER_RESPONSE'
+  | 'LOGIN_MISMATCH'
+  | 'TRADING_NOT_ALLOWED'
+  | 'ALREADY_LINKED'
+  | 'IS_MASTER_ACCOUNT'
+  | 'CAPACITY';
+
+export class BrokerVerificationError extends Error {
+  code: BrokerErrorCode;
+  constructor(code: BrokerErrorCode, message: string) {
+    super(message);
+    this.name = 'BrokerVerificationError';
+    this.code = code;
+  }
+}
+
+/** Account information as reported by the broker terminal (via MetaApi). */
+export interface BrokerAccountInfo {
+  login?: string | number;
+  server?: string;
+  broker?: string;
+  name?: string;
+  currency?: string;
+  balance?: unknown;
+  equity?: unknown;
+  freeMargin?: unknown;
+  leverage?: unknown;
+  tradeAllowed?: boolean;
+  investorMode?: boolean;
+}
+
+export interface VerifiedBrokerAccount {
+  balance: number;
+  equity: number;
+  freeMargin: number;
+  leverage: number;
+  currency: string;
+  brokerName: string;
+  accountHolderName: string;
+  tradeAllowed: true;
+  investorMode: false;
+  accountType: 'demo' | 'real';
+}
+
+export interface SubmittedCredentials {
+  login: string;
+  server: string;
+}
+
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+export function sameLogin(a: unknown, b: unknown): boolean {
+  return String(a ?? '').trim() === String(b ?? '').trim() && String(a ?? '').trim() !== '';
+}
+
+/** Cleans and validates what the client typed. Throws BAD_INPUT. */
+export function validateSubmittedCredentials(input: {
+  login: unknown;
+  password: unknown;
+  server: unknown;
+}): { login: string; password: string; server: string } {
+  const login = String(input.login ?? '').trim();
+  const server = String(input.server ?? '').trim();
+  const password = typeof input.password === 'string' ? input.password : '';
+
+  if (!/^\d{4,12}$/.test(login)) {
+    throw new BrokerVerificationError('BAD_INPUT', 'MT5 account number must be 4 to 12 digits.');
+  }
+  if (server.length < 3 || server.length > 100) {
+    throw new BrokerVerificationError('BAD_INPUT', 'Please choose your broker server.');
+  }
+  if (password.length < 1 || password.length > 200) {
+    throw new BrokerVerificationError('BAD_INPUT', 'Please enter your MT5 password.');
+  }
+  return { login, password, server };
+}
+
+/**
+ * Decides whether the broker's answer describes a real, tradable account.
+ * Throws a BrokerVerificationError for anything else.
+ */
+export function verifyBrokerAccountInfo(
+  info: BrokerAccountInfo | null | undefined,
+  submitted: SubmittedCredentials
+): VerifiedBrokerAccount {
+  if (!info || typeof info !== 'object') {
+    throw new BrokerVerificationError('BAD_BROKER_RESPONSE', 'The broker returned no account information.');
+  }
+
+  // The broker's own answer must name the broker and carry real money figures.
+  const brokerName = typeof info.broker === 'string' ? info.broker.trim() : '';
+  if (!brokerName) {
+    throw new BrokerVerificationError('BAD_BROKER_RESPONSE', 'The broker did not identify itself.');
+  }
+  if (!isFiniteNumber(info.balance) || !isFiniteNumber(info.equity) || info.balance < 0 || info.equity < 0) {
+    throw new BrokerVerificationError('BAD_BROKER_RESPONSE', 'The broker returned invalid balance figures.');
+  }
+
+  // If the broker reports a login, it must be the one that was submitted.
+  if (info.login !== undefined && info.login !== null && !sameLogin(info.login, submitted.login)) {
+    throw new BrokerVerificationError('LOGIN_MISMATCH', 'The broker account does not match the login you entered.');
+  }
+
+  // Copying needs permission to place orders. A read-only (investor) login cannot be copied onto.
+  if (info.tradeAllowed === false || info.investorMode === true) {
+    throw new BrokerVerificationError(
+      'TRADING_NOT_ALLOWED',
+      'This login is read-only (investor password) or has trading disabled. Use the trading password so trades can be copied.'
+    );
+  }
+
+  const server = String(info.server || submitted.server || '');
+  const equity = info.equity;
+  return {
+    balance: info.balance,
+    equity,
+    freeMargin: isFiniteNumber(info.freeMargin) ? info.freeMargin : equity,
+    leverage: isFiniteNumber(info.leverage) && info.leverage > 0 ? info.leverage : 100,
+    currency: typeof info.currency === 'string' && info.currency ? info.currency : 'USD',
+    brokerName,
+    accountHolderName: typeof info.name === 'string' ? info.name.trim() : '',
+    tradeAllowed: true,
+    investorMode: false,
+    accountType: /demo/i.test(server) ? 'demo' : 'real',
+  };
+}
+
+// ---------- ownership of broker accounts inside MetaApi ----------
+
+/** Every account we create in MetaApi is named after the user who linked it. */
+export function clientAccountName(userId: string, login: string): string {
+  return `CastimoFX Client ${userId} #${login}`;
+}
+
+/**
+ * True only if a MetaApi account was created for this exact user. Accounts that belong to
+ * another user, the master account, or that were created by hand are NOT owned.
+ * (The older name format is still recognised so earlier test links keep working.)
+ */
+export function isOwnedBy(accountName: unknown, userId: string): boolean {
+  if (typeof accountName !== 'string' || !userId) return false;
+  return (
+    accountName.startsWith(`CastimoFX Client ${userId} #`) ||
+    accountName.startsWith(`CastimoFX Client - ${userId} (#`)
+  );
+}
+
+/** Maps raw MetaApi errors to errors that are safe and useful to show a client. */
+export function translateBrokerError(
+  err: any,
+  creds: SubmittedCredentials
+): BrokerVerificationError {
+  const msg: string = String(err?.message || '');
+  const code: string = String(err?.details?.code || err?.code || '');
+
+  if (msg.includes('.dat file for server') || code === 'E_SRV_NOT_FOUND') {
+    const suggestions: string[] = err?.details?.serversByBrokers
+      ? (Object.values(err.details.serversByBrokers).flat() as string[]).slice(0, 5)
+      : [];
+    return new BrokerVerificationError(
+      'BROKER_SERVER_NOT_FOUND',
+      `Broker server '${creds.server}' was not recognised.` +
+        (suggestions.length ? ` Servers that exist: ${suggestions.join(', ')}.` : '') +
+        ' Check that it matches your broker\'s official MT5 server name.'
+    );
+  }
+  if (
+    code === 'E_AUTH' ||
+    code === 'INVALID_CREDENTIALS' ||
+    /INVALID_CREDENTIALS|authori[sz]ation|authentication|account connection validation failed/i.test(msg)
+  ) {
+    return new BrokerVerificationError(
+      'BROKER_AUTH_FAILED',
+      `The broker rejected MT5 account #${creds.login} on '${creds.server}'. Check the account number, password and server.`
+    );
+  }
+  if (/top[- ]?up|not enough funds|insufficient|quota|limit/i.test(msg) || code === 'E_QUOTA_EXCEEDED') {
+    return new BrokerVerificationError(
+      'CAPACITY',
+      'We cannot add new accounts right now. Please try again later or contact support.'
+    );
+  }
+  return new BrokerVerificationError(
+    'BROKER_UNREACHABLE',
+    'Could not reach your broker to verify this account. Please try again in a minute.'
+  );
+}

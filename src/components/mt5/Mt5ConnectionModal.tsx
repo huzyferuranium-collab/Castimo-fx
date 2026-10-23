@@ -29,7 +29,6 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
   const [accountNumber, setAccountNumber] = useState('');
   const [brokerServer, setBrokerServer] = useState(COMMON_SERVERS[0]);
   const [password, setPassword] = useState('');
-  const [initialEquity, setInitialEquity] = useState('100.00');
   const [isConnecting, setIsConnecting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -49,8 +48,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
         throw new Error('Please enter MT5 account password.');
       }
 
-      const bal = parseFloat(initialEquity) || 100.0;
-      await tradingEngine.connectMt5Account(userId, accountNumber, brokerServer, password, bal);
+      await tradingEngine.connectMt5Account(userId, accountNumber, brokerServer, password);
       // Password is immediately discarded from memory
       setPassword('');
       setSuccess(true);
@@ -100,7 +98,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                 Your MT5 Account #{accountNumber} on <strong>{brokerServer}</strong> is authenticated with the broker and bound to <strong>Main Master MT5 #{masterAccount.accountNumber}</strong>.
               </p>
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-emerald-400 font-mono">
-                Institutional trade mirroring active: proportional lot scaling based on live equity.
+                Institutional trade mirroring active: proportional lot scaling based on your broker-reported equity.
               </div>
             </div>
           ) : (
@@ -189,26 +187,10 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Starting Balance / Equity (USD)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">$</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="10"
-                    required
-                    value={initialEquity}
-                    onChange={(e) => setInitialEquity(e.target.value)}
-                    placeholder="100.00"
-                    className="w-full pl-9 pr-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl focus:border-blue-500 text-white font-mono"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Used for proportional lot scaling against Master MT5 equity ($100.97).
-                </p>
+              <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-slate-300 leading-relaxed">
+                Your balance and equity are read directly from your broker after the login is confirmed.
+                They cannot be typed in. Only real broker accounts (demo or live) can connect, and the
+                login must have trading permission (use your trading password, not the investor password).
               </div>
 
               <div>

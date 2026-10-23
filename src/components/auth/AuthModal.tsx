@@ -18,13 +18,15 @@ import { UserRole } from '../../types';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultTab?: 'signin' | 'signup';
+  defaultTab?: 'signin' | 'signup' | 'verify';
+  prefillEmail?: string;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   defaultTab = 'signin',
+  prefillEmail,
 }) => {
   const {
     signInWithEmail,
@@ -38,10 +40,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     apiNeedsActivation,
     activationUrl,
     clearError,
+    user,
+    isEmailVerified,
+    sendVerificationEmail,
+    refreshEmailVerified,
   } = useAuth();
 
-  const [tab, setTab] = useState<'signin' | 'signup'>(defaultTab);
-  const [email, setEmail] = useState('');
+  const [tab, setTab] = useState<'signin' | 'signup' | 'verify'>(defaultTab);
+  const [email, setEmail] = useState(prefillEmail || '');
+  const [verifyNote, setVerifyNote] = useState<string | null>(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   // New accounts are always clients. Admin rights can only be granted in Firebase.
@@ -71,6 +79,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSendLink = async () => {
+    setVerifyBusy(true);
+    setVerifyNote(null);
+    const res = await sendVerificationEmail();
+    setVerifyNote(
+      res.success
+        ? 'Verification link sent. Open it from your inbox (check spam), then press "I have verified".'
+        : res.error || 'Could not send the email.'
+    );
+    setVerifyBusy(false);
+  };
+
+  const handleCheckVerified = async () => {
+    setVerifyBusy(true);
+    const ok = await refreshEmailVerified();
+    setVerifyNote(ok ? 'Email verified. Thank you!' : 'Not verified yet. Open the link in the email first.');
+    setVerifyBusy(false);
+    if (ok) setTimeout(() => onClose(), 900);
   };
 
   const handleDirectSignIn = () => {
@@ -139,6 +167,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {/* Tab Toggle */}
+        {tab !== 'verify' && (
         <div className="flex border-b border-slate-800 bg-slate-900/50 p-1 shrink-0">
           <button
             onClick={() => {
@@ -167,6 +196,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             Register Client
           </button>
         </div>
+        )}
 
         {/* Form Body */}
         <div className="p-5 overflow-y-auto space-y-3.5">
@@ -243,6 +273,40 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
+          {tab === 'verify' && (
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-300 leading-relaxed">
+                We send a verification link to <strong className="text-white">{user?.email || email || 'your email'}</strong>.
+                Open it, then come back and press the button below.
+              </p>
+              {isEmailVerified && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>Your email is already verified.</span>
+                </div>
+              )}
+              {verifyNote && <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-700/60 text-slate-200">{verifyNote}</div>}
+              <button
+                type="button"
+                disabled={verifyBusy || !user}
+                onClick={handleSendLink}
+                className="w-full py-2.5 px-4 font-semibold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 disabled:opacity-50 cursor-pointer"
+              >
+                Send verification link
+              </button>
+              <button
+                type="button"
+                disabled={verifyBusy || !user}
+                onClick={handleCheckVerified}
+                className="w-full py-2 px-3 font-medium rounded-xl border border-slate-700 bg-slate-950 text-slate-200 disabled:opacity-50 cursor-pointer"
+              >
+                I have verified
+              </button>
+              {!user && <p className="text-[11px] text-amber-300">Sign in with a real account first.</p>}
+            </div>
+          )}
+
+          {tab !== 'verify' && (
           <form onSubmit={handleSubmit} className="space-y-3">
             {tab === 'signup' && (
               <>
@@ -321,8 +385,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </button>
             </div>
           </form>
+          )}
 
           {/* Social or Google Sign In */}
+          {tab !== 'verify' && (<>
           <div className="relative flex py-0.5 items-center">
             <div className="flex-grow border-t border-slate-800"></div>
             <span className="flex-shrink mx-3 text-[10px] uppercase tracking-wider text-slate-500">Or continue with</span>
@@ -355,6 +421,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </svg>
             <span>Continue with Google</span>
           </button>
+          </>)}
         </div>
       </div>
     </div>
