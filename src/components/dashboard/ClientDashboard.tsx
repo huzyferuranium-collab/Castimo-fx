@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth, validateNationalIdFormat } from '../../hooks/useAuth';
 import { tradingEngine } from '../../services/tradingEngine';
+import { authHeaders } from '../../services/apiAuth';
 import {
   Mt5Account,
   CopiedTrade,
@@ -79,8 +80,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const [countdownText, setCountdownText] = useState<string>('');
 
   // Client Equity Calibration State
-  const [showAdjustEquityModal, setShowAdjustEquityModal] = useState(false);
-  const [adjustEquityInput, setAdjustEquityInput] = useState<string>('');
   const [isSavingEquity, setIsSavingEquity] = useState(false);
 
   // 50% Profit Share Remittance & Transaction Hash State
@@ -162,9 +161,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     try {
       setIsRetryingMaster(true);
       setRetryMessage(null);
-      const res = await fetch('/api/trade/retry-master', { method: 'POST' });
+      const res = await fetch('/api/trade/retry-master', { method: 'POST', headers: await authHeaders() });
       const data = await res.json();
-      setRetryMessage(data.message || (data.success ? 'Master connected' : 'Retry completed'));
+      setRetryMessage(data.message || data.error || (data.success ? 'Master connected' : 'Retry completed'));
       await fetchMetaApiStatus();
     } catch {
       setRetryMessage('Network error while requesting master reconnect');
@@ -189,12 +188,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
       const targetState = metaApiStatus.mirrorActive ? 'IDLE' : 'ACTIVE';
       const res = await fetch('/api/trade/toggle-mirror', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: userProfile?.uid || 'verified-client-castimo-001',
-          accountId: account.id,
-          targetState,
-        }),
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+        body: JSON.stringify({ targetState }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -728,14 +723,18 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                       {isConnected && (
                         <button
                           type="button"
-                          onClick={() => {
-                            setAdjustEquityInput(String(account.equity));
-                            setShowAdjustEquityModal(true);
+                          onClick={async () => {
+                            setIsSavingEquity(true);
+                            try {
+                              await tradingEngine.refreshAccountFromBroker();
+                            } finally {
+                              setIsSavingEquity(false);
+                            }
                           }}
                           className="text-[10px] text-blue-500 hover:text-blue-400 font-bold underline cursor-pointer"
-                          title="Calibrate account equity to match your MT5 terminal"
+                          title="Re-read balance and equity from your broker"
                         >
-                          Calibrate
+                          {isSavingEquity ? 'Refreshing...' : 'Refresh from broker'}
                         </button>
                       )}
                     </div>
@@ -1445,67 +1444,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         prefillEmail={userProfile?.email}
       />
 
-      {/* Adjust / Calibrate Equity Modal */}
-      {showAdjustEquityModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="relative w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-5 text-slate-100">
-            <h3 className="font-bold text-base text-white mb-1">Calibrate MT5 Equity</h3>
-            <p className="text-xs text-slate-400 mb-4">
-              Set your live balance & equity from your MT5 account (#{account.accountNumber}). This ensures trade copier lot scaling proportionally matches the Master ($100.97).
-            </p>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">
-                  Current Equity / Balance ($ USD)
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2 text-sm font-bold text-slate-400">$</span>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="10"
-                    value={adjustEquityInput}
-                    onChange={(e) => setAdjustEquityInput(e.target.value)}
-                    placeholder="e.g. 100.00"
-                    className="w-full pl-8 pr-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:border-blue-500 text-white font-mono"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAdjustEquityModal(false)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={isSavingEquity}
-                  onClick={async () => {
-                    const val = parseFloat(adjustEquityInput);
-                    if (isNaN(val) || val <= 0) return;
-                    setIsSavingEquity(true);
-                    try {
-                      await tradingEngine.updateClientAccountBalance(
-                        userProfile?.uid || 'verified-client-castimo-001',
-                        val,
-                        val
-                      );
-                      setShowAdjustEquityModal(false);
-                    } finally {
-                      setIsSavingEquity(false);
-                    }
-                  }}
-                  className="px-4 py-2 rounded-xl bg-blue-500 hover:bg-blue-400 font-bold text-xs text-white cursor-pointer"
-                >
-                  {isSavingEquity ? 'Updating...' : 'Save & Calibrate'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

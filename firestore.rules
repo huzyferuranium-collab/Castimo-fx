@@ -33,10 +33,11 @@ service cloud.firestore {
                     && request.resource.data.status == 'pending';
       allow update, delete: if isAdmin();
     }
+    // Broker accounts are verified by the server against the broker. A client must never be
+    // able to write (and so forge) one of these records, so only admins can change them.
     match /mt5_accounts/{id} {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin();
+      allow write: if isAdmin();
     }
     match /audit_logs/{id} {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());

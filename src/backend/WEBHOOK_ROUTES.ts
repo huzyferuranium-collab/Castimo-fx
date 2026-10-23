@@ -13,11 +13,52 @@
 import { Router, Request, Response } from 'express';
 import { Mt5ConnectionManager } from './MT5_CONNECTION_MANAGER';
 import { ReplicationEngine } from './REPLICATION_ENGINE';
+import { requireUser, requireAdmin, getAuthUser, isAdminUser } from './firebaseAuth';
+import { BrokerVerificationError } from './brokerVerification';
 
 export const tradeRouter = Router();
 
 const connectionManager = Mt5ConnectionManager.getInstance();
 const replicationEngine = ReplicationEngine.getInstance();
+
+/** Only fields that are safe to show. Never expose connection objects or credentials. */
+function toPublicClient(c: any) {
+  return {
+    userId: c.userId,
+    accountId: c.accountId,
+    login: c.login,
+    server: c.server,
+    status: c.status,
+    balance: c.balance,
+    equity: c.equity,
+    freeMargin: c.freeMargin,
+    leverage: c.leverage,
+    currency: c.currency,
+    isSimulated: Boolean(c.isSimulated),
+    brokerName: c.brokerName,
+    accountHolderName: c.accountHolderName,
+    isBrokerVerified: Boolean(c.isBrokerVerified),
+    tradeAllowed: c.tradeAllowed,
+    investorMode: c.investorMode,
+    accountType: c.accountType,
+    verificationTimestamp: c.verificationTimestamp,
+    lastSync: c.lastSync,
+  };
+}
+
+const STATUS_BY_CODE: Record<string, number> = {
+  BAD_INPUT: 400,
+  VERIFICATION_UNAVAILABLE: 503,
+  BROKER_SERVER_NOT_FOUND: 400,
+  BROKER_AUTH_FAILED: 400,
+  BROKER_UNREACHABLE: 502,
+  BAD_BROKER_RESPONSE: 502,
+  LOGIN_MISMATCH: 400,
+  TRADING_NOT_ALLOWED: 400,
+  ALREADY_LINKED: 409,
+  IS_MASTER_ACCOUNT: 409,
+  CAPACITY: 503,
+};
 
 /**
  * GET /api/trade/account-status
@@ -84,65 +125,50 @@ tradeRouter.get('/account-status', async (req: Request, res: Response) => {
  *   targetState?: 'ACTIVE' | 'IDLE';
  * }
  */
-tradeRouter.post('/toggle-mirror', async (req: Request, res: Response) => {
+tradeRouter.post('/toggle-mirror', requireUser, async (req: Request, res: Response) => {
   try {
-    const { userId, accountId, targetState } = req.body;
+    // The user comes from the verified sign-in token, never from the request body.
+    const user = getAuthUser(req);
+    const { targetState } = req.body || {};
+    if (targetState !== undefined && targetState !== 'ACTIVE' && targetState !== 'IDLE') {
+      return res.status(400).json({ success: false, error: 'targetState must be ACTIVE or IDLE.' });
+    }
 
-    if (!userId) {
-      return res.status(400).json({
+    // Only a broker-verified account that THIS user connected can be switched on.
+    const client = connectionManager.getClientConnection(user.uid);
+    if (!client || !client.isBrokerVerified || client.isSimulated) {
+      return res.status(409).json({
         success: false,
-        error: 'Missing required field: userId is required.',
+        code: 'NO_VERIFIED_ACCOUNT',
+        error: 'Connect a broker-verified MT5 account first.',
       });
     }
 
-    // Lookup client terminal in connection manager pool
-    let client = connectionManager.getClientConnection(userId);
-    if (!client && accountId) {
-      client = connectionManager.getClientConnection(accountId);
+    const newState: 'ACTIVE' | 'IDLE' = targetState ? targetState : client.status === 'ACTIVE' ? 'IDLE' : 'ACTIVE';
+
+    if (newState === 'ACTIVE') {
+      if (client.tradeAllowed === false || client.investorMode) {
+        return res.status(403).json({
+          success: false,
+          code: 'TRADING_NOT_ALLOWED',
+          error: 'This login cannot place trades, so copying cannot be activated.',
+        });
+      }
+      // Safety floor, using the equity the broker reported.
+      if (client.equity < 25.0) {
+        return res.status(403).json({
+          success: false,
+          error: `Cannot activate trade copying: account equity ($${client.equity.toFixed(2)}) is below the required safety floor ($25.00).`,
+          code: 'EQUITY_BELOW_MINIMUM_FLOOR',
+          equity: client.equity,
+          minimumRequired: 25.0,
+        });
+      }
     }
 
-    // If client is not yet registered in pool, register a baseline record
-    if (!client) {
-      const defaultBal = req.body.balance != null ? Number(req.body.balance) : 100.0;
-      client = {
-        userId,
-        accountId: accountId || `client-acc-${userId}`,
-        login: 'Awaiting Credentials',
-        server: 'Awaiting Server',
-        status: 'IDLE',
-        balance: defaultBal,
-        equity: defaultBal,
-        currency: 'USD',
-        leverage: 100,
-        lastSync: new Date().toISOString(),
-      };
-      connectionManager.registerClient(client);
-    }
-
-    // Determine new state
-    const newState: 'ACTIVE' | 'IDLE' = targetState
-      ? targetState
-      : client.status === 'ACTIVE'
-      ? 'IDLE'
-      : 'ACTIVE';
-
-    // Safety Validation when activating: Verify capital floor ($25.00)
-    if (newState === 'ACTIVE' && client.equity < 25.0) {
-      return res.status(403).json({
-        success: false,
-        error: `Cannot activate trade copying: client equity ($${client.equity.toFixed(2)}) is below the required safety floor ($25.00).`,
-        code: 'EQUITY_BELOW_MINIMUM_FLOOR',
-        equity: client.equity,
-        minimumRequired: 25.0,
-      });
-    }
-
-    // Update status in pool
     client.status = newState;
     client.lastSync = new Date().toISOString();
     connectionManager.registerClient(client);
-
-    console.log(`🔄 [API /api/trade/toggle-mirror] User ${userId} copy relationship changed to: ${newState}`);
 
     return res.status(200).json({
       success: true,
@@ -157,217 +183,115 @@ tradeRouter.post('/toggle-mirror', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('❌ [API /api/trade/toggle-mirror] Error:', error?.message || error);
-    return res.status(500).json({
-      success: false,
-      error: error?.message || 'Failed to toggle mirror state',
-    });
+    return res.status(500).json({ success: false, error: 'Failed to toggle mirror state' });
   }
 });
 
 /**
- * POST /api/trade/provision-client
- * Provisions a new client MT5 terminal using Login, Password, Broker Server, and live balance
+ * POST /api/trade/provision-client  (signed-in users only)
+ * Connects the caller's own broker account. The server asks the broker to confirm the login,
+ * password and server, and every figure returned comes from the broker. Anything the browser
+ * sends besides login, password and server is ignored.
  */
-tradeRouter.post('/provision-client', async (req: Request, res: Response) => {
+tradeRouter.post('/provision-client', requireUser, async (req: Request, res: Response) => {
   try {
-    const { userId, login, password, server, name, platform, balance, equity } = req.body;
-
-    if (!userId || !login || !password || !server) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required credentials: userId, login, password, and server are required.',
-      });
-    }
-
-    console.log(`🔐 [API /api/trade/provision-client] Provisioning terminal for user: ${userId}`);
+    const user = getAuthUser(req);
+    const { login, password, server, platform } = req.body || {};
 
     const clientRecord = await connectionManager.provisionClientTerminal({
-      userId,
-      login: String(login),
-      password: String(password),
-      server: String(server),
-      name,
+      userId: user.uid,
+      login: String(login ?? ''),
+      password: typeof password === 'string' ? password : '',
+      server: String(server ?? ''),
       platform: platform === 'mt4' ? 'mt4' : 'mt5',
-      balance: balance != null ? Number(balance) : (equity != null ? Number(equity) : undefined),
     });
 
     return res.status(201).json({
       success: true,
-      message: 'Client MT5 terminal provisioned and synchronized successfully.',
-      client: {
-        userId: clientRecord.userId,
-        accountId: clientRecord.accountId,
-        login: clientRecord.login,
-        server: clientRecord.server,
-        status: clientRecord.status,
-        balance: clientRecord.balance,
-        equity: clientRecord.equity,
-        freeMargin: clientRecord.freeMargin,
-        leverage: clientRecord.leverage,
-        currency: clientRecord.currency,
-        isSimulated: clientRecord.isSimulated,
-        brokerName: clientRecord.brokerName,
-        accountHolderName: clientRecord.accountHolderName,
-        isBrokerVerified: clientRecord.isBrokerVerified,
-        tradeAllowed: clientRecord.tradeAllowed,
-        investorMode: clientRecord.investorMode,
-        verificationTimestamp: clientRecord.verificationTimestamp,
-      },
+      message: 'Broker account verified and connected.',
+      client: toPublicClient(clientRecord),
     });
   } catch (error: any) {
-    console.error('❌ [API /api/trade/provision-client] Provisioning error:', error?.message || error);
-    return res.status(400).json({
-      success: false,
-      error: error?.message || 'Failed to authenticate and verify MT5 terminal with broker.',
-    });
+    if (error instanceof BrokerVerificationError) {
+      return res.status(STATUS_BY_CODE[error.code] ?? 400).json({ success: false, code: error.code, error: error.message });
+    }
+    console.error('❌ [API /api/trade/provision-client] Unexpected error:', error?.message || error);
+    return res.status(500).json({ success: false, error: 'Could not verify this account. Nothing was connected.' });
   }
 });
 
 /**
- * POST /api/trade/update-client
- * Updates a client's live balance, equity, or status in real time
+ * POST /api/trade/update-client  (administrators only)
+ * Pause or resume a client's copying. It cannot create clients or change balance, equity or identity.
  */
-tradeRouter.post('/update-client', async (req: Request, res: Response) => {
+tradeRouter.post('/update-client', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const { userId, accountId, login, server, balance, equity, status } = req.body;
-    const targetId = userId || accountId || login;
-
+    const { userId, accountId, status } = req.body || {};
+    const targetId = userId || accountId;
     if (!targetId) {
-      return res.status(400).json({
-        success: false,
-        error: 'userId, accountId, or login is required to update client metrics.',
-      });
+      return res.status(400).json({ success: false, error: 'userId or accountId is required.' });
     }
-
-    const updated = connectionManager.updateClientMetrics(targetId, {
-      balance: balance != null ? Number(balance) : undefined,
-      equity: equity != null ? Number(equity) : undefined,
-      status: status || undefined,
-      server: server || undefined,
-      login: login ? String(login) : undefined,
-    });
-
+    if (status !== 'ACTIVE' && status !== 'IDLE') {
+      return res.status(400).json({ success: false, error: 'status must be ACTIVE or IDLE.' });
+    }
+    const updated = connectionManager.updateClientMetrics(String(targetId), { status });
     if (!updated) {
-      // Create if doesn't exist
-      const newRecord = {
-        userId: userId || targetId,
-        accountId: accountId || `client-acc-${targetId}`,
-        login: login || 'Live Account',
-        server: server || 'HFMarketsGlobal-Live20',
-        status: (status as any) || 'ACTIVE',
-        balance: balance != null ? Number(balance) : 100.0,
-        equity: equity != null ? Number(equity) : (balance != null ? Number(balance) : 100.0),
-        currency: 'USD',
-        leverage: 100,
-        lastSync: new Date().toISOString(),
-      };
-      connectionManager.registerClient(newRecord);
-      return res.status(200).json({ success: true, client: newRecord });
+      return res.status(404).json({ success: false, error: 'No verified client with that id.' });
     }
-
-    return res.status(200).json({
-      success: true,
-      client: {
-        userId: updated.userId,
-        accountId: updated.accountId,
-        login: updated.login,
-        server: updated.server,
-        status: updated.status,
-        balance: updated.balance,
-        equity: updated.equity,
-        currency: updated.currency,
-        lastSync: updated.lastSync,
-      },
-    });
+    return res.status(200).json({ success: true, client: toPublicClient(updated) });
   } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      error: error?.message || 'Failed to update client metrics',
-    });
+    return res.status(500).json({ success: false, error: 'Failed to update client' });
   }
 });
 
 /**
- * POST /api/trade/reverify-client
- * Re-queries the live MT5 broker via RPC for an active client terminal,
- * refreshing live balance, equity, freeMargin, leverage, and broker details.
+ * POST /api/trade/reverify-client  (signed-in users; administrators may name any user)
+ * Re-asks the broker for live balance and equity.
  */
-tradeRouter.post('/reverify-client', async (req: Request, res: Response) => {
+tradeRouter.post('/reverify-client', requireUser, async (req: Request, res: Response) => {
   try {
-    const { userId, accountId, login } = req.body;
-    const targetId = userId || accountId || login;
-    if (!targetId) {
-      return res.status(400).json({ success: false, error: 'userId, accountId, or login is required.' });
+    const user = getAuthUser(req);
+    let targetId = user.uid;
+    const requested = req.body?.userId;
+    if (requested && requested !== user.uid) {
+      if (!(await isAdminUser(user))) {
+        return res.status(403).json({ success: false, error: 'You can only refresh your own account.' });
+      }
+      targetId = String(requested);
     }
-    const updated = await connectionManager.refreshClientFromBroker(String(targetId));
+    const updated = await connectionManager.refreshClientFromBroker(targetId);
     if (!updated) {
-      return res.status(404).json({ success: false, error: 'Client terminal not found in active pool.' });
+      return res.status(404).json({ success: false, error: 'No connected account found. Connect your MT5 account first.' });
     }
-    return res.status(200).json({
-      success: true,
-      client: {
-        userId: updated.userId,
-        accountId: updated.accountId,
-        login: updated.login,
-        server: updated.server,
-        status: updated.status,
-        balance: updated.balance,
-        equity: updated.equity,
-        freeMargin: updated.freeMargin,
-        leverage: updated.leverage,
-        currency: updated.currency,
-        brokerName: updated.brokerName,
-        accountHolderName: updated.accountHolderName,
-        isBrokerVerified: updated.isBrokerVerified,
-        tradeAllowed: updated.tradeAllowed,
-        investorMode: updated.investorMode,
-        lastSync: updated.lastSync,
-      },
-    });
+    return res.status(200).json({ success: true, client: toPublicClient(updated) });
   } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      error: error?.message || 'Failed to reverify client account with broker',
-    });
+    return res.status(500).json({ success: false, error: 'Failed to refresh account from broker' });
   }
 });
 
 /**
- * GET /api/trade/clients
- * Returns all active client accounts connected to the replication pipeline
+ * GET /api/trade/my-account  (signed-in users)
+ * The caller's own broker-verified account, or connected:false.
  */
-tradeRouter.get('/clients', (req: Request, res: Response) => {
+tradeRouter.get('/my-account', requireUser, (req: Request, res: Response) => {
+  const user = getAuthUser(req);
+  const c = connectionManager.getClientConnection(user.uid);
+  if (!c || !c.isBrokerVerified || c.isSimulated) {
+    return res.status(200).json({ success: true, connected: false, client: null });
+  }
+  return res.status(200).json({ success: true, connected: true, client: toPublicClient(c) });
+});
+
+/**
+ * GET /api/trade/clients  (administrators only)
+ * Every broker-verified client in the replication pipeline.
+ */
+tradeRouter.get('/clients', requireAdmin, (req: Request, res: Response) => {
   try {
     const clients = connectionManager.getActiveClients();
-    return res.status(200).json({
-      success: true,
-      count: clients.length,
-      clients: clients.map((c) => ({
-        userId: c.userId,
-        accountId: c.accountId,
-        login: c.login,
-        server: c.server,
-        status: c.status,
-        balance: c.balance,
-        equity: c.equity,
-        freeMargin: c.freeMargin,
-        leverage: c.leverage,
-        currency: c.currency,
-        isSimulated: c.isSimulated,
-        brokerName: c.brokerName,
-        accountHolderName: c.accountHolderName,
-        isBrokerVerified: c.isBrokerVerified,
-        tradeAllowed: c.tradeAllowed,
-        investorMode: c.investorMode,
-        verificationTimestamp: c.verificationTimestamp,
-        lastSync: c.lastSync,
-      })),
-    });
+    return res.status(200).json({ success: true, count: clients.length, clients: clients.map(toPublicClient) });
   } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      error: error?.message || 'Failed to fetch clients',
-    });
+    return res.status(500).json({ success: false, error: 'Failed to fetch clients' });
   }
 });
 
@@ -391,39 +315,31 @@ tradeRouter.get('/metrics', (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/trade/retry-master
- * Manually retries connection & deployment to Master Terminal once user tops up account.
+ * POST /api/trade/retry-master  (administrators only)
  */
-tradeRouter.post('/retry-master', async (req: Request, res: Response) => {
+tradeRouter.post('/retry-master', requireAdmin, async (req: Request, res: Response) => {
   try {
     const result = await connectionManager.retryMasterConnection();
     return res.status(200).json(result);
   } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      error: error?.message || 'Error retrying master connection',
-    });
+    return res.status(500).json({ success: false, error: 'Error retrying master connection' });
   }
 });
 
 /**
- * POST /api/trade/simulate-trade
- * Programmatically triggers a test trade on Master terminal to test balance-ratio lot scaling across clients
+ * POST /api/trade/simulate-trade  (administrators only, and OFF unless ALLOW_SIMULATED_TRADES=true)
+ * A test trade on the master terminal. It must never be reachable on a production server.
  */
-tradeRouter.post('/simulate-trade', async (req: Request, res: Response) => {
+tradeRouter.post('/simulate-trade', requireAdmin, async (req: Request, res: Response) => {
   try {
+    if (process.env.ALLOW_SIMULATED_TRADES !== 'true') {
+      return res.status(403).json({ success: false, error: 'Test trades are disabled on this server.' });
+    }
     const { symbol = 'XAUUSD', type = 'BUY', volume = 1.0, openPrice = 2650.5 } = req.body || {};
     const results = await replicationEngine.simulateMasterTrade(symbol, type, Number(volume), Number(openPrice));
-    return res.status(200).json({
-      success: true,
-      replicatedOrders: results,
-      count: results.length,
-    });
+    return res.status(200).json({ success: true, replicatedOrders: results, count: results.length });
   } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      error: error?.message || 'Error simulating master trade',
-    });
+    return res.status(500).json({ success: false, error: 'Error simulating master trade' });
   }
 });
 
