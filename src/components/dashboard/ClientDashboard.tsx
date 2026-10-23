@@ -78,10 +78,33 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const [showEmailVerifyModal, setShowEmailVerifyModal] = useState(false);
   const [countdownText, setCountdownText] = useState<string>('');
 
-  // Client Equity Calibration State
+  // Client Equity Calibration & Broker Verification State
   const [showAdjustEquityModal, setShowAdjustEquityModal] = useState(false);
   const [adjustEquityInput, setAdjustEquityInput] = useState<string>('');
   const [isSavingEquity, setIsSavingEquity] = useState(false);
+  const [isReverifyingBroker, setIsReverifyingBroker] = useState(false);
+  const [reverifyMessage, setReverifyMessage] = useState<string | null>(null);
+
+  const handleReverifyBroker = async () => {
+    setIsReverifyingBroker(true);
+    setReverifyMessage(null);
+    try {
+      const res = await tradingEngine.reverifyClientAccountWithBroker(userProfile?.uid);
+      if (res.success) {
+        setAccount({ ...tradingEngine.getMt5Account() });
+        setReverifyMessage(`Broker Synced: $${(res.equity ?? 0).toFixed(2)}`);
+        setTimeout(() => setReverifyMessage(null), 3000);
+      } else {
+        setReverifyMessage(res.error || 'Sync failed');
+        setTimeout(() => setReverifyMessage(null), 3000);
+      }
+    } catch {
+      setReverifyMessage('Sync failed');
+      setTimeout(() => setReverifyMessage(null), 3000);
+    } finally {
+      setIsReverifyingBroker(false);
+    }
+  };
 
   // 50% Profit Share Remittance & Transaction Hash State
   const [invoices, setInvoices] = useState<ProfitShareInvoice[]>(tradingEngine.getProfitInvoices());
@@ -726,22 +749,42 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">Equity</span>
                       {isConnected && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAdjustEquityInput(String(account.equity));
-                            setShowAdjustEquityModal(true);
-                          }}
-                          className="text-[10px] text-blue-500 hover:text-blue-400 font-bold underline cursor-pointer"
-                          title="Calibrate account equity to match your MT5 terminal"
-                        >
-                          Calibrate
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={handleReverifyBroker}
+                            disabled={isReverifyingBroker}
+                            className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline font-bold cursor-pointer flex items-center gap-0.5"
+                            title="Query live MT5 broker for current balance, equity, and free margin"
+                          >
+                            <RefreshCw className={`w-2.5 h-2.5 ${isReverifyingBroker ? 'animate-spin' : ''}`} />
+                            <span>{isReverifyingBroker ? 'Syncing...' : 'Re-sync Broker'}</span>
+                          </button>
+                          <span className="text-slate-400">•</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAdjustEquityInput(String(account.equity));
+                              setShowAdjustEquityModal(true);
+                            }}
+                            className="text-[10px] text-blue-500 hover:text-blue-400 font-bold underline cursor-pointer"
+                            title="Calibrate account equity to match your MT5 terminal"
+                          >
+                            Calibrate
+                          </button>
+                        </div>
                       )}
                     </div>
-                    <span className="text-xs sm:text-sm font-black text-slate-950 dark:text-white">
-                      ${account.equity.toFixed(2)}
-                    </span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xs sm:text-sm font-black text-slate-950 dark:text-white">
+                        ${account.equity.toFixed(2)}
+                      </span>
+                      {reverifyMessage && (
+                        <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                          {reverifyMessage}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div>

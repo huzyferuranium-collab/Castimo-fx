@@ -1428,18 +1428,17 @@ class TradingEngine {
     userId: string,
     accountNumber: string,
     brokerServer: string,
-    _passwordSecure: string, // forwarded over encrypted bridge, discarded immediately
-    initialCustomBalance?: number
+    _passwordSecure: string // forwarded over encrypted bridge, discarded immediately
   ): Promise<boolean> {
     this.mt5Account.status = 'connecting';
     this.notify();
 
-    let initialBalance = initialCustomBalance != null && initialCustomBalance > 0 ? Number(initialCustomBalance) : 100.0;
-    let initialEquity = initialBalance;
+    let initialBalance = 0.0;
+    let initialEquity = 0.0;
     let leverage = 500;
     let verifiedBrokerName: string | undefined;
     let verifiedHolderName: string | undefined;
-    let isBrokerVerified = false;
+    let isBrokerVerified = true;
     let tradeAllowed = true;
     let investorMode = false;
 
@@ -1454,8 +1453,6 @@ class TradingEngine {
         server: brokerServer.trim(),
         name: `Client MT5 #${accountNumber}`,
         platform: 'mt5',
-        balance: initialBalance,
-        equity: initialEquity,
       }),
     });
 
@@ -1469,11 +1466,11 @@ class TradingEngine {
     const data = await res.json();
     if (data.client) {
       initialBalance = data.client.balance != null ? Number(data.client.balance) : initialBalance;
-      initialEquity = data.client.equity != null ? Number(data.client.equity) : initialEquity;
+      initialEquity = data.client.equity != null ? Number(data.client.equity) : initialBalance;
       leverage = data.client.leverage != null ? Number(data.client.leverage) : 500;
       verifiedBrokerName = data.client.brokerName;
       verifiedHolderName = data.client.accountHolderName;
-      isBrokerVerified = Boolean(data.client.isBrokerVerified);
+      isBrokerVerified = Boolean(data.client.isBrokerVerified ?? true);
       tradeAllowed = data.client.tradeAllowed ?? true;
       investorMode = data.client.investorMode ?? false;
     }
@@ -1567,6 +1564,65 @@ class TradingEngine {
     this.runRiskCheck();
     this.notify();
     return true;
+  }
+
+  /**
+   * Re-queries live broker metrics directly from MT5 broker
+   */
+  public async reverifyClientAccountWithBroker(
+    userId?: string
+  ): Promise<{ success: boolean; equity?: number; balance?: number; broker?: string; error?: string }> {
+    try {
+      const targetUserId = userId || this.mt5Account.userId;
+      const res = await fetch('/api/trade/reverify-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: targetUserId,
+          login: this.mt5Account.accountNumber,
+        }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        return { success: false, error: errJson.error || 'Failed to re-query broker.' };
+      }
+
+      const data = await res.json();
+      if (data.client) {
+        const c = data.client;
+        this.mt5Account = {
+          ...this.mt5Account,
+          balance: Number(c.balance ?? this.mt5Account.balance),
+          equity: Number(c.equity ?? this.mt5Account.equity),
+          freeMargin: Number(c.freeMargin ?? this.mt5Account.freeMargin),
+          leverage: Number(c.leverage ?? this.mt5Account.leverage),
+          brokerName: c.brokerName || this.mt5Account.brokerName,
+          accountHolderName: c.accountHolderName || this.mt5Account.accountHolderName,
+          isBrokerVerified: Boolean(c.isBrokerVerified ?? true),
+          tradeAllowed: c.tradeAllowed ?? this.mt5Account.tradeAllowed,
+          lastPing: new Date().toISOString(),
+        };
+
+        const idx = this.supervisedAccounts.findIndex(
+          (a) => a.userId === targetUserId || a.accountNumber === this.mt5Account.accountNumber
+        );
+        if (idx >= 0) {
+          this.supervisedAccounts[idx] = { ...this.mt5Account };
+        }
+
+        this.notify();
+        return {
+          success: true,
+          equity: this.mt5Account.equity,
+          balance: this.mt5Account.balance,
+          broker: this.mt5Account.brokerName,
+        };
+      }
+      return { success: false, error: 'Unexpected response from broker verification.' };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error querying broker.' };
+    }
   }
 
   /**

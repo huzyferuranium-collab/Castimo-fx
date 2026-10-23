@@ -11,7 +11,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { Mt5ConnectionManager } from './MT5_CONNECTION_MANAGER';
+import { Mt5ConnectionManager, ClientConnectionRecord } from './MT5_CONNECTION_MANAGER';
 import { ReplicationEngine } from './REPLICATION_ENGINE';
 
 export const tradeRouter = Router();
@@ -96,7 +96,7 @@ tradeRouter.post('/toggle-mirror', async (req: Request, res: Response) => {
     }
 
     // Lookup client terminal in connection manager pool
-    let client = connectionManager.getClientConnection(userId);
+    let client: ClientConnectionRecord | undefined = connectionManager.getClientConnection(userId);
     if (!client && accountId) {
       client = connectionManager.getClientConnection(accountId);
     }
@@ -104,7 +104,7 @@ tradeRouter.post('/toggle-mirror', async (req: Request, res: Response) => {
     // If client is not yet registered in pool, register a baseline record
     if (!client) {
       const defaultBal = req.body.balance != null ? Number(req.body.balance) : 100.0;
-      client = {
+      const newClientRecord: ClientConnectionRecord = {
         userId,
         accountId: accountId || `client-acc-${userId}`,
         login: 'Awaiting Credentials',
@@ -112,48 +112,68 @@ tradeRouter.post('/toggle-mirror', async (req: Request, res: Response) => {
         status: 'IDLE',
         balance: defaultBal,
         equity: defaultBal,
+        freeMargin: defaultBal,
         currency: 'USD',
         leverage: 100,
+        isBrokerVerified: false,
+        verificationTimestamp: new Date().toISOString(),
         lastSync: new Date().toISOString(),
       };
-      connectionManager.registerClient(client);
+      client = newClientRecord;
+      connectionManager.registerClient(newClientRecord);
     }
+
+    const activeClient = client;
 
     // Determine new state
     const newState: 'ACTIVE' | 'IDLE' = targetState
       ? targetState
-      : client.status === 'ACTIVE'
+      : activeClient.status === 'ACTIVE'
       ? 'IDLE'
       : 'ACTIVE';
 
+    // Server-Side Authorization Check: When activating, validate account status via MetaApi getAccount
+    if (newState === 'ACTIVE') {
+      const authValidation = await connectionManager.validateAccountStatusWithMetaApi(activeClient.accountId);
+      if (!authValidation.valid) {
+        return res.status(403).json({
+          success: false,
+          error: `Cannot activate trade copying: Terminal account status validation failed via MetaApi getAccount (${authValidation.reason}). Access denied.`,
+          code: 'TERMINAL_UNAUTHORIZED',
+          state: authValidation.state,
+          connectionStatus: authValidation.connectionStatus,
+        });
+      }
+    }
+
     // Safety Validation when activating: Verify capital floor ($25.00)
-    if (newState === 'ACTIVE' && client.equity < 25.0) {
+    if (newState === 'ACTIVE' && activeClient.equity < 25.0) {
       return res.status(403).json({
         success: false,
-        error: `Cannot activate trade copying: client equity ($${client.equity.toFixed(2)}) is below the required safety floor ($25.00).`,
+        error: `Cannot activate trade copying: client equity ($${activeClient.equity.toFixed(2)}) is below the required safety floor ($25.00).`,
         code: 'EQUITY_BELOW_MINIMUM_FLOOR',
-        equity: client.equity,
+        equity: activeClient.equity,
         minimumRequired: 25.0,
       });
     }
 
     // Update status in pool
-    client.status = newState;
-    client.lastSync = new Date().toISOString();
-    connectionManager.registerClient(client);
+    activeClient.status = newState;
+    activeClient.lastSync = new Date().toISOString();
+    connectionManager.registerClient(activeClient);
 
     console.log(`🔄 [API /api/trade/toggle-mirror] User ${userId} copy relationship changed to: ${newState}`);
 
     return res.status(200).json({
       success: true,
-      userId: client.userId,
-      accountId: client.accountId,
-      status: client.status,
+      userId: activeClient.userId,
+      accountId: activeClient.accountId,
+      status: activeClient.status,
       message:
         newState === 'ACTIVE'
           ? 'Trade mirroring activated. Orders on the master account will now be replicated with lot scaling.'
           : 'Trade mirroring paused. New master orders will not be executed on this account.',
-      updatedAt: client.lastSync,
+      updatedAt: activeClient.lastSync,
     });
   } catch (error: any) {
     console.error('❌ [API /api/trade/toggle-mirror] Error:', error?.message || error);
@@ -249,16 +269,21 @@ tradeRouter.post('/update-client', async (req: Request, res: Response) => {
 
     if (!updated) {
       // Create if doesn't exist
-      const newRecord = {
+      const defaultBal = balance != null ? Number(balance) : 100.0;
+      const defaultEq = equity != null ? Number(equity) : defaultBal;
+      const newRecord: ClientConnectionRecord = {
         userId: userId || targetId,
         accountId: accountId || `client-acc-${targetId}`,
         login: login || 'Live Account',
         server: server || 'HFMarketsGlobal-Live20',
         status: (status as any) || 'ACTIVE',
-        balance: balance != null ? Number(balance) : 100.0,
-        equity: equity != null ? Number(equity) : (balance != null ? Number(balance) : 100.0),
+        balance: defaultBal,
+        equity: defaultEq,
+        freeMargin: defaultEq,
         currency: 'USD',
         leverage: 100,
+        isBrokerVerified: false,
+        verificationTimestamp: new Date().toISOString(),
         lastSync: new Date().toISOString(),
       };
       connectionManager.registerClient(newRecord);
@@ -423,6 +448,52 @@ tradeRouter.post('/simulate-trade', async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       error: error?.message || 'Error simulating master trade',
+    });
+  }
+});
+
+/**
+ * POST /api/trade/validate-terminal
+ * Queries MetaApi getAccount endpoint to validate terminal connection status,
+ * blocking unauthorized, disconnected, or invalid accounts before granting access.
+ */
+tradeRouter.post('/validate-terminal', async (req: Request, res: Response) => {
+  try {
+    const { accountId, userId } = req.body;
+    const targetId = accountId || userId;
+    if (!targetId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required field: accountId or userId is required.',
+      });
+    }
+
+    const client = connectionManager.getClientConnection(targetId);
+    const idToValidate = client?.accountId || targetId;
+
+    const validation = await connectionManager.validateAccountStatusWithMetaApi(idToValidate);
+    if (!validation.valid) {
+      return res.status(403).json({
+        success: false,
+        valid: false,
+        error: `Terminal validation failed: ${validation.reason}`,
+        code: 'TERMINAL_UNAUTHORIZED',
+        state: validation.state,
+        connectionStatus: validation.connectionStatus,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      valid: true,
+      state: validation.state,
+      connectionStatus: validation.connectionStatus,
+      message: 'Terminal account status successfully validated via MetaApi getAccount.',
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      error: error?.message || 'Unexpected error validating terminal status',
     });
   }
 });

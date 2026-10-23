@@ -14,6 +14,33 @@ import { auth, db, testFirestoreConnection } from '../config/firebase';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 import { UserProfile, UserRole } from '../types';
 
+export function validateNationalIdFormat(rawId: string): {
+  isValid: boolean;
+  normalized: string;
+  error?: string;
+} {
+  const normalized = (rawId || '').trim().toUpperCase();
+  if (!normalized) {
+    return { isValid: false, normalized: '', error: 'National ID is required.' };
+  }
+  if (normalized.length < 5 || normalized.length > 25) {
+    return {
+      isValid: false,
+      normalized,
+      error: 'National ID must be between 5 and 25 characters.',
+    };
+  }
+  const regex = /^[A-Z0-9-]+$/;
+  if (!regex.test(normalized)) {
+    return {
+      isValid: false,
+      normalized,
+      error: 'National ID must contain only alphanumeric characters (letters, numbers, hyphens).',
+    };
+  }
+  return { isValid: true, normalized };
+}
+
 interface AuthContextType {
   user: User | null;
   userProfile: UserProfile | null;
@@ -25,6 +52,11 @@ interface AuthContextType {
   activationUrl: string | null;
   isDemoUser: boolean;
   isDirectSession: boolean;
+  isEmailVerified: boolean;
+  isAdmin: boolean;
+  isClient: boolean;
+  updateNationalId: (nationalId: string) => Promise<{ success: boolean; error?: string }>;
+  isNationalIdDuplicate: (nationalId: string, currentUid?: string) => boolean;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string, role?: UserRole) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -497,6 +529,65 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setApiNeedsActivation(false);
   };
 
+  const isEmailVerified = Boolean(user?.emailVerified || isDemoUser || isDirectSession);
+  const isAdmin = userProfile?.role === 'admin';
+  const isClient = userProfile?.role === 'client';
+
+  const isNationalIdDuplicate = (nationalId: string, currentUid?: string): boolean => {
+    try {
+      const clean = nationalId.trim().toUpperCase();
+      const stored = localStorage.getItem('castimofx_registered_national_ids');
+      if (stored) {
+        const idMap: Record<string, string> = JSON.parse(stored);
+        if (idMap[clean] && idMap[clean] !== currentUid) {
+          return true;
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return false;
+  };
+
+  const updateNationalId = async (nationalId: string): Promise<{ success: boolean; error?: string }> => {
+    const clean = nationalId.trim().toUpperCase();
+    const format = validateNationalIdFormat(clean);
+    if (!format.isValid) {
+      return { success: false, error: format.error };
+    }
+    if (isNationalIdDuplicate(clean, userProfile?.uid)) {
+      return { success: false, error: 'This National ID is already registered to another account.' };
+    }
+
+    try {
+      if (userProfile) {
+        const updatedProfile = { ...userProfile, nationalId: clean, nationalIdVerified: true };
+        setUserProfile(updatedProfile);
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedProfile));
+          const stored = localStorage.getItem('castimofx_registered_national_ids');
+          const idMap = stored ? JSON.parse(stored) : {};
+          idMap[clean] = userProfile.uid;
+          localStorage.setItem('castimofx_registered_national_ids', JSON.stringify(idMap));
+        } catch (e) {
+          console.warn('Could not persist ID mapping:', e);
+        }
+
+        // Also persist to Firestore if authenticated
+        if (!isDemoUser && !isDirectSession && userProfile.uid) {
+          try {
+            await setDoc(doc(db, 'users', userProfile.uid), { nationalId: clean, nationalIdVerified: true, updatedAt: serverTimestamp() }, { merge: true });
+          } catch (fsErr) {
+            console.warn('Firestore nationalId update error (local updated):', fsErr);
+          }
+        }
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Failed to update National ID' };
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -510,6 +601,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         activationUrl,
         isDemoUser,
         isDirectSession,
+        isEmailVerified,
+        isAdmin,
+        isClient,
+        updateNationalId,
+        isNationalIdDuplicate,
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,

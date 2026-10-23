@@ -18,13 +18,15 @@ import { UserRole } from '../../types';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultTab?: 'signin' | 'signup';
+  defaultTab?: 'signin' | 'signup' | 'verify';
+  prefillEmail?: string;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   defaultTab = 'signin',
+  prefillEmail = '',
 }) => {
   const {
     signInWithEmail,
@@ -40,14 +42,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     clearError,
   } = useAuth();
 
-  const [tab, setTab] = useState<'signin' | 'signup'>(defaultTab);
-  const [email, setEmail] = useState('');
+  const [tab, setTab] = useState<'signin' | 'signup' | 'verify'>(defaultTab);
+  const [email, setEmail] = useState(prefillEmail || '');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [verificationSent, setVerificationSent] = useState(false);
   // New accounts are always clients. Admin rights can only be granted in Firebase.
   const role: UserRole = 'client';
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (prefillEmail) setEmail(prefillEmail);
+    if (defaultTab) setTab(defaultTab);
+  }, [prefillEmail, defaultTab]);
 
   if (!isOpen) return null;
 
@@ -166,6 +174,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           >
             Register Client
           </button>
+          {tab === 'verify' && (
+            <button
+              className="flex-1 py-2 text-xs font-semibold rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+            >
+              Verify Email
+            </button>
+          )}
         </div>
 
         {/* Form Body */}
@@ -243,8 +258,54 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3">
-            {tab === 'signup' && (
+          {tab === 'verify' ? (
+            <div className="space-y-4 py-2">
+              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 text-center space-y-2">
+                <div className="w-10 h-10 mx-auto rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Mail className="w-5 h-5" />
+                </div>
+                <h4 className="text-sm font-semibold text-white">Email Verification Required</h4>
+                <p className="text-xs text-slate-400">
+                  {email ? `Account email: ${email}` : 'Verify your email address to enable institutional MT5 copy trading.'}
+                </p>
+              </div>
+
+              {verificationSent ? (
+                <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>Verification link sent to your inbox. Check your email to activate trading.</span>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setVerificationSent(true)}
+                  className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-500/20"
+                >
+                  <Mail className="w-4 h-4" />
+                  <span>Send Verification Email</span>
+                </button>
+              )}
+
+              <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-xs">
+                <button
+                  type="button"
+                  onClick={() => setTab('signin')}
+                  className="text-slate-400 hover:text-white"
+                >
+                  Back to Sign In
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDirectSignIn}
+                  className="text-emerald-400 hover:text-emerald-300 font-medium"
+                >
+                  Instant Direct Session
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-3">
+              {tab === 'signup' && (
               <>
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">Full Legal Name</label>
@@ -321,6 +382,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </button>
             </div>
           </form>
+          )}
 
           {/* Social or Google Sign In */}
           <div className="relative flex py-0.5 items-center">
