@@ -45,6 +45,13 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // One account per National ID: the first account to claim an ID keeps it; nobody can change or free it.
+    match /national_ids/{id} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
     match /test/{id} { allow read: if true; }
   }
 }
