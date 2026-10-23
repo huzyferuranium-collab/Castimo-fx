@@ -19,7 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const isProduction = process.env.NODE_ENV === 'production';
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 async function startServer() {
   const app = express();
@@ -39,6 +39,10 @@ async function startServer() {
       timestamp: new Date().toISOString(),
     });
   });
+
+  if (isProduction && !process.env.METAAPI_TOKEN) {
+    console.error('❌ [SERVER] METAAPI_TOKEN is not set. Broker verification is OFF: no client account can be connected until it is set.');
+  }
 
   // Initialize MT5 Connection Manager & attach Replication Engine
   try {
