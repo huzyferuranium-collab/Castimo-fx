@@ -15,6 +15,7 @@ import { Mt5ConnectionManager } from './MT5_CONNECTION_MANAGER';
 import { ReplicationEngine } from './REPLICATION_ENGINE';
 import { requireUser, requireAdmin, getAuthUser, isAdminUser } from './firebaseAuth';
 import { BrokerVerificationError } from './brokerVerification';
+import { BillingService, BillingError, billingConfig, billingEnabled } from './billing';
 
 export const tradeRouter = Router();
 
@@ -43,6 +44,7 @@ function toPublicClient(c: any) {
     accountType: c.accountType,
     verificationTimestamp: c.verificationTimestamp,
     lastSync: c.lastSync,
+    billingBlocked: Boolean(c.billingBlocked),
   };
 }
 
@@ -147,6 +149,10 @@ tradeRouter.post('/toggle-mirror', requireUser, async (req: Request, res: Respon
     const newState: 'ACTIVE' | 'IDLE' = targetState ? targetState : client.status === 'ACTIVE' ? 'IDLE' : 'ACTIVE';
 
     if (newState === 'ACTIVE') {
+      await BillingService.getInstance().assertNotOverdue(user.uid); // throws BillingError when overdue
+    }
+
+    if (newState === 'ACTIVE') {
       if (client.tradeAllowed === false || client.investorMode) {
         return res.status(403).json({
           success: false,
@@ -182,6 +188,9 @@ tradeRouter.post('/toggle-mirror', requireUser, async (req: Request, res: Respon
       updatedAt: client.lastSync,
     });
   } catch (error: any) {
+    if (error instanceof BillingError) {
+      return res.status(error.status).json({ success: false, code: 'INVOICE_OVERDUE', error: error.message });
+    }
     console.error('❌ [API /api/trade/toggle-mirror] Error:', error?.message || error);
     return res.status(500).json({ success: false, error: 'Failed to toggle mirror state' });
   }
@@ -198,6 +207,8 @@ tradeRouter.post('/provision-client', requireUser, async (req: Request, res: Res
     const user = getAuthUser(req);
     const { login, password, server, platform } = req.body || {};
 
+    await BillingService.getInstance().assertNotOverdue(user.uid);
+
     const clientRecord = await connectionManager.provisionClientTerminal({
       userId: user.uid,
       login: String(login ?? ''),
@@ -212,6 +223,9 @@ tradeRouter.post('/provision-client', requireUser, async (req: Request, res: Res
       client: toPublicClient(clientRecord),
     });
   } catch (error: any) {
+    if (error instanceof BillingError) {
+      return res.status(error.status).json({ success: false, code: 'INVOICE_OVERDUE', error: error.message });
+    }
     if (error instanceof BrokerVerificationError) {
       return res.status(STATUS_BY_CODE[error.code] ?? 400).json({ success: false, code: error.code, error: error.message });
     }
@@ -291,6 +305,58 @@ tradeRouter.post('/disconnect-client', requireUser, async (req: Request, res: Re
       return res.status(STATUS_BY_CODE[error.code] ?? 400).json({ success: false, code: error.code, error: error.message });
     }
     return res.status(500).json({ success: false, error: 'Failed to disconnect the account' });
+  }
+});
+
+/**
+ * Billing: a client's own invoices, paying one (checked on the TRON blockchain), and admin tools.
+ */
+tradeRouter.get('/invoices', requireUser, async (req: Request, res: Response) => {
+  try {
+    const user = getAuthUser(req);
+    const cfg = billingConfig();
+    const invoices = await BillingService.getInstance().listInvoicesForUser(user.uid);
+    return res.status(200).json({
+      success: true,
+      billingEnabled: billingEnabled(),
+      feePct: cfg.feePct,
+      periodDays: cfg.periodDays,
+      treasuryAddress: billingEnabled() ? cfg.treasury : '',
+      invoices,
+    });
+  } catch {
+    return res.status(500).json({ success: false, error: 'Could not load invoices.' });
+  }
+});
+
+tradeRouter.post('/pay-invoice', requireUser, async (req: Request, res: Response) => {
+  try {
+    const user = getAuthUser(req);
+    const invoice = await BillingService.getInstance().payInvoice(user.uid, String(req.body?.invoiceId ?? ''), String(req.body?.txHash ?? ''));
+    return res.status(200).json({ success: true, invoice });
+  } catch (error: any) {
+    if (error instanceof BillingError) return res.status(error.status).json({ success: false, error: error.message });
+    console.error('❌ [API /pay-invoice]', error?.message || error);
+    return res.status(500).json({ success: false, error: 'Could not verify the payment. Please try again.' });
+  }
+});
+
+tradeRouter.get('/admin/invoices', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    return res.status(200).json({ success: true, invoices: await BillingService.getInstance().listAllInvoices() });
+  } catch {
+    return res.status(500).json({ success: false, error: 'Could not load invoices.' });
+  }
+});
+
+tradeRouter.post('/admin/confirm-invoice', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const admin = getAuthUser(req);
+    const invoice = await BillingService.getInstance().adminConfirm(admin.uid, String(req.body?.invoiceId ?? ''), req.body?.note);
+    return res.status(200).json({ success: true, invoice });
+  } catch (error: any) {
+    if (error instanceof BillingError) return res.status(error.status).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: 'Could not confirm the invoice.' });
   }
 });
 

@@ -76,6 +76,8 @@ export interface ClientConnectionRecord {
   investorMode?: boolean;
   accountType?: 'demo' | 'real';
   verificationTimestamp: string;
+  /** True while the client has an overdue profit-share invoice: copying is paused. */
+  billingBlocked?: boolean;
 }
 
 export type ConnectionState = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'ERROR';
@@ -138,6 +140,8 @@ export class Mt5ConnectionManager {
 
   // Client Connections Pool (keyed by userId or accountId)
   private clientPool: Map<string, ClientConnectionRecord> = new Map();
+  /** Called whenever a client's broker account is verified or restored (used to open the billing ledger). */
+  public onClientVerified: ((record: ClientConnectionRecord) => void) | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectIntervalMs = 5000;
@@ -640,6 +644,7 @@ export class Mt5ConnectionManager {
         verificationTimestamp: now,
       };
       this.registerClient(record);
+      this.onClientVerified?.(record);
 
       console.log(
         `✅ [MT5_CONNECTION_MANAGER] Broker verified #${login}: ${verified.brokerName} (${verified.accountType}), equity $${verified.equity.toFixed(2)}`
@@ -737,6 +742,16 @@ export class Mt5ConnectionManager {
   /**
    * Retrieves an active client RPC connection by userId or accountId
    */
+  public getAllClientRecords(): ClientConnectionRecord[] {
+    return Array.from(this.clientPool.values());
+  }
+
+  public setBillingBlocked(userId: string, blocked: boolean): void {
+    for (const rec of this.clientPool.values()) {
+      if (rec.userId === userId) rec.billingBlocked = blocked;
+    }
+  }
+
   public getClientConnection(identifier: string): ClientConnectionRecord | undefined {
     return this.clientPool.get(identifier);
   }
@@ -759,7 +774,7 @@ export class Mt5ConnectionManager {
   public getActiveClients(): ClientConnectionRecord[] {
     const unique = new Map<string, ClientConnectionRecord>();
     for (const record of this.clientPool.values()) {
-      if (record.status === 'ACTIVE' && record.isBrokerVerified && !record.isSimulated) {
+      if (record.status === 'ACTIVE' && record.isBrokerVerified && !record.isSimulated && !record.billingBlocked) {
         unique.set(record.userId, record);
       }
     }
@@ -928,6 +943,7 @@ export class Mt5ConnectionManager {
             accountType: v.accountType,
             verificationTimestamp: now,
           });
+          this.onClientVerified?.(this.clientPool.get(parsed.userId)!);
           console.log(`♻️ [MT5_CONNECTION_MANAGER] Restored client #${parsed.login} after restart.`);
         } catch (err: any) {
           console.warn(`⚠️ [MT5_CONNECTION_MANAGER] Could not restore #${parsed.login}:`, err?.message);

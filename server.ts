@@ -14,6 +14,7 @@ import fs from 'fs';
 import { tradeRouter } from './src/backend/WEBHOOK_ROUTES';
 import { Mt5ConnectionManager } from './src/backend/MT5_CONNECTION_MANAGER';
 import { ReplicationEngine } from './src/backend/REPLICATION_ENGINE';
+import { BillingService } from './src/backend/billing';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,6 +52,7 @@ async function startServer() {
     
     const replicationEngine = ReplicationEngine.getInstance();
     replicationEngine.attachToMasterStream();
+    BillingService.getInstance().start();
     console.log('✅ [SERVER] CastimoFX MT5 Replication Engine initialized and listening.');
   } catch (err: any) {
     console.warn('⚠️ [SERVER] MT5 Connection Manager initialization deferred:', err?.message || err);
