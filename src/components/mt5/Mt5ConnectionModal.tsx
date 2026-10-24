@@ -9,14 +9,22 @@ interface Mt5ConnectionModalProps {
 }
 
 const COMMON_SERVERS = [
+  'Exness-MT5Real9',
+  'Exness-MT5Real14',
+  'Exness-MT5Real7',
+  'Exness-MT5Real10',
+  'Exness-MT5Real8',
+  'Exness-MT5Real',
+  'Exness-Real9',
   'HFMarketsGlobal-Live20',
   'HFMarketsSC-Live2',
-  'ICMarketsAU-Live',
   'ICMarketsSC-Live02',
   'ICMarketsSC-Live05',
+  'ICMarketsAU-Live',
+  'Deriv-Server',
+  'XMGlobal-MT5',
   'FTMO-Server-Live',
   'Tickmill-Live01',
-  'Exness-Real10',
   'Pepperstone-Edge-Live',
 ];
 
@@ -159,7 +167,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                     list="server-options"
                     value={brokerServer}
                     onChange={(e) => setBrokerServer(e.target.value)}
-                    placeholder="e.g. ICMarketsSC-Live02"
+                    placeholder="e.g. Exness-MT5Real9 or ICMarketsSC-Live02"
                     className="w-full pl-9 pr-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl focus:border-blue-500 text-white font-mono"
                   />
                   <datalist id="server-options">
@@ -168,6 +176,14 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                     ))}
                   </datalist>
                 </div>
+                {brokerServer.toLowerCase().includes('exness') && brokerServer.toLowerCase().includes('real') && !brokerServer.toLowerCase().includes('mt5') && (
+                  <p className="text-[10px] text-blue-400 mt-1 flex items-center gap-1 font-mono">
+                    <span>ℹ️ Auto-aliasing to official MT5 server:</span>
+                    <strong className="text-white">
+                      {brokerServer.replace(/exness-?real(\d+)/i, 'Exness-MT5Real$1')}
+                    </strong>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -181,7 +197,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                     required
                     value={accountNumber}
                     onChange={(e) => setAccountNumber(e.target.value)}
-                    placeholder="e.g. 8829104"
+                    placeholder="e.g. 133227028"
                     className="w-full pl-9 pr-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl focus:border-blue-500 text-white font-mono"
                   />
                 </div>

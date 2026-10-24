@@ -11,7 +11,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { Mt5ConnectionManager } from './MT5_CONNECTION_MANAGER';
+import { Mt5ConnectionManager, ClientConnectionRecord } from './MT5_CONNECTION_MANAGER';
 import { ReplicationEngine } from './REPLICATION_ENGINE';
 import { requireUser, requireAdmin, getAuthUser, isAdminUser } from './firebaseAuth';
 import { BrokerVerificationError } from './brokerVerification';
@@ -172,14 +172,14 @@ tradeRouter.post('/toggle-mirror', requireUser, async (req: Request, res: Respon
 
     return res.status(200).json({
       success: true,
-      userId: client.userId,
-      accountId: client.accountId,
-      status: client.status,
+      userId: activeClient.userId,
+      accountId: activeClient.accountId,
+      status: activeClient.status,
       message:
         newState === 'ACTIVE'
           ? 'Trade mirroring activated. Orders on the master account will now be replicated with lot scaling.'
           : 'Trade mirroring paused. New master orders will not be executed on this account.',
-      updatedAt: client.lastSync,
+      updatedAt: activeClient.lastSync,
     });
   } catch (error: any) {
     console.error('❌ [API /api/trade/toggle-mirror] Error:', error?.message || error);
@@ -340,6 +340,52 @@ tradeRouter.post('/simulate-trade', requireAdmin, async (req: Request, res: Resp
     return res.status(200).json({ success: true, replicatedOrders: results, count: results.length });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: 'Error simulating master trade' });
+  }
+});
+
+/**
+ * POST /api/trade/validate-terminal
+ * Queries MetaApi getAccount endpoint to validate terminal connection status,
+ * blocking unauthorized, disconnected, or invalid accounts before granting access.
+ */
+tradeRouter.post('/validate-terminal', async (req: Request, res: Response) => {
+  try {
+    const { accountId, userId } = req.body;
+    const targetId = accountId || userId;
+    if (!targetId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required field: accountId or userId is required.',
+      });
+    }
+
+    const client = connectionManager.getClientConnection(targetId);
+    const idToValidate = client?.accountId || targetId;
+
+    const validation = await connectionManager.validateAccountStatusWithMetaApi(idToValidate);
+    if (!validation.valid) {
+      return res.status(403).json({
+        success: false,
+        valid: false,
+        error: `Terminal validation failed: ${validation.reason}`,
+        code: 'TERMINAL_UNAUTHORIZED',
+        state: validation.state,
+        connectionStatus: validation.connectionStatus,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      valid: true,
+      state: validation.state,
+      connectionStatus: validation.connectionStatus,
+      message: 'Terminal account status successfully validated via MetaApi getAccount.',
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      error: error?.message || 'Unexpected error validating terminal status',
+    });
   }
 });
 

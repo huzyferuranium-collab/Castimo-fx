@@ -81,6 +81,29 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
 
   // Client Equity Calibration State
   const [isSavingEquity, setIsSavingEquity] = useState(false);
+  const [isReverifyingBroker, setIsReverifyingBroker] = useState(false);
+  const [reverifyMessage, setReverifyMessage] = useState<string | null>(null);
+
+  const handleReverifyBroker = async () => {
+    setIsReverifyingBroker(true);
+    setReverifyMessage(null);
+    try {
+      const res = await tradingEngine.reverifyClientAccountWithBroker(userProfile?.uid);
+      if (res.success) {
+        setAccount({ ...tradingEngine.getMt5Account() });
+        setReverifyMessage(`Broker Synced: $${(res.equity ?? 0).toFixed(2)}`);
+        setTimeout(() => setReverifyMessage(null), 3000);
+      } else {
+        setReverifyMessage(res.error || 'Sync failed');
+        setTimeout(() => setReverifyMessage(null), 3000);
+      }
+    } catch {
+      setReverifyMessage('Sync failed');
+      setTimeout(() => setReverifyMessage(null), 3000);
+    } finally {
+      setIsReverifyingBroker(false);
+    }
+  };
 
   // 50% Profit Share Remittance & Transaction Hash State
   const [invoices, setInvoices] = useState<ProfitShareInvoice[]>(tradingEngine.getProfitInvoices());
@@ -738,9 +761,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                         </button>
                       )}
                     </div>
-                    <span className="text-xs sm:text-sm font-black text-slate-950 dark:text-white">
-                      ${account.equity.toFixed(2)}
-                    </span>
                   </div>
 
                   <div>

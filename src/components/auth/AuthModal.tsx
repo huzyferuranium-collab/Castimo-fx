@@ -52,10 +52,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [verificationSent, setVerificationSent] = useState(false);
   // New accounts are always clients. Admin rights can only be granted in Firebase.
   const role: UserRole = 'client';
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (prefillEmail) setEmail(prefillEmail);
+    if (defaultTab) setTab(defaultTab);
+  }, [prefillEmail, defaultTab]);
 
   if (!isOpen) return null;
 
@@ -195,6 +201,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           >
             Register Client
           </button>
+          {tab === 'verify' && (
+            <button
+              className="flex-1 py-2 text-xs font-semibold rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+            >
+              Verify Email
+            </button>
+          )}
         </div>
         )}
 
