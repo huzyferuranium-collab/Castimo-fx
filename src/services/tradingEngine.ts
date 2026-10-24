@@ -21,7 +21,11 @@ import {
 import { authHeaders } from './apiAuth';
 
 export const TRC20_USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
-export const CASTIMO_TREASURY_ADDRESS = 'TJzM7N4VvUq82Yx8fD3A6P4L8otSzgjLj6t';
+// The wallet that receives USDT. Set VITE_TREASURY_ADDRESS to YOUR real TRON (TRC20) address at build time.
+// Until it is set (and looks like a valid TRON address) no payment address is shown and payments are refused.
+const RAW_TREASURY = String((import.meta as any).env?.VITE_TREASURY_ADDRESS ?? '').trim();
+export const CASTIMO_TREASURY_ADDRESS = /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(RAW_TREASURY) ? RAW_TREASURY : '';
+export const PAYMENTS_ENABLED = CASTIMO_TREASURY_ADDRESS !== '';
 
 export const DEFAULT_PLANS: SubscriptionPlan[] = [
   {
@@ -124,21 +128,6 @@ const INITIAL_COMMISSION_HISTORY: ReferralCommissionEvent[] = [];
 
 const INITIAL_TRADES: CopiedTrade[] = [];
 
-const INITIAL_SUBSCRIPTION: Subscription = {
-  id: 'sub-cfx-001',
-  userId: 'verified-client-castimo-001',
-  planId: 'monthly',
-  planName: 'Monthly Pro Trader',
-  priceUsdt: 40,
-  status: 'active',
-  txHash: '9a8d7e6f5c4b3a210987654321fedcba0123456789abcdef0123456789abcdef',
-  confirmations: 38,
-  recipientAddress: CASTIMO_TREASURY_ADDRESS,
-  createdAt: '2026-09-15T12:00:00Z',
-  startDate: '2026-09-15T12:05:00Z',
-  expiresAt: '2026-10-15T12:05:00Z',
-};
-
 const INITIAL_WITHDRAWALS: WithdrawalRequest[] = [];
 
 const INITIAL_SETTLEMENTS: ProfitShareSettlement[] = [];
@@ -194,7 +183,7 @@ class TradingEngine {
   private listeners: (() => void)[] = [];
 
   constructor() {
-    this.subscription = INITIAL_SUBSCRIPTION;
+    this.subscription = null;
     this.runRiskCheck();
   }
 
@@ -993,67 +982,18 @@ class TradingEngine {
       return { success: true };
     }
 
-    const verifiedTx =
-      txHash && txHash.trim().length === 64
-        ? txHash.trim()
-        : 'tx-trc20-' + Date.now().toString(16) + Math.random().toString(16).slice(2, 10);
-
-    inv.status = 'paid';
-    inv.paidAt = new Date().toISOString();
-    inv.txHash = verifiedTx;
-
-    // Clear dues on client account
-    if (this.mt5Account.userId === inv.userId) {
-      this.mt5Account.unpaidProfitShareUsdt = 0;
-      this.mt5Account.profitShareStatus = 'up_to_date';
-      this.mt5Account.profitShareDueAt = undefined;
-      if (this.mt5Account.status === 'blocked_unpaid') {
-        this.mt5Account.status = 'copying';
-        this.mt5Account.blockedReason = undefined;
-        this.mt5Account.riskStatus = 'normal';
-      }
+    // Nothing is marked paid on the client's say-so. Automatic blockchain checking is not live yet,
+    // so a payment has to be confirmed by an administrator.
+    if (!PAYMENTS_ENABLED) {
+      return { success: false, error: 'Payments are not open yet. Please contact support.' };
     }
-
-    // Update in supervised accounts
-    const supAcc = this.supervisedAccounts.find((a) => a.accountNumber === inv.accountNumber);
-    if (supAcc) {
-      supAcc.unpaidProfitShareUsdt = 0;
-      supAcc.profitShareStatus = 'up_to_date';
-      supAcc.profitShareDueAt = undefined;
-      if (supAcc.status === 'blocked_unpaid') {
-        supAcc.status = 'copying';
-        supAcc.blockedReason = undefined;
-        supAcc.riskStatus = 'normal';
-      }
+    if (!txHash || !/^[0-9a-fA-F]{64}$/.test(txHash.trim())) {
+      return { success: false, error: 'Please paste the 64-character transaction ID (TXID) of your USDT payment.' };
     }
-
-    this.addLedgerEntry(
-      'PROFIT_SHARE_FEE_LEVIED',
-      inv.id,
-      `50% Profit Share received (${inv.amountDueUsdt.toFixed(2)} USDT) for gross profit ${inv.grossProfit.toFixed(2)}. TXID: ${verifiedTx.slice(0, 16)}...`,
-      inv.amountDueUsdt,
-      0
-    );
-
-    this.logAudit(
-      inv.userId,
-      'System Payment Engine',
-      'PROFIT_SHARE_PAID_USDT',
-      'PAYMENT',
-      `Invoice ${inv.id} paid. ${inv.amountDueUsdt.toFixed(2)} USDT verified on TRC20 network. Account trade copying active.`,
-      'SUCCESS'
-    );
-
-    this.addNotification(
-      'SETTLEMENT_PROCESSED',
-      '24-Hour Profit Settlement Processed',
-      `Your 50% Profit Share remittance of $${inv.amountDueUsdt.toFixed(2)} USDT for invoice ${inv.id} has been verified on TRC20 network. Trading remains uninterrupted.`,
-      inv.amountDueUsdt,
-      'open_settlements'
-    );
-
-    this.notify();
-    return { success: true };
+    return {
+      success: false,
+      error: 'Automatic payment checking is not live yet. Send your TXID to support so an administrator can confirm it.',
+    };
   }
 
   public async submitAndVerifyProfitShareHash(
@@ -1067,6 +1007,9 @@ class TradingEngine {
     invoiceId?: string;
     error?: string;
   }> {
+    if (!PAYMENTS_ENABLED) {
+      return { success: false, message: 'Payments are not open yet.', error: 'Payments are not open yet. Please contact support.' };
+    }
     const cleanHash = txHash.trim();
     if (!cleanHash) {
       return {
@@ -1111,7 +1054,7 @@ class TradingEngine {
         grossProfit: dueAmount * 2,
         profitSharePct: 50,
         amountDueUsdt: dueAmount,
-        recipientAddress: 'TYD2v7sT4jYnF1X1p5WkM9Z8Uq3eXGg1Ab',
+        recipientAddress: CASTIMO_TREASURY_ADDRESS,
         status: 'pending',
         createdAt: new Date().toISOString(),
         dueAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
@@ -1128,7 +1071,7 @@ class TradingEngine {
         grossProfit: 100,
         profitSharePct: 50,
         amountDueUsdt: 50,
-        recipientAddress: 'TYD2v7sT4jYnF1X1p5WkM9Z8Uq3eXGg1Ab',
+        recipientAddress: CASTIMO_TREASURY_ADDRESS,
         status: 'pending',
         createdAt: new Date().toISOString(),
         dueAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),

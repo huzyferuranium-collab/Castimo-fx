@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { tradingEngine } from '../../services/tradingEngine';
+import { tradingEngine, CASTIMO_TREASURY_ADDRESS } from '../../services/tradingEngine';
 import { Mt5Account, RiskSettings, ProfitShareInvoice } from '../../types';
 import { RiskSettingsModal } from '../risk/RiskSettingsModal';
 import { LedgerAuditModal } from '../ledger/LedgerAuditModal';
@@ -607,7 +607,7 @@ export const AdminDashboard: React.FC = () => {
                   TRON (TRC20 USDT)
                 </span>
                 <span className="text-[10px] text-slate-400 block mt-0.5 truncate font-mono">
-                  TYD2v7sT4jYnF1X1p5WkM9Z8Uq3eXGg1Ab
+                  {CASTIMO_TREASURY_ADDRESS || 'Payment address not set yet'}
                 </span>
               </div>
             </div>

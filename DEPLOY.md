@@ -25,3 +25,7 @@ Set these on Render next to `METAAPI_TOKEN`:
 - `MAX_CLIENT_ACCOUNTS` = most client accounts allowed in total (default 5, `0` = no limit). Set it to what your MetaApi plan includes.
 - `MAX_ACCOUNTS_PER_USER` = accounts per client (default 1).
 Clients who disconnect are removed from MetaApi, which stops their charge. Admins can see usage at `/api/trade/capacity`.
+
+## Payments wallet
+Add `VITE_TREASURY_ADDRESS` = your real TRON (TRC20) USDT address in Render's environment variables, then redeploy.
+Until it is set, the site shows "Payment address not set yet" and refuses payments, so nobody can send money to a wrong address.
