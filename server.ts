@@ -15,6 +15,7 @@ import { tradeRouter } from './src/backend/WEBHOOK_ROUTES';
 import { Mt5ConnectionManager } from './src/backend/MT5_CONNECTION_MANAGER';
 import { ReplicationEngine } from './src/backend/REPLICATION_ENGINE';
 import { BillingService } from './src/backend/billing';
+import { saveClientRecord, loadSavedStatus } from './src/backend/clientStore';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -77,6 +78,9 @@ async function startServer() {
   // Initialize MT5 Connection Manager & attach Replication Engine
   try {
     const connectionManager = Mt5ConnectionManager.getInstance();
+    // Remember each client's account (no passwords) so they never have to reconnect after a restart.
+    connectionManager.onClientSaved = (rec) => void saveClientRecord(rec).catch((e) => console.warn('[STORE] save failed:', e?.message));
+    connectionManager.loadSavedStatus = loadSavedStatus;
     await connectionManager.initialize();
     
     const replicationEngine = ReplicationEngine.getInstance();

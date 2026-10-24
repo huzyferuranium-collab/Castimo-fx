@@ -382,9 +382,9 @@ tradeRouter.get('/capacity', requireAdmin, async (_req: Request, res: Response) 
  * GET /api/trade/my-account  (signed-in users)
  * The caller's own broker-verified account, or connected:false.
  */
-tradeRouter.get('/my-account', requireUser, (req: Request, res: Response) => {
+tradeRouter.get('/my-account', requireUser, async (req: Request, res: Response) => {
   const user = getAuthUser(req);
-  const c = connectionManager.getClientConnection(user.uid);
+  const c = connectionManager.getClientConnection(user.uid) ?? (await connectionManager.restoreClientForUser(user.uid));
   if (!c || !c.isBrokerVerified || c.isSimulated) {
     return res.status(200).json({ success: true, connected: false, client: null });
   }

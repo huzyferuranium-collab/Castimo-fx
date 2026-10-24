@@ -142,6 +142,11 @@ export class Mt5ConnectionManager {
   private clientPool: Map<string, ClientConnectionRecord> = new Map();
   /** Called whenever a client's broker account is verified or restored (used to open the billing ledger). */
   public onClientVerified: ((record: ClientConnectionRecord) => void) | null = null;
+  /** Called whenever a client's record is saved to the pool (connect, pause, resume). */
+  public onClientSaved: ((record: ClientConnectionRecord) => void) | null = null;
+  /** Looks up the pause/resume choice the client last made. */
+  public loadSavedStatus: ((userId: string) => Promise<'ACTIVE' | 'IDLE' | null>) | null = null;
+  private lastLazyRestore = new Map<string, number>();
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectIntervalMs = 5000;
@@ -803,6 +808,11 @@ export class Mt5ConnectionManager {
     }
     this.clientPool.set(record.userId, record);
     this.clientPool.set(record.accountId, record);
+    try {
+      this.onClientSaved?.(record);
+    } catch {
+      // saving is best-effort
+    }
   }
 
   /**
@@ -941,6 +951,47 @@ export class Mt5ConnectionManager {
     }
   }
 
+  /** Re-attaches one client's MetaApi account to the pool. Returns false if it cannot be restored. */
+  private async restoreOne(accountId: string, parsed: { userId: string; login: string }): Promise<boolean> {
+    if (!this.api || this.isSimulatedMode) return false;
+    const entity = await this.api.metatraderAccountApi.getAccount(accountId);
+    if (entity.state !== 'DEPLOYED') return false;
+    const rpc = entity.getRPCConnection();
+    await rpc.connect();
+    await rpc.waitSynchronized(30);
+    const info = await rpc.getAccountInformation();
+    const v = verifyBrokerAccountInfo(info as any, { login: parsed.login, server: entity.server });
+    const now = new Date().toISOString();
+    const saved = (await this.loadSavedStatus?.(parsed.userId).catch(() => null)) ?? 'ACTIVE';
+    this.registerClient({
+      userId: parsed.userId,
+      accountId: entity.id,
+      login: parsed.login,
+      server: entity.server,
+      status: saved,
+      account: entity,
+      rpcConnection: rpc,
+      balance: v.balance,
+      equity: v.equity,
+      freeMargin: v.freeMargin,
+      currency: v.currency,
+      leverage: v.leverage,
+      lastSync: now,
+      isSimulated: false,
+      accountHolderName: v.accountHolderName,
+      brokerName: v.brokerName,
+      isBrokerVerified: true,
+      tradeAllowed: v.tradeAllowed,
+      investorMode: v.investorMode,
+      accountType: v.accountType,
+      verificationTimestamp: now,
+    });
+    const rec = this.clientPool.get(parsed.userId);
+    if (rec) this.onClientVerified?.(rec);
+    console.log(`♻️ [MT5_CONNECTION_MANAGER] Restored client #${parsed.login} (${saved}).`);
+    return true;
+  }
+
   /** Re-attaches client accounts that already exist in MetaApi (after a server restart). */
   public async rehydrateClients(): Promise<void> {
     if (!this.api || this.isSimulatedMode) return;
@@ -950,39 +1001,7 @@ export class Mt5ConnectionManager {
         const parsed = parseClientAccountName(a.name);
         if (!parsed || this.clientPool.has(parsed.userId)) continue;
         try {
-          const entity = await this.api.metatraderAccountApi.getAccount(a.id);
-          if (entity.state !== 'DEPLOYED') continue;
-          const rpc = entity.getRPCConnection();
-          await rpc.connect();
-          await rpc.waitSynchronized(30);
-          const info = await rpc.getAccountInformation();
-          const v = verifyBrokerAccountInfo(info as any, { login: parsed.login, server: entity.server });
-          const now = new Date().toISOString();
-          this.registerClient({
-            userId: parsed.userId,
-            accountId: entity.id,
-            login: parsed.login,
-            server: entity.server,
-            status: 'ACTIVE',
-            account: entity,
-            rpcConnection: rpc,
-            balance: v.balance,
-            equity: v.equity,
-            freeMargin: v.freeMargin,
-            currency: v.currency,
-            leverage: v.leverage,
-            lastSync: now,
-            isSimulated: false,
-            accountHolderName: v.accountHolderName,
-            brokerName: v.brokerName,
-            isBrokerVerified: true,
-            tradeAllowed: v.tradeAllowed,
-            investorMode: v.investorMode,
-            accountType: v.accountType,
-            verificationTimestamp: now,
-          });
-          this.onClientVerified?.(this.clientPool.get(parsed.userId)!);
-          console.log(`♻️ [MT5_CONNECTION_MANAGER] Restored client #${parsed.login} after restart.`);
+          await this.restoreOne(a.id, parsed);
         } catch (err: any) {
           console.warn(`⚠️ [MT5_CONNECTION_MANAGER] Could not restore #${parsed.login}:`, err?.message);
         }
@@ -990,6 +1009,31 @@ export class Mt5ConnectionManager {
     } catch (err: any) {
       console.warn('⚠️ [MT5_CONNECTION_MANAGER] Client restore skipped:', err?.message);
     }
+  }
+
+  /**
+   * Called when a signed-in client opens the dashboard but is not in memory (for example the server
+   * restarted and the first restore failed). Looks for their account in MetaApi and restores it.
+   */
+  public async restoreClientForUser(userId: string): Promise<ClientConnectionRecord | undefined> {
+    const existing = this.clientPool.get(userId);
+    if (existing) return existing;
+    if (!this.api || this.isSimulatedMode) return undefined;
+    const last = this.lastLazyRestore.get(userId) || 0;
+    if (Date.now() - last < 30_000) return undefined;
+    this.lastLazyRestore.set(userId, Date.now());
+    try {
+      const all = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
+      for (const a of all) {
+        const parsed = parseClientAccountName(a.name);
+        if (parsed && parsed.userId === userId) {
+          if (await this.restoreOne(a.id, parsed)) return this.clientPool.get(userId);
+        }
+      }
+    } catch (err: any) {
+      console.warn('⚠️ [MT5_CONNECTION_MANAGER] Lazy restore failed:', err?.message);
+    }
+    return undefined;
   }
 
   private startHeartbeatMonitor(): void {
