@@ -8,40 +8,36 @@ import {
   signOut,
   onAuthStateChanged,
   updateProfile,
+  sendEmailVerification,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, testFirestoreConnection } from '../config/firebase';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 import { UserProfile, UserRole } from '../types';
 
-export function validateNationalIdFormat(rawId: string): {
-  isValid: boolean;
-  normalized: string;
-  error?: string;
-} {
-  const normalized = (rawId || '').trim().toUpperCase();
-  if (!normalized) {
-    return { isValid: false, normalized: '', error: 'National ID is required.' };
-  }
-  if (normalized.length < 5 || normalized.length > 25) {
+/** National ID: letters and digits only, 5 to 20 characters. Stored upper-case. */
+export function validateNationalIdFormat(
+  raw: string
+): { isValid: boolean; normalized: string; error?: string } {
+  const normalized = String(raw ?? '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{5,20}$/.test(normalized)) {
     return {
       isValid: false,
       normalized,
-      error: 'National ID must be between 5 and 25 characters.',
-    };
-  }
-  const regex = /^[A-Z0-9-]+$/;
-  if (!regex.test(normalized)) {
-    return {
-      isValid: false,
-      normalized,
-      error: 'National ID must contain only alphanumeric characters (letters, numbers, hyphens).',
+      error: 'National ID must be 5 to 20 letters or digits, with no spaces or symbols.',
     };
   }
   return { isValid: true, normalized };
 }
 
 interface AuthContextType {
+  isAdmin: boolean;
+  isClient: boolean;
+  isEmailVerified: boolean;
+  sendVerificationEmail: () => Promise<{ success: boolean; error?: string }>;
+  refreshEmailVerified: () => Promise<boolean>;
+  isNationalIdDuplicate: (id: string, uid?: string) => boolean;
+  updateNationalId: (id: string) => Promise<{ success: boolean; error?: string }>;
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
@@ -52,11 +48,6 @@ interface AuthContextType {
   activationUrl: string | null;
   isDemoUser: boolean;
   isDirectSession: boolean;
-  isEmailVerified: boolean;
-  isAdmin: boolean;
-  isClient: boolean;
-  updateNationalId: (nationalId: string) => Promise<{ success: boolean; error?: string }>;
-  isNationalIdDuplicate: (nationalId: string, currentUid?: string) => boolean;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string, role?: UserRole) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -198,6 +189,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               role: (data.role as UserRole) || 'client',
               createdAt: data.createdAt || new Date().toISOString(),
               photoURL: currentUser.photoURL || undefined,
+              nationalId: data.nationalId || undefined,
+              nationalIdVerified: !!data.nationalId,
             });
           } else {
             console.log('📄 [Firestore] User profile document does not exist yet. Creating default doc...');
@@ -347,6 +340,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       });
 
       await updateProfile(createdUser, { displayName });
+      sendEmailVerification(createdUser).catch(() => {});
       console.log('✅ [Firebase Auth] Profile display name updated to:', displayName);
 
       const newProfile: UserProfile = {
@@ -522,70 +516,77 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setDiagnosticAdvice(null);
   };
 
+  // ---- Email verification (real: Firebase sends a link, Firebase records the result) ----
+  const isRealUser = !!user && !isDirectSession && !isDemoUser;
+  const isEmailVerified = isRealUser && !!user?.emailVerified;
+  const [verifyTick, setVerifyTick] = useState(0);
+  void verifyTick;
+
+  const sendVerificationEmail = async () => {
+    const current = auth.currentUser;
+    if (!current) return { success: false, error: 'Please sign in with a real account first.' };
+    try {
+      await sendEmailVerification(current);
+      return { success: true };
+    } catch (err: any) {
+      const msg =
+        err?.code === 'auth/too-many-requests'
+          ? 'Too many requests. Please wait a few minutes and try again.'
+          : err?.message || 'Could not send the verification email.';
+      return { success: false, error: msg };
+    }
+  };
+
+  const refreshEmailVerified = async () => {
+    const current = auth.currentUser;
+    if (!current) return false;
+    try {
+      await current.reload();
+      setUser(auth.currentUser);
+      setVerifyTick((n) => n + 1);
+    } catch {
+      // ignore; keep the previous state
+    }
+    return !!auth.currentUser?.emailVerified;
+  };
+
+  // ---- National ID (one account per ID, enforced by the database rules) ----
+  // Duplicates cannot be known without asking the database, so the real check is in updateNationalId.
+  const isNationalIdDuplicate = (_id: string, _uid?: string) => false;
+
+  const updateNationalId = async (rawId: string) => {
+    const current = auth.currentUser;
+    if (!current || !isRealUser) return { success: false, error: 'Please sign in with a real account first.' };
+    const check = validateNationalIdFormat(rawId);
+    if (!check.isValid) return { success: false, error: check.error };
+    try {
+      const idRef = doc(db, 'national_ids', check.normalized);
+      const existing = await getDoc(idRef);
+      if (existing.exists() && existing.data().userId !== current.uid) {
+        return {
+          success: false,
+          error: `National ID (${check.normalized}) is already linked to another CastimoFX account. Only 1 account is permitted per National ID.`,
+        };
+      }
+      if (!existing.exists()) {
+        await setDoc(idRef, { userId: current.uid, createdAt: new Date().toISOString() });
+      }
+      await updateDoc(doc(db, 'users', current.uid), { nationalId: check.normalized });
+      setUserProfile((p) => (p ? { ...p, nationalId: check.normalized, nationalIdVerified: true } : p));
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Could not save the National ID.' };
+    }
+  };
+
+  const isAdmin = !!userProfile && userProfile.role === 'admin' && isRealUser;
+  const isClient = !!userProfile && !isAdmin;
+
   const clearError = () => {
     setError(null);
     setLastErrorCode(null);
     setDiagnosticAdvice(null);
     setApiNeedsActivation(false);
-  };
-
-  const isEmailVerified = Boolean(user?.emailVerified || isDemoUser || isDirectSession);
-  const isAdmin = userProfile?.role === 'admin';
-  const isClient = userProfile?.role === 'client';
-
-  const isNationalIdDuplicate = (nationalId: string, currentUid?: string): boolean => {
-    try {
-      const clean = nationalId.trim().toUpperCase();
-      const stored = localStorage.getItem('castimofx_registered_national_ids');
-      if (stored) {
-        const idMap: Record<string, string> = JSON.parse(stored);
-        if (idMap[clean] && idMap[clean] !== currentUid) {
-          return true;
-        }
-      }
-    } catch {
-      // fallback
-    }
-    return false;
-  };
-
-  const updateNationalId = async (nationalId: string): Promise<{ success: boolean; error?: string }> => {
-    const clean = nationalId.trim().toUpperCase();
-    const format = validateNationalIdFormat(clean);
-    if (!format.isValid) {
-      return { success: false, error: format.error };
-    }
-    if (isNationalIdDuplicate(clean, userProfile?.uid)) {
-      return { success: false, error: 'This National ID is already registered to another account.' };
-    }
-
-    try {
-      if (userProfile) {
-        const updatedProfile = { ...userProfile, nationalId: clean, nationalIdVerified: true };
-        setUserProfile(updatedProfile);
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedProfile));
-          const stored = localStorage.getItem('castimofx_registered_national_ids');
-          const idMap = stored ? JSON.parse(stored) : {};
-          idMap[clean] = userProfile.uid;
-          localStorage.setItem('castimofx_registered_national_ids', JSON.stringify(idMap));
-        } catch (e) {
-          console.warn('Could not persist ID mapping:', e);
-        }
-
-        // Also persist to Firestore if authenticated
-        if (!isDemoUser && !isDirectSession && userProfile.uid) {
-          try {
-            await setDoc(doc(db, 'users', userProfile.uid), { nationalId: clean, nationalIdVerified: true, updatedAt: serverTimestamp() }, { merge: true });
-          } catch (fsErr) {
-            console.warn('Firestore nationalId update error (local updated):', fsErr);
-          }
-        }
-      }
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Failed to update National ID' };
-    }
   };
 
   return (
@@ -601,11 +602,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         activationUrl,
         isDemoUser,
         isDirectSession,
-        isEmailVerified,
-        isAdmin,
-        isClient,
-        updateNationalId,
-        isNationalIdDuplicate,
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,
@@ -614,6 +610,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         switchRole,
         demoLogin,
         clearError,
+        isAdmin,
+        isClient,
+        isEmailVerified,
+        sendVerificationEmail,
+        refreshEmailVerified,
+        isNationalIdDuplicate,
+        updateNationalId,
       }}
     >
       {children}

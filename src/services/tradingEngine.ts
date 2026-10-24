@@ -18,8 +18,7 @@ import {
   ClientNotification,
   NotificationType,
 } from '../types';
-import { doc, setDoc, getDocs, collection } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { authHeaders } from './apiAuth';
 
 export const TRC20_USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 export const CASTIMO_TREASURY_ADDRESS = 'TJzM7N4VvUq82Yx8fD3A6P4L8otSzgjLj6t';
@@ -1428,95 +1427,92 @@ class TradingEngine {
     userId: string,
     accountNumber: string,
     brokerServer: string,
-    _passwordSecure: string // forwarded over encrypted bridge, discarded immediately
+    passwordSecure: string // sent once over HTTPS to the server, never stored here
   ): Promise<boolean> {
+    // Only a real, signed-in account can connect. Demo / quick-start sessions have no token.
+    const headers = await authHeaders();
+    if (!headers.Authorization) {
+      throw new Error(
+        'Please sign in with your email or Google account first. Demo and quick-start sessions cannot connect a real MT5 account.'
+      );
+    }
+
     this.mt5Account.status = 'connecting';
     this.notify();
 
-    let initialBalance = 0.0;
-    let initialEquity = 0.0;
-    let leverage = 500;
-    let verifiedBrokerName: string | undefined;
-    let verifiedHolderName: string | undefined;
-    let isBrokerVerified = true;
-    let tradeAllowed = true;
-    let investorMode = false;
-
-    // Connect and register terminal with CastimoFX server replication engine & real broker
-    const res = await fetch('/api/trade/provision-client', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId,
-        login: accountNumber.trim(),
-        password: _passwordSecure.trim(),
-        server: brokerServer.trim(),
-        name: `Client MT5 #${accountNumber}`,
-        platform: 'mt5',
-      }),
-    });
+    // The server asks the broker to confirm the account. We send credentials only: no balance, equity or names.
+    let res: Response;
+    try {
+      res = await fetch('/api/trade/provision-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({
+          login: accountNumber.trim(),
+          password: passwordSecure,
+          server: brokerServer.trim(),
+          platform: 'mt5',
+        }),
+      });
+    } catch {
+      this.mt5Account.status = 'connection_failed';
+      this.notify();
+      throw new Error('Could not reach the verification server. Please try again.');
+    }
 
     if (!res.ok) {
       const errorJson = await res.json().catch(() => ({}));
       this.mt5Account.status = 'connection_failed';
       this.notify();
-      throw new Error(errorJson.error || 'Failed to authenticate and verify MT5 terminal with broker.');
+      throw new Error(errorJson.error || 'The broker could not verify this account. Nothing was connected.');
     }
 
-    const data = await res.json();
-    if (data.client) {
-      initialBalance = data.client.balance != null ? Number(data.client.balance) : initialBalance;
-      initialEquity = data.client.equity != null ? Number(data.client.equity) : initialBalance;
-      leverage = data.client.leverage != null ? Number(data.client.leverage) : 500;
-      verifiedBrokerName = data.client.brokerName;
-      verifiedHolderName = data.client.accountHolderName;
-      isBrokerVerified = Boolean(data.client.isBrokerVerified ?? true);
-      tradeAllowed = data.client.tradeAllowed ?? true;
-      investorMode = data.client.investorMode ?? false;
+    const data = await res.json().catch(() => ({}));
+    const c = data?.client;
+    // Defence in depth: accept only an answer the broker verified.
+    if (!c || c.isBrokerVerified !== true || c.isSimulated === true) {
+      this.mt5Account.status = 'connection_failed';
+      this.notify();
+      throw new Error('The broker could not verify this account. Nothing was connected.');
     }
 
-    // Activate real-time replication bridge
+    // Start copying (the server checks that this user owns a verified account).
     try {
       await fetch('/api/trade/toggle-mirror', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          targetState: 'ACTIVE',
-          balance: initialBalance,
-          equity: initialEquity,
-        }),
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+        body: JSON.stringify({ targetState: 'ACTIVE' }),
       });
     } catch (toggleErr: any) {
       console.warn('⚠️ [TRADING_ENGINE] Toggle mirror notice:', toggleErr?.message);
     }
 
+    const balance = Number(c.balance);
+    const equity = Number(c.equity);
     this.mt5Account = {
       ...this.mt5Account,
       userId,
-      accountNumber,
-      brokerServer,
+      accountNumber: String(c.login),
+      brokerServer: String(c.server),
       status: 'copying',
-      balance: initialBalance,
-      equity: initialEquity,
-      freeMargin: initialEquity,
+      balance,
+      equity,
+      freeMargin: Number(c.freeMargin ?? equity),
       marginLevel: 0,
-      leverage,
+      leverage: Number(c.leverage),
       riskStatus: 'normal',
-      brokerName: verifiedBrokerName || brokerServer,
-      accountHolderName: verifiedHolderName || `Verified Client #${accountNumber}`,
-      isBrokerVerified,
-      tradeAllowed,
-      investorMode,
-      verificationTimestamp: new Date().toISOString(),
+      brokerName: c.brokerName,
+      accountHolderName: c.accountHolderName || '',
+      isBrokerVerified: true,
+      tradeAllowed: c.tradeAllowed,
+      investorMode: c.investorMode,
+      verificationTimestamp: c.verificationTimestamp,
       copiedFromMasterAccount: this.masterAccount.accountNumber,
       masterAccountName: this.masterAccount.accountName,
       lastPing: new Date().toISOString(),
     };
 
-    // Update or append to supervised accounts array so Admin Dashboard sees real equity
     const existingIndex = this.supervisedAccounts.findIndex(
-      (a) => a.userId === userId || a.accountNumber === accountNumber
+      (a) => a.userId === userId || a.accountNumber === String(c.login)
     );
     if (existingIndex >= 0) {
       this.supervisedAccounts[existingIndex] = { ...this.mt5Account };
@@ -1524,40 +1520,14 @@ class TradingEngine {
       this.supervisedAccounts.push({ ...this.mt5Account });
     }
 
-    // Persist verified MT5 account to Firestore
-    try {
-      await setDoc(
-        doc(db, 'mt5_accounts', userId),
-        {
-          userId,
-          accountNumber,
-          brokerServer,
-          status: 'copying',
-          balance: initialBalance,
-          equity: initialEquity,
-          freeMargin: initialEquity,
-          leverage,
-          brokerName: verifiedBrokerName || brokerServer,
-          accountHolderName: verifiedHolderName || '',
-          isBrokerVerified,
-          tradeAllowed,
-          investorMode,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
-    } catch (dbErr) {
-      console.warn('ℹ️ [TRADING_ENGINE] Firestore account record notice:', dbErr);
-    }
-
     this.masterAccount.activeCopiersCount = Math.max(1, this.supervisedAccounts.length);
 
     this.logAudit(
       userId,
-      `Client (${accountNumber})`,
+      `Client (${c.login})`,
       'CONNECTED_TO_MAIN_MASTER',
       'MT5',
-      `Client MT5 #${accountNumber} successfully verified & connected to Main Master MT5 #${this.masterAccount.accountNumber} (${this.masterAccount.accountName}) on ${brokerServer} (${verifiedBrokerName || 'Broker'}). Real-time trade copying initiated with balance-ratio lot scaling ($${initialEquity.toFixed(2)} equity).`,
+      `Client MT5 #${c.login} verified by the broker (${c.brokerName}, ${c.accountType || 'account'}) and connected to Main Master MT5 #${this.masterAccount.accountNumber}. Broker-reported equity: $${equity.toFixed(2)}.`,
       'SUCCESS'
     );
 
@@ -1567,154 +1537,86 @@ class TradingEngine {
   }
 
   /**
-   * Re-queries live broker metrics directly from MT5 broker
-   */
-  public async reverifyClientAccountWithBroker(
-    userId?: string
-  ): Promise<{ success: boolean; equity?: number; balance?: number; broker?: string; error?: string }> {
-    try {
-      const targetUserId = userId || this.mt5Account.userId;
-      const res = await fetch('/api/trade/reverify-client', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: targetUserId,
-          login: this.mt5Account.accountNumber,
-        }),
-      });
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        return { success: false, error: errJson.error || 'Failed to re-query broker.' };
-      }
-
-      const data = await res.json();
-      if (data.client) {
-        const c = data.client;
-        this.mt5Account = {
-          ...this.mt5Account,
-          balance: Number(c.balance ?? this.mt5Account.balance),
-          equity: Number(c.equity ?? this.mt5Account.equity),
-          freeMargin: Number(c.freeMargin ?? this.mt5Account.freeMargin),
-          leverage: Number(c.leverage ?? this.mt5Account.leverage),
-          brokerName: c.brokerName || this.mt5Account.brokerName,
-          accountHolderName: c.accountHolderName || this.mt5Account.accountHolderName,
-          isBrokerVerified: Boolean(c.isBrokerVerified ?? true),
-          tradeAllowed: c.tradeAllowed ?? this.mt5Account.tradeAllowed,
-          lastPing: new Date().toISOString(),
-        };
-
-        const idx = this.supervisedAccounts.findIndex(
-          (a) => a.userId === targetUserId || a.accountNumber === this.mt5Account.accountNumber
-        );
-        if (idx >= 0) {
-          this.supervisedAccounts[idx] = { ...this.mt5Account };
-        }
-
-        this.notify();
-        return {
-          success: true,
-          equity: this.mt5Account.equity,
-          balance: this.mt5Account.balance,
-          broker: this.mt5Account.brokerName,
-        };
-      }
-      return { success: false, error: 'Unexpected response from broker verification.' };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Network error querying broker.' };
-    }
-  }
-
-  /**
-   * Syncs connected client accounts from the server replication engine into local state
+   * Syncs broker-verified accounts from the server. Administrators receive every client;
+   * everyone else receives only their own account. Nothing else is trusted.
    */
   public async syncClientsFromBackend(): Promise<void> {
     try {
-      const res = await fetch('/api/trade/clients');
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.clients) && data.clients.length > 0) {
-          for (const c of data.clients) {
-            const idx = this.supervisedAccounts.findIndex(
-              (a) => a.userId === c.userId || a.accountNumber === String(c.login)
-            );
-            const mappedAcc: Mt5Account = {
-              id: c.accountId || `mt5-acc-${c.userId}`,
-              userId: c.userId,
-              accountNumber: String(c.login),
-              brokerServer: c.server,
-              status: c.status === 'ACTIVE' ? 'copying' : 'disconnected',
-              balance: Number(c.balance || 0),
-              equity: Number(c.equity || c.balance || 0),
-              freeMargin: Number(c.freeMargin || c.equity || c.balance || 0),
-              marginLevel: 0,
-              leverage: Number(c.leverage || 500),
-              riskStatus: 'normal',
-              profitShareStatus: 'up_to_date',
-              unpaidProfitShareUsdt: 0,
-              lastProfitGenerated: 0,
-              lastPing: c.lastSync || new Date().toISOString(),
-              createdAt: new Date().toISOString(),
-              brokerName: c.brokerName || c.server,
-              accountHolderName: c.accountHolderName || `Verified Account #${c.login}`,
-              isBrokerVerified: Boolean(c.isBrokerVerified),
-              tradeAllowed: c.tradeAllowed ?? true,
-              investorMode: c.investorMode ?? false,
-              verificationTimestamp: c.verificationTimestamp || new Date().toISOString(),
-              copiedFromMasterAccount: this.masterAccount.accountNumber,
-              masterAccountName: this.masterAccount.accountName,
-            };
+      const headers = await authHeaders();
+      if (!headers.Authorization) return; // demo / quick-start sessions have nothing to sync
 
-            if (idx >= 0) {
-              this.supervisedAccounts[idx] = { ...this.supervisedAccounts[idx], ...mappedAcc };
-            } else {
-              this.supervisedAccounts.push(mappedAcc);
-            }
-
-            // Also synchronize active client account if this is their account
-            if (this.mt5Account.userId === c.userId || this.mt5Account.accountNumber === String(c.login)) {
-              this.mt5Account = {
-                ...this.mt5Account,
-                accountNumber: String(c.login),
-                brokerServer: c.server,
-                status: mappedAcc.status,
-                balance: mappedAcc.balance,
-                equity: mappedAcc.equity,
-                freeMargin: mappedAcc.freeMargin,
-                leverage: mappedAcc.leverage,
-                brokerName: mappedAcc.brokerName,
-                accountHolderName: mappedAcc.accountHolderName,
-                isBrokerVerified: mappedAcc.isBrokerVerified,
-                tradeAllowed: mappedAcc.tradeAllowed,
-                investorMode: mappedAcc.investorMode,
-                verificationTimestamp: mappedAcc.verificationTimestamp,
-              };
-            }
-          }
-          this.masterAccount.activeCopiersCount = this.supervisedAccounts.length;
-          this.notify();
-        }
+      let clients: any[] = [];
+      const all = await fetch('/api/trade/clients', { headers });
+      if (all.ok) {
+        const data = await all.json();
+        clients = Array.isArray(data.clients) ? data.clients : [];
+      } else {
+        const mine = await fetch('/api/trade/my-account', { headers });
+        if (!mine.ok) return;
+        const data = await mine.json();
+        clients = data.connected && data.client ? [data.client] : [];
       }
 
-      // Also sync from Firestore mt5_accounts collection
-      try {
-        const snap = await getDocs(collection(db, 'mt5_accounts'));
-        snap.forEach((d) => {
-          const data = d.data();
-          const idx = this.supervisedAccounts.findIndex(
-            (a) => a.userId === data.userId || a.accountNumber === data.accountNumber
-          );
-          if (idx >= 0) {
-            this.supervisedAccounts[idx] = {
-              ...this.supervisedAccounts[idx],
-              brokerName: data.brokerName || this.supervisedAccounts[idx].brokerName,
-              accountHolderName: data.accountHolderName || this.supervisedAccounts[idx].accountHolderName,
-              isBrokerVerified: data.isBrokerVerified ?? this.supervisedAccounts[idx].isBrokerVerified,
-            };
-          }
-        });
-      } catch {
-        // Fallback
+      for (const c of clients) {
+        if (c.isBrokerVerified !== true || c.isSimulated === true) continue;
+        const mappedAcc: Mt5Account = {
+          id: c.accountId || `mt5-acc-${c.userId}`,
+          userId: c.userId,
+          accountNumber: String(c.login),
+          brokerServer: c.server,
+          status: c.status === 'ACTIVE' ? 'copying' : 'disconnected',
+          balance: Number(c.balance),
+          equity: Number(c.equity),
+          freeMargin: Number(c.freeMargin ?? c.equity),
+          marginLevel: 0,
+          leverage: Number(c.leverage),
+          riskStatus: 'normal',
+          profitShareStatus: 'up_to_date',
+          unpaidProfitShareUsdt: 0,
+          lastProfitGenerated: 0,
+          lastPing: c.lastSync || new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          brokerName: c.brokerName,
+          accountHolderName: c.accountHolderName || '',
+          isBrokerVerified: true,
+          tradeAllowed: c.tradeAllowed,
+          investorMode: c.investorMode,
+          verificationTimestamp: c.verificationTimestamp,
+          copiedFromMasterAccount: this.masterAccount.accountNumber,
+          masterAccountName: this.masterAccount.accountName,
+        };
+
+        const idx = this.supervisedAccounts.findIndex(
+          (a) => a.userId === c.userId || a.accountNumber === String(c.login)
+        );
+        if (idx >= 0) {
+          this.supervisedAccounts[idx] = { ...this.supervisedAccounts[idx], ...mappedAcc };
+        } else {
+          this.supervisedAccounts.push(mappedAcc);
+        }
+
+        if (this.mt5Account.userId === c.userId) {
+          this.mt5Account = {
+            ...this.mt5Account,
+            accountNumber: mappedAcc.accountNumber,
+            brokerServer: mappedAcc.brokerServer,
+            status: mappedAcc.status,
+            balance: mappedAcc.balance,
+            equity: mappedAcc.equity,
+            freeMargin: mappedAcc.freeMargin,
+            leverage: mappedAcc.leverage,
+            brokerName: mappedAcc.brokerName,
+            accountHolderName: mappedAcc.accountHolderName,
+            isBrokerVerified: true,
+            tradeAllowed: mappedAcc.tradeAllowed,
+            investorMode: mappedAcc.investorMode,
+            verificationTimestamp: mappedAcc.verificationTimestamp,
+          };
+        }
+      }
+      if (clients.length > 0) {
+        this.masterAccount.activeCopiersCount = this.supervisedAccounts.length;
+        this.notify();
       }
     } catch {
       // Non-blocking background sync
@@ -1722,45 +1624,22 @@ class TradingEngine {
   }
 
   /**
-   * Directly updates a client's live balance and equity in state and on replication backend
+   * Asks the server to re-read balance and equity from the broker.
+   * Figures can no longer be typed in by hand: only the broker's answer is used.
    */
-  public async updateClientAccountBalance(userId: string, balance: number, equity: number): Promise<boolean> {
+  public async refreshAccountFromBroker(): Promise<boolean> {
     try {
-      this.mt5Account = {
-        ...this.mt5Account,
-        balance,
-        equity,
-        freeMargin: equity,
-      };
-
-      const idx = this.supervisedAccounts.findIndex(
-        (a) => a.userId === userId || a.accountNumber === this.mt5Account.accountNumber
-      );
-      if (idx >= 0) {
-        this.supervisedAccounts[idx] = {
-          ...this.supervisedAccounts[idx],
-          balance,
-          equity,
-          freeMargin: equity,
-        };
-      }
-
-      await fetch('/api/trade/update-client', {
+      const headers = await authHeaders();
+      if (!headers.Authorization) return false;
+      const res = await fetch('/api/trade/reverify-client', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          login: this.mt5Account.accountNumber,
-          server: this.mt5Account.brokerServer,
-          balance,
-          equity,
-        }),
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({}),
       });
-
-      this.notify();
+      if (!res.ok) return false;
+      await this.syncClientsFromBackend();
       return true;
     } catch {
-      this.notify();
       return false;
     }
   }
@@ -1794,7 +1673,7 @@ class TradingEngine {
 
     // Step 2: closing_positions
     this.mt5Account.status = 'closing_positions';
-    if (onProgress) onProgress('Liquidating and closing all open copied positions on MT5 bridge...');
+    if (onProgress) onProgress('Removing your account from the copier. Open trades stay open in your MT5 and are not closed for you...');
     this.logAudit(
       userId,
       'MT5 Copier Service',
@@ -1805,6 +1684,26 @@ class TradingEngine {
     );
     this.notify();
     await new Promise((res) => setTimeout(res, 1200));
+
+    // Ask the server to stop copying and remove the account from MetaApi. Only continue if it worked.
+    try {
+      const headers = await authHeaders();
+      const res = await fetch('/api/trade/disconnect-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        this.mt5Account.status = 'disconnect_failed' as any;
+        this.notify();
+        return { success: false, error: data?.error || 'Could not disconnect right now. Please try again.' };
+      }
+    } catch {
+      this.mt5Account.status = 'disconnect_failed' as any;
+      this.notify();
+      return { success: false, error: 'Could not reach the server. Please try again.' };
+    }
 
     // Close all open trades
     const now = new Date().toISOString();
@@ -1830,13 +1729,13 @@ class TradingEngine {
       profitShareDueAt: undefined,
       lastProfitGenerated: 0.0,
     };
-    if (onProgress) onProgress('All positions closed. MT5 copier bridge disconnected successfully.');
+    if (onProgress) onProgress('Disconnected. Copying has stopped and your account was removed.');
     this.logAudit(
       userId,
       'MT5 Bridge',
       'MT5_DISCONNECTED_SUCCESSFULLY',
       'MT5',
-      'Account disconnected safely. Open positions count: 0.',
+      'Copying stopped and account removed from the copier. Open trades on the broker account were not closed.',
       'SUCCESS'
     );
 

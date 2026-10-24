@@ -26,7 +26,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   defaultTab = 'signin',
-  prefillEmail = '',
+  prefillEmail,
 }) => {
   const {
     signInWithEmail,
@@ -40,22 +40,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     apiNeedsActivation,
     activationUrl,
     clearError,
+    user,
+    isEmailVerified,
+    sendVerificationEmail,
+    refreshEmailVerified,
   } = useAuth();
 
   const [tab, setTab] = useState<'signin' | 'signup' | 'verify'>(defaultTab);
   const [email, setEmail] = useState(prefillEmail || '');
+  const [verifyNote, setVerifyNote] = useState<string | null>(null);
+  const [verifyBusy, setVerifyBusy] = useState(false);
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [verificationSent, setVerificationSent] = useState(false);
   // New accounts are always clients. Admin rights can only be granted in Firebase.
   const role: UserRole = 'client';
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (prefillEmail) setEmail(prefillEmail);
-    if (defaultTab) setTab(defaultTab);
-  }, [prefillEmail, defaultTab]);
 
   if (!isOpen) return null;
 
@@ -79,6 +79,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSendLink = async () => {
+    setVerifyBusy(true);
+    setVerifyNote(null);
+    const res = await sendVerificationEmail();
+    setVerifyNote(
+      res.success
+        ? 'Verification link sent. Open it from your inbox (check spam), then press "I have verified".'
+        : res.error || 'Could not send the email.'
+    );
+    setVerifyBusy(false);
+  };
+
+  const handleCheckVerified = async () => {
+    setVerifyBusy(true);
+    const ok = await refreshEmailVerified();
+    setVerifyNote(ok ? 'Email verified. Thank you!' : 'Not verified yet. Open the link in the email first.');
+    setVerifyBusy(false);
+    if (ok) setTimeout(() => onClose(), 900);
   };
 
   const handleDirectSignIn = () => {
@@ -147,6 +167,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {/* Tab Toggle */}
+        {tab !== 'verify' && (
         <div className="flex border-b border-slate-800 bg-slate-900/50 p-1 shrink-0">
           <button
             onClick={() => {
@@ -174,14 +195,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           >
             Register Client
           </button>
-          {tab === 'verify' && (
-            <button
-              className="flex-1 py-2 text-xs font-semibold rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-            >
-              Verify Email
-            </button>
-          )}
         </div>
+        )}
 
         {/* Form Body */}
         <div className="p-5 overflow-y-auto space-y-3.5">
@@ -258,54 +273,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          {tab === 'verify' ? (
-            <div className="space-y-4 py-2">
-              <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 text-center space-y-2">
-                <div className="w-10 h-10 mx-auto rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <Mail className="w-5 h-5" />
+          {tab === 'verify' && (
+            <div className="space-y-3 text-xs">
+              <p className="text-slate-300 leading-relaxed">
+                We send a verification link to <strong className="text-white">{user?.email || email || 'your email'}</strong>.
+                Open it, then come back and press the button below.
+              </p>
+              {isEmailVerified && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>Your email is already verified.</span>
                 </div>
-                <h4 className="text-sm font-semibold text-white">Email Verification Required</h4>
-                <p className="text-xs text-slate-400">
-                  {email ? `Account email: ${email}` : 'Verify your email address to enable institutional MT5 copy trading.'}
-                </p>
-              </div>
-
-              {verificationSent ? (
-                <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2.5">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                  <span>Verification link sent to your inbox. Check your email to activate trading.</span>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setVerificationSent(true)}
-                  className="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-emerald-500/20"
-                >
-                  <Mail className="w-4 h-4" />
-                  <span>Send Verification Email</span>
-                </button>
               )}
-
-              <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-xs">
-                <button
-                  type="button"
-                  onClick={() => setTab('signin')}
-                  className="text-slate-400 hover:text-white"
-                >
-                  Back to Sign In
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDirectSignIn}
-                  className="text-emerald-400 hover:text-emerald-300 font-medium"
-                >
-                  Instant Direct Session
-                </button>
-              </div>
+              {verifyNote && <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-700/60 text-slate-200">{verifyNote}</div>}
+              <button
+                type="button"
+                disabled={verifyBusy || !user}
+                onClick={handleSendLink}
+                className="w-full py-2.5 px-4 font-semibold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 disabled:opacity-50 cursor-pointer"
+              >
+                Send verification link
+              </button>
+              <button
+                type="button"
+                disabled={verifyBusy || !user}
+                onClick={handleCheckVerified}
+                className="w-full py-2 px-3 font-medium rounded-xl border border-slate-700 bg-slate-950 text-slate-200 disabled:opacity-50 cursor-pointer"
+              >
+                I have verified
+              </button>
+              {!user && <p className="text-[11px] text-amber-300">Sign in with a real account first.</p>}
             </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-3">
-              {tab === 'signup' && (
+          )}
+
+          {tab !== 'verify' && (
+          <form onSubmit={handleSubmit} className="space-y-3">
+            {tab === 'signup' && (
               <>
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">Full Legal Name</label>
@@ -385,6 +388,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           )}
 
           {/* Social or Google Sign In */}
+          {tab !== 'verify' && (<>
           <div className="relative flex py-0.5 items-center">
             <div className="flex-grow border-t border-slate-800"></div>
             <span className="flex-shrink mx-3 text-[10px] uppercase tracking-wider text-slate-500">Or continue with</span>
@@ -417,6 +421,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </svg>
             <span>Continue with Google</span>
           </button>
+          </>)}
         </div>
       </div>
     </div>

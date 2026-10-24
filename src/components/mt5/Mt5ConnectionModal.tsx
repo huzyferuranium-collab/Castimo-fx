@@ -106,7 +106,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                 Your MT5 Account #{accountNumber} on <strong>{brokerServer}</strong> is authenticated with the broker and bound to <strong>Main Master MT5 #{masterAccount.accountNumber}</strong>.
               </p>
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-emerald-400 font-mono">
-                Institutional trade mirroring active: proportional lot scaling based on live equity.
+                Institutional trade mirroring active: proportional lot scaling based on your broker-reported equity.
               </div>
             </div>
           ) : (
@@ -203,15 +203,10 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                 </div>
               </div>
 
-              {/* Dynamic Live Broker Equity Notice - replaces manual starting balance */}
-              <div className="p-3 rounded-xl bg-slate-950 border border-emerald-500/30 text-[11px] text-slate-300 space-y-1">
-                <div className="flex items-center gap-1.5 font-bold text-emerald-400">
-                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                  <span>Real Broker Equity Reflection</span>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Your true live account balance, equity, and margin will be verified directly from your MT5 broker upon connection. Manual balance entry is no longer required.
-                </p>
+              <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-slate-300 leading-relaxed">
+                Your balance and equity are read directly from your broker after the login is confirmed.
+                They cannot be typed in. Only real broker accounts (demo or live) can connect, and the
+                login must have trading permission (use your trading password, not the investor password).
               </div>
 
               <div>

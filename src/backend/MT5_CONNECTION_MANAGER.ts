@@ -16,18 +16,41 @@ import MetaApi, {
   type StreamingMetaApiConnectionInstance,
   type RpcMetaApiConnectionInstance,
 } from './metaapiClient';
+import {
+  BrokerVerificationError,
+  clientAccountName,
+  isOwnedBy,
+  sameLogin,
+  translateBrokerError,
+  validateSubmittedCredentials,
+  normalizeBrokerServer,
+  pickServerAlias,
+  countClientAccounts,
+  readLimit,
+  parseClientAccountName,
+  verifyBrokerAccountInfo,
+} from './brokerVerification';
+
+/** Rejects if the promise takes longer than ms. */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); }
+    );
+  });
+}
 
 export interface ProvisionClientParams {
   userId: string;
   login: string;
   password: string;
   server: string;
-  name?: string;
   magic?: number;
   platform?: 'mt4' | 'mt5';
   region?: string;
   reliability?: 'regular' | 'high';
-  balance?: number;
 }
 
 export interface ClientConnectionRecord {
@@ -51,6 +74,7 @@ export interface ClientConnectionRecord {
   isBrokerVerified: boolean;
   tradeAllowed?: boolean;
   investorMode?: boolean;
+  accountType?: 'demo' | 'real';
   verificationTimestamp: string;
 }
 
@@ -79,74 +103,6 @@ export interface TopUpNotice {
   accountName?: string;
   message: string;
   topUpUrl: string;
-}
-
-export function normalizeBrokerServer(rawServer: string): string {
-  if (!rawServer) return '';
-  let server = rawServer.trim();
-
-  // Exness: Exness-Real<N> -> Exness-MT5Real<N>, Exness-Trial<N> -> Exness-MT5Trial<N>
-  const exnessReal = server.match(/^exness-?real(\d+)$/i);
-  if (exnessReal) return `Exness-MT5Real${exnessReal[1]}`;
-
-  const exnessTrial = server.match(/^exness-?trial(\d+)$/i);
-  if (exnessTrial) return `Exness-MT5Trial${exnessTrial[1]}`;
-
-  if (/^exness-?real$/i.test(server)) return 'Exness-MT5Real';
-  if (/^exness-?trial$/i.test(server)) return 'Exness-MT5Trial';
-
-  // ICMarkets: e.g. ICMarkets-Live02 or ICMarketsLive2
-  const icMatch = server.match(/^icmarkets-?live(\d+)$/i);
-  if (icMatch) return `ICMarketsSC-Live${icMatch[1].padStart(2, '0')}`;
-
-  // HFMarkets: e.g. HFMarkets-Live20
-  const hfMatch = server.match(/^hfmarkets-?live(\d+)$/i);
-  if (hfMatch) return `HFMarketsGlobal-Live${hfMatch[1]}`;
-
-  // Deriv
-  if (/^deriv-?server$/i.test(server)) return 'Deriv-Server';
-  if (/^deriv-?demo$/i.test(server)) return 'Deriv-Demo';
-
-  // XM
-  const xmMatch = server.match(/^xm(global)?-?mt5-?(\d+)$/i);
-  if (xmMatch) return `XMGlobal-MT5-${xmMatch[2]}`;
-
-  return server;
-}
-
-export function identifyBroker(server: string): { brokerName: string; detectedCompany: string; defaultLeverage: number } {
-  const s = (server || '').toLowerCase();
-  if (s.includes('exness')) {
-    return { brokerName: 'Exness (MT5 Direct)', detectedCompany: 'Exness Technologies Ltd', defaultLeverage: 500 };
-  }
-  if (s.includes('hfmarkets') || s.includes('hotforex')) {
-    return { brokerName: 'HF Markets (SV) Ltd', detectedCompany: 'HF Markets Global', defaultLeverage: 500 };
-  }
-  if (s.includes('icmarkets')) {
-    return { brokerName: 'IC Markets Global', detectedCompany: 'Raw Trading Ltd (IC Markets)', defaultLeverage: 500 };
-  }
-  if (s.includes('deriv')) {
-    return { brokerName: 'Deriv MT5', detectedCompany: 'Deriv (SVG) LLC', defaultLeverage: 500 };
-  }
-  if (s.includes('xm')) {
-    return { brokerName: 'XM Global', detectedCompany: 'XM Global Limited', defaultLeverage: 500 };
-  }
-  if (s.includes('pepperstone')) {
-    return { brokerName: 'Pepperstone', detectedCompany: 'Pepperstone Markets Ltd', defaultLeverage: 400 };
-  }
-  if (s.includes('tickmill')) {
-    return { brokerName: 'Tickmill', detectedCompany: 'Tickmill Ltd', defaultLeverage: 500 };
-  }
-  if (s.includes('ftmo')) {
-    return { brokerName: 'FTMO MT5', detectedCompany: 'FTMO s.r.o.', defaultLeverage: 100 };
-  }
-  if (s.includes('octa')) {
-    return { brokerName: 'OctaFX MT5', detectedCompany: 'Octa Markets Inc.', defaultLeverage: 500 };
-  }
-  if (s.includes('fbs')) {
-    return { brokerName: 'FBS MT5', detectedCompany: 'FBS Markets Inc.', defaultLeverage: 500 };
-  }
-  return { brokerName: `${server}`, detectedCompany: `${server} Institutional Broker`, defaultLeverage: 500 };
 }
 
 export class Mt5ConnectionManager {
@@ -302,6 +258,8 @@ export class Mt5ConnectionManager {
       }
 
       this.startHeartbeatMonitor();
+      // Bring back clients that were connected before a restart (their MetaApi accounts still exist).
+      void this.rehydrateClients();
       return true;
     } catch (error: any) {
       console.error('❌ [MT5_CONNECTION_MANAGER] Initialization failed:', error?.message || error);
@@ -530,390 +488,213 @@ export class Mt5ConnectionManager {
    * Provision a new Client MT5 Terminal using Login, Password, and Broker Server
    */
   public async provisionClientTerminal(params: ProvisionClientParams): Promise<ClientConnectionRecord> {
-    const {
-      userId,
-      login,
-      password,
-      server: rawServer,
-      name,
-      magic,
-      platform = 'mt5',
-      region = 'london',
-      reliability = 'high',
-      balance: clientSubmittedBal,
-    } = params;
+    const { userId, magic, platform = 'mt5', region = 'london', reliability = 'high' } = params;
+    if (!userId) throw new BrokerVerificationError('BAD_INPUT', 'You must be signed in to connect an account.');
 
-    const server = normalizeBrokerServer(rawServer);
-    const identifiedBroker = identifyBroker(server);
+    // Only what the client typed as credentials is used. Balance, equity and names are NEVER taken from them.
+    const checked = validateSubmittedCredentials(params);
+    const { login, password } = checked;
+    let server = normalizeBrokerServer(checked.server);
+    const creds = { login, server };
+    const sameServer = (a?: string) => String(a || '').trim().toLowerCase() === server.toLowerCase();
 
-    const initialBal = clientSubmittedBal != null && clientSubmittedBal > 0 ? Number(clientSubmittedBal) : 100.0;
-
-    console.log(`🔐 [MT5_CONNECTION_MANAGER] Provisioning MT5 Terminal for Client ${userId} (Server: ${server} [raw: ${rawServer}], Login: ${login}, Initial Balance: $${initialBal})`);
-
-    // Basic credentials validation
-    if (!login || !password || !server) {
-      throw new Error('Missing required terminal credentials: login, password, and broker server are mandatory.');
+    // FAIL CLOSED: without a live MetaApi connection we cannot ask the broker, so we accept nothing.
+    if (!this.api || this.isSimulatedMode) {
+      throw new BrokerVerificationError(
+        'VERIFICATION_UNAVAILABLE',
+        'Account verification is temporarily unavailable, so no account was connected. Please try again later.'
+      );
     }
 
+    // The master account can never be attached as a client.
+    if (
+      (this.masterAccount && sameLogin(this.masterAccount.login, login) && sameServer(this.masterAccount.server)) ||
+      (sameLogin(this.masterMetrics.login, login) && sameServer(this.masterMetrics.server))
+    ) {
+      throw new BrokerVerificationError('IS_MASTER_ACCOUNT', 'This is the platform\'s master account and cannot be connected as a client.');
+    }
+
+    // An account that another user already linked cannot be linked again.
+    for (const rec of this.clientPool.values()) {
+      if (rec.userId !== userId && sameLogin(rec.login, login) && sameServer(rec.server)) {
+        throw new BrokerVerificationError('ALREADY_LINKED', 'This broker account is already linked to another user.');
+      }
+    }
+
+    console.log(`🔐 [MT5_CONNECTION_MANAGER] Verifying MT5 #${login} on ${server} with the broker for user ${userId}`);
+
+    let accountEntity: MetatraderAccount | undefined;
+    let createdId: string | undefined;
+    let rpcConn: RpcMetaApiConnectionInstance | undefined;
+
     try {
-      let createdAccountId = `metaapi-acc-${userId}-${Date.now()}`;
-      let accountEntity: MetatraderAccount | undefined;
-      let rpcConn: RpcMetaApiConnectionInstance | undefined;
-      let accountHolderName: string | undefined;
-      let brokerName: string | undefined;
-      let isBrokerVerified = false;
-      let tradeAllowed: boolean | undefined;
-      let investorMode: boolean | undefined;
+      // Reuse an account only if it was created for this same user.
+      const allAccounts = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
+      const existing = allAccounts.find((a) => sameLogin(a.login, login) && sameServer(a.server));
 
-      if (this.api && !this.isSimulatedMode) {
-        try {
-          // 1. Check if terminal account is already registered in MetaApi cloud
-          try {
-            const allAccounts = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
-            const existing = allAccounts.find(
-              (a) =>
-                String(a.login) === String(login).trim() &&
-                a.server.trim().toLowerCase() === server.trim().toLowerCase()
-            );
-            if (existing) {
-              console.log(`⚡ [MT5_CONNECTION_MANAGER] Existing MetaApi account found for ${login}@${server} (${existing.id})`);
-              accountEntity = await this.api.metatraderAccountApi.getAccount(existing.id);
-              createdAccountId = existing.id;
-            }
-          } catch (listErr: any) {
-            console.warn('ℹ️ [MT5_CONNECTION_MANAGER] MetaApi existing account lookup notice:', listErr?.message);
-          }
+      // Cost guard: MetaApi charges per account, so limits are set by you (0 = no limit).
+      const maxTotal = readLimit(process.env.MAX_CLIENT_ACCOUNTS, 5);
+      const maxPerUser = readLimit(process.env.MAX_ACCOUNTS_PER_USER, 1);
+      const mine = allAccounts.filter((a) => isOwnedBy(a.name, userId));
+      if (!existing) {
+        if (maxPerUser > 0 && mine.length >= maxPerUser) {
+          throw new BrokerVerificationError(
+            'CAPACITY',
+            'You already have a connected account. Disconnect it first to connect a different one.'
+          );
+        }
+        if (maxTotal > 0 && countClientAccounts(allAccounts) >= maxTotal) {
+          throw new BrokerVerificationError(
+            'CAPACITY',
+            'We have reached our limit for new connections right now. Please contact support to be added.'
+          );
+        }
+      }
 
-          // 2. If not existing, deploy on MetaApi cloud
-          if (!accountEntity) {
-            const createPromise = this.api.metatraderAccountApi.createAccount({
-              name: name || `CastimoFX Client - ${userId} (#${login})`,
+      if (existing) {
+        if (!isOwnedBy(existing.name, userId)) {
+          throw new BrokerVerificationError(
+            'ALREADY_LINKED',
+            'This broker account is already linked to another user or to the platform, so it cannot be connected here.'
+          );
+        }
+        accountEntity = await this.api.metatraderAccountApi.getAccount(existing.id);
+      } else {
+        // MetaApi asks the broker to authenticate these credentials; wrong ones are rejected here.
+        const create = (srv: string) =>
+          withTimeout<{ id: string }>(
+            this.api!.metatraderAccountApi.createAccount({
+              name: clientAccountName(userId, login),
               type: 'cloud-g2',
-              login: login.trim(),
-              password: password.trim(),
-              server: server.trim(),
+              login,
+              password,
+              server: srv,
               platform,
               magic: magic || 889900,
               region,
               reliability,
               manualTrades: false,
-            });
-
-            const timeoutPromise = new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('MetaApi broker provisioning timed out. Please retry or check broker network.')), 20000)
-            );
-
-            const accountDto = await Promise.race([createPromise, timeoutPromise]);
-            createdAccountId = accountDto.id;
-            accountEntity = await this.api.metatraderAccountApi.getAccount(createdAccountId);
-          }
-
-          if (accountEntity) {
-            console.log(`⏳ [MT5_CONNECTION_MANAGER] Waiting for terminal ${createdAccountId} to reach DEPLOYED status (max 15s)...`);
-            try {
-              if (accountEntity.state !== 'DEPLOYED') {
-                await accountEntity.waitDeployed(15, 1000);
-              }
-              console.log(`⏳ [MT5_CONNECTION_MANAGER] Connecting RPC bridge for client terminal ${createdAccountId}...`);
-              rpcConn = accountEntity.getRPCConnection();
-              await rpcConn.connect();
-              await rpcConn.waitSynchronized(15);
-            } catch (deployTimeout) {
-              console.warn(`ℹ️ [MT5_CONNECTION_MANAGER] Client terminal cloud deployment waiting:`, deployTimeout);
-            }
-          }
-        } catch (metaApiErr: any) {
-          const errMsg = metaApiErr?.message || '';
-          console.warn(`⚠️ [MT5_CONNECTION_MANAGER] MetaApi broker verification notice:`, errMsg);
-
-          // If broker server is not found in MetaApi's directory, check if suggestions match
-          if (errMsg.includes('.dat file for server') || metaApiErr?.details?.code === 'E_SRV_NOT_FOUND') {
-            let suggestions: string[] = [];
-            if (metaApiErr.details?.serversByBrokers) {
-              suggestions = Object.values(metaApiErr.details.serversByBrokers).flat() as string[];
-            }
-
-            // Check if any suggested server matches the server name (e.g. Exness-MT5Real9 vs Exness-Real9)
-            const strippedTarget = server.toLowerCase().replace(/[^a-z0-9]/g, '');
-            const candidate = suggestions.find((s) => {
-              const strippedS = s.toLowerCase().replace(/[^a-z0-9]/g, '');
-              return strippedS === strippedTarget ||
-                strippedS.includes(strippedTarget) ||
-                strippedTarget.includes(strippedS) ||
-                (strippedTarget.includes('exness') && strippedS.includes(strippedTarget.replace('real', 'mt5real')));
-            });
-
-            if (candidate && candidate !== server) {
-              console.log(`🔄 [MT5_CONNECTION_MANAGER] Auto-resolved broker server alias: '${server}' -> '${candidate}'. Provisioning via verified broker alias...`);
-              try {
-                const autoDto = await this.api.metatraderAccountApi.createAccount({
-                  name: name || `CastimoFX Client - ${userId} (#${login})`,
-                  type: 'cloud-g2',
-                  login: login.trim(),
-                  password: password.trim(),
-                  server: candidate,
-                  platform,
-                  magic: magic || 889900,
-                  region,
-                  reliability,
-                  manualTrades: false,
-                });
-                createdAccountId = autoDto.id;
-                accountEntity = await this.api.metatraderAccountApi.getAccount(createdAccountId);
-                if (accountEntity) {
-                  try {
-                    if (accountEntity.state !== 'DEPLOYED') {
-                      await accountEntity.waitDeployed(15, 1000);
-                    }
-                    rpcConn = accountEntity.getRPCConnection();
-                    await rpcConn.connect();
-                    await rpcConn.waitSynchronized(15);
-                  } catch (e) {
-                    console.warn('ℹ️ [MT5_CONNECTION_MANAGER] Auto-alias RPC connection notice:', e);
-                  }
-                }
-              } catch (retryErr: any) {
-                console.warn('ℹ️ [MT5_CONNECTION_MANAGER] Auto-alias attempt note:', retryErr?.message);
-              }
-            }
-          }
-
-          // If invalid login or password explicitly rejected by broker terminal
-          if (errMsg.includes('INVALID_CREDENTIALS') || errMsg.includes('account connection validation failed')) {
-            throw new Error(`Broker Authentication Failed: Real broker rejected MT5 #${login} on server '${server}'. Please verify your account number and password.`);
-          }
-
-          // If cloud deployment limit or server .dat missing, connect via Direct Verified MT5 Copier Bridge
-          console.warn(`ℹ️ [MT5_CONNECTION_MANAGER] Terminal #${login} operating via verified direct MT5 Copier Bridge (${identifiedBroker.detectedCompany})`);
-        }
-      }
-
-      // Check existing pool for previous balance/equity if any
-      const existingClient = this.clientPool.get(userId) || this.clientPool.get(login);
-
-      let balance = clientSubmittedBal != null && clientSubmittedBal > 0
-        ? Number(clientSubmittedBal)
-        : (existingClient?.balance && existingClient.balance > 0 ? existingClient.balance : 0);
-      let equity = balance;
-      let freeMargin = balance;
-      let currency = 'USD';
-      let leverage = identifiedBroker.defaultLeverage || 500;
-      brokerName = identifiedBroker.detectedCompany;
-      accountHolderName = name || `Verified Trader #${login}`;
-      isBrokerVerified = true;
-      tradeAllowed = true;
-      investorMode = false;
-
-      if (rpcConn) {
+            }),
+            45000,
+            'MetaApi broker provisioning timed out.'
+          );
+        let dto: { id: string };
         try {
-          const accInfo = await rpcConn.getAccountInformation();
-          balance = accInfo.balance != null ? Number(accInfo.balance) : balance;
-          equity = accInfo.equity != null ? Number(accInfo.equity) : balance;
-          freeMargin = accInfo.freeMargin != null ? Number(accInfo.freeMargin) : equity;
-          currency = accInfo.currency || 'USD';
-          leverage = accInfo.leverage != null ? Number(accInfo.leverage) : leverage;
-          accountHolderName = accInfo.name || accountHolderName;
-          brokerName = accInfo.broker || brokerName;
-          tradeAllowed = accInfo.tradeAllowed ?? true;
-          investorMode = accInfo.investorMode ?? false;
-          isBrokerVerified = true;
-          console.log(`🎯 [MT5_CONNECTION_MANAGER] Real Broker Verified via RPC: ${brokerName} - ${accountHolderName} (#${login}), Balance: $${balance}, Equity: $${equity}, Leverage: 1:${leverage}`);
-        } catch (fetchErr: any) {
-          console.warn(`⚠️ [MT5_CONNECTION_MANAGER] Real broker metrics check note for ${createdAccountId}:`, fetchErr?.message);
+          dto = await create(server);
+        } catch (e: any) {
+          // Unknown server name: retry once with the same server as MetaApi spells it, if it lists one.
+          const list: string[] = e?.details?.serversByBrokers
+            ? (Object.values(e.details.serversByBrokers).flat() as string[])
+            : [];
+          const alias = pickServerAlias(server, list);
+          if (!alias) throw e;
+          console.log(`🔄 [MT5_CONNECTION_MANAGER] Server '${server}' resolved to MetaApi's '${alias}'.`);
+          server = alias;
+          creds.server = alias;
+          dto = await create(alias);
         }
+        createdId = dto.id;
+        accountEntity = await this.api.metatraderAccountApi.getAccount(dto.id);
       }
 
-      const clientRecord: ClientConnectionRecord = {
+      if (!accountEntity) {
+        throw new BrokerVerificationError('BROKER_UNREACHABLE', 'Could not reach your broker to verify this account.');
+      }
+      if (!sameLogin(accountEntity.login, login) || !sameServer(accountEntity.server)) {
+        throw new BrokerVerificationError('LOGIN_MISMATCH', 'The broker account does not match the details you entered.');
+      }
+
+      if (accountEntity.state !== 'DEPLOYED') {
+        await accountEntity.waitDeployed(45, 1000);
+      }
+      rpcConn = accountEntity.getRPCConnection();
+      await rpcConn.connect();
+      await rpcConn.waitSynchronized(45);
+
+      // Everything below comes from the broker's own answer.
+      const info = await rpcConn.getAccountInformation();
+      const verified = verifyBrokerAccountInfo(info as any, creds);
+      const now = new Date().toISOString();
+
+      const record: ClientConnectionRecord = {
         userId,
-        accountId: createdAccountId,
+        accountId: accountEntity.id,
         login,
         server,
         status: 'ACTIVE',
         account: accountEntity,
         rpcConnection: rpcConn,
-        balance,
-        equity,
-        freeMargin,
-        currency,
-        leverage,
-        lastSync: new Date().toISOString(),
-        isSimulated: this.isSimulatedMode || !rpcConn,
-        accountHolderName,
-        brokerName,
-        isBrokerVerified,
-        tradeAllowed,
-        investorMode,
-        verificationTimestamp: new Date().toISOString(),
+        balance: verified.balance,
+        equity: verified.equity,
+        freeMargin: verified.freeMargin,
+        currency: verified.currency,
+        leverage: verified.leverage,
+        lastSync: now,
+        isSimulated: false,
+        accountHolderName: verified.accountHolderName,
+        brokerName: verified.brokerName,
+        isBrokerVerified: true,
+        tradeAllowed: verified.tradeAllowed,
+        investorMode: verified.investorMode,
+        accountType: verified.accountType,
+        verificationTimestamp: now,
       };
+      this.registerClient(record);
 
-      // Server-side check querying MetaApi getAccount endpoint to validate account status
-      const validation = await this.validateAccountStatusWithMetaApi(createdAccountId);
-      if (!validation.valid) {
-        throw new Error(
-          `Unauthorized Terminal Connection: MetaApi getAccount status check failed (${validation.reason}). Access denied.`
-        );
-      }
-
-      this.clientPool.set(userId, clientRecord);
-      this.clientPool.set(createdAccountId, clientRecord);
-
-      console.log(`✅ [MT5_CONNECTION_MANAGER] Real Client Terminal #${login} verified & enrolled in replication engine!`);
-      return clientRecord;
+      console.log(
+        `✅ [MT5_CONNECTION_MANAGER] Broker verified #${login}: ${verified.brokerName} (${verified.accountType}), equity $${verified.equity.toFixed(2)}`
+      );
+      return record;
     } catch (error: any) {
-      console.error(`❌ [MT5_CONNECTION_MANAGER] Terminal provisioning failed for user ${userId}:`, error?.message || error);
-      throw error;
+      // Do not leave half-created accounts behind in MetaApi (they cost money and could be re-used).
+      const idToRemove = createdId;
+      if (idToRemove) {
+        try {
+          const acc = accountEntity ?? (await this.api.metatraderAccountApi.getAccount(idToRemove));
+          await acc.remove();
+        } catch (cleanupErr: any) {
+          console.warn('⚠️ [MT5_CONNECTION_MANAGER] Could not remove unverified account:', cleanupErr?.message);
+        }
+      }
+      const safe = error instanceof BrokerVerificationError ? error : translateBrokerError(error, creds);
+      console.warn(`❌ [MT5_CONNECTION_MANAGER] Verification failed for #${login} (${safe.code}); raw: ${error?.message || error}`);
+      throw safe;
     }
   }
 
   /**
-   * Server-side check that queries the MetaApi 'getAccount' endpoint
-   * to validate terminal account status before granting access,
-   * effectively blocking invalid or unauthorized terminal connections.
+   * Removes a user's broker account from MetaApi (stops the per-account charge) and stops copying to it.
+   * Only accounts created for this user are touched; the master and other users are never affected.
    */
-  public async validateAccountStatusWithMetaApi(accountId: string): Promise<{
-    valid: boolean;
-    state?: string;
-    connectionStatus?: string;
-    reason?: string;
-    account?: MetatraderAccount;
-  }> {
-    if (!accountId) {
-      return { valid: false, reason: 'Missing account ID for validation.' };
-    }
-
-    try {
-      // 1. Query MetaApi SDK getAccount endpoint if initialized
-      if (this.api && !this.isSimulatedMode) {
+  public async removeClientTerminal(userId: string): Promise<{ removed: number }> {
+    if (!userId) return { removed: 0 };
+    let removed = 0;
+    if (this.api && !this.isSimulatedMode) {
+      const all = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
+      for (const a of all.filter((x) => isOwnedBy(x.name, userId))) {
         try {
-          const account = await this.api.metatraderAccountApi.getAccount(accountId);
-          if (!account) {
-            return {
-              valid: false,
-              reason: `Account '${accountId}' could not be resolved from MetaApi getAccount endpoint.`,
-            };
-          }
-
-          const state = account.state;
-          const connectionStatus = account.connectionStatus;
-
-          console.log(`🔍 [MT5_CONNECTION_MANAGER] MetaApi getAccount validation for ${accountId}: state=${state}, connectionStatus=${connectionStatus}`);
-
-          // Block disconnected or failed connections
-          const statusStr = String(connectionStatus);
-          if (statusStr === 'DISCONNECTED_FROM_BROKER' || (connectionStatus === 'DISCONNECTED' && state !== 'DEPLOYED')) {
-            return {
-              valid: false,
-              state,
-              connectionStatus,
-              reason: 'Terminal disconnected from broker: Invalid credentials or authorization revoked by broker.',
-            };
-          }
-
-          if (statusStr === 'FAILED_TO_CONNECT') {
-            return {
-              valid: false,
-              state,
-              connectionStatus,
-              reason: 'Terminal failed to establish authorized broker connection. Please verify credentials.',
-            };
-          }
-
-          return {
-            valid: true,
-            state,
-            connectionStatus,
-            account,
-          };
-        } catch (sdkErr: any) {
-          const msg = sdkErr?.message || '';
-          console.warn('⚠️ [MT5_CONNECTION_MANAGER] SDK getAccount query notice:', msg);
-
-          // 2. Direct REST fallback to MetaApi provisioning API getAccount endpoint
-          if (this.apiToken) {
-            try {
-              const res = await fetch(
-                `https://mt-provisioning-api-v1.agiliumtrade.ai/users/current/accounts/${accountId}`,
-                {
-                  headers: { 'auth-token': this.apiToken },
-                  signal: AbortSignal.timeout(8000),
-                }
-              );
-
-              if (res.status === 404) {
-                return {
-                  valid: false,
-                  reason: `Terminal account '${accountId}' does not exist on MetaApi cloud network (404 Not Found).`,
-                };
-              }
-
-              if (res.status === 401 || res.status === 403) {
-                return {
-                  valid: false,
-                  reason: 'MetaApi authentication unauthorized. Access to terminal credentials denied.',
-                };
-              }
-
-              if (res.ok) {
-                const accData: any = await res.json();
-                if (accData.connectionStatus === 'DISCONNECTED_FROM_BROKER' || accData.connectionStatus === 'FAILED_TO_CONNECT') {
-                  return {
-                    valid: false,
-                    state: accData.state,
-                    connectionStatus: accData.connectionStatus,
-                    reason: `Broker rejected account connection (${accData.connectionStatus}). Invalid login credentials.`,
-                  };
-                }
-                return {
-                  valid: true,
-                  state: accData.state,
-                  connectionStatus: accData.connectionStatus,
-                };
-              }
-            } catch (restErr: any) {
-              console.warn('⚠️ [MT5_CONNECTION_MANAGER] REST getAccount query note:', restErr?.message);
-            }
-          }
-
-          if (this.isTopUpRequiredError(sdkErr)) {
-            return {
-              valid: true,
-              state: 'DEPLOYED_BRIDGE',
-              connectionStatus: 'CONNECTED',
-              reason: 'Operating under Institutional Bridge authentication.',
-            };
-          }
-
-          if (msg.includes('INVALID_CREDENTIALS') || msg.includes('not found') || msg.includes('Unauthorized')) {
-            return {
-              valid: false,
-              reason: `Unauthorized terminal: ${msg}`,
-            };
-          }
+          const acc = await this.api.metatraderAccountApi.getAccount(a.id);
+          await acc.remove();
+          removed++;
+        } catch (err: any) {
+          console.warn('⚠️ [MT5_CONNECTION_MANAGER] Could not remove account', a.id, err?.message);
+          throw new BrokerVerificationError('BROKER_UNREACHABLE', 'Could not disconnect the account right now. Please try again.');
         }
       }
-
-      // Check client pool if existing
-      const existing = this.clientPool.get(accountId);
-      if (existing) {
-        if (existing.status === 'ERROR') {
-          return {
-            valid: false,
-            reason: existing.errorMessage || 'Terminal is in ERROR state in connection pool.',
-          };
-        }
-      }
-
-      return {
-        valid: true,
-        state: 'CONNECTED',
-        connectionStatus: 'CONNECTED',
-      };
-    } catch (err: any) {
-      return {
-        valid: false,
-        reason: err?.message || 'Server-side account status check encountered an unexpected error.',
-      };
     }
+    for (const [key, rec] of Array.from(this.clientPool.entries())) {
+      if (rec.userId === userId) this.clientPool.delete(key);
+    }
+    return { removed };
+  }
+
+  /** Admin view of how many client accounts exist in MetaApi versus the limit. */
+  public async getCapacity(): Promise<{ used: number; limit: number; perUserLimit: number }> {
+    const limit = readLimit(process.env.MAX_CLIENT_ACCOUNTS, 5);
+    const perUserLimit = readLimit(process.env.MAX_ACCOUNTS_PER_USER, 1);
+    if (!this.api || this.isSimulatedMode) return { used: 0, limit, perUserLimit };
+    const all = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
+    return { used: countClientAccounts(all), limit, perUserLimit };
   }
 
   /**
@@ -964,6 +745,10 @@ export class Mt5ConnectionManager {
    * Register or update client terminal record directly in memory pool
    */
   public registerClient(record: ClientConnectionRecord): void {
+    // Only accounts the broker itself has verified may ever enter the copy pool.
+    if (!record.isBrokerVerified || record.isSimulated) {
+      throw new BrokerVerificationError('BAD_BROKER_RESPONSE', 'Refusing to register an account the broker has not verified.');
+    }
     this.clientPool.set(record.userId, record);
     this.clientPool.set(record.accountId, record);
   }
@@ -974,7 +759,7 @@ export class Mt5ConnectionManager {
   public getActiveClients(): ClientConnectionRecord[] {
     const unique = new Map<string, ClientConnectionRecord>();
     for (const record of this.clientPool.values()) {
-      if (record.status === 'ACTIVE') {
+      if (record.status === 'ACTIVE' && record.isBrokerVerified && !record.isSimulated) {
         unique.set(record.userId, record);
       }
     }
@@ -982,11 +767,12 @@ export class Mt5ConnectionManager {
   }
 
   /**
-   * Update client terminal metrics (balance, equity, status) in pool
+   * Pause or resume a client's copying. This is the ONLY thing that may be changed by hand:
+   * balance, equity and identity come from the broker and can never be written from outside.
    */
   public updateClientMetrics(
     identifier: string,
-    updates: { balance?: number; equity?: number; status?: 'ACTIVE' | 'IDLE'; server?: string; login?: string }
+    updates: { status?: 'ACTIVE' | 'IDLE' }
   ): ClientConnectionRecord | undefined {
     let client = this.clientPool.get(identifier);
     if (!client) {
@@ -997,16 +783,11 @@ export class Mt5ConnectionManager {
         }
       }
     }
-    if (client) {
-      if (updates.balance != null) client.balance = Number(updates.balance);
-      if (updates.equity != null) client.equity = Number(updates.equity);
-      if (updates.status) client.status = updates.status;
-      if (updates.server) client.server = updates.server;
-      if (updates.login) client.login = updates.login;
+    if (client && updates.status) {
+      client.status = updates.status;
       client.lastSync = new Date().toISOString();
       this.clientPool.set(client.userId, client);
       this.clientPool.set(client.accountId, client);
-      console.log(`📊 [MT5_CONNECTION_MANAGER] Client ${client.userId} metrics updated: Balance $${client.balance.toFixed(2)}, Equity $${client.equity.toFixed(2)}`);
     }
     return client;
   }
@@ -1081,7 +862,85 @@ export class Mt5ConnectionManager {
   /**
    * Start periodic heartbeat checks to verify socket health and live metrics
    */
+  private clientRefreshTimer: NodeJS.Timeout | null = null;
+  private refreshingClients = false;
+
+  /**
+   * Keeps every connected client's balance, equity and free margin in step with their broker account,
+   * so deposits, withdrawals and floating profit show up on the dashboard and in lot sizing.
+   */
+  public async refreshAllClients(): Promise<void> {
+    if (this.refreshingClients || !this.api || this.isSimulatedMode) return;
+    this.refreshingClients = true;
+    try {
+      const seen = new Set<string>();
+      for (const rec of Array.from(this.clientPool.values())) {
+        if (seen.has(rec.accountId) || !rec.isBrokerVerified || rec.isSimulated) continue;
+        seen.add(rec.accountId);
+        try {
+          await withTimeout<unknown>(this.refreshClientFromBroker(rec.accountId), 8000, 'refresh timed out');
+        } catch {
+          // keep the last known values; the next round tries again
+        }
+      }
+    } finally {
+      this.refreshingClients = false;
+    }
+  }
+
+  /** Re-attaches client accounts that already exist in MetaApi (after a server restart). */
+  public async rehydrateClients(): Promise<void> {
+    if (!this.api || this.isSimulatedMode) return;
+    try {
+      const all = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
+      for (const a of all) {
+        const parsed = parseClientAccountName(a.name);
+        if (!parsed || this.clientPool.has(parsed.userId)) continue;
+        try {
+          const entity = await this.api.metatraderAccountApi.getAccount(a.id);
+          if (entity.state !== 'DEPLOYED') continue;
+          const rpc = entity.getRPCConnection();
+          await rpc.connect();
+          await rpc.waitSynchronized(30);
+          const info = await rpc.getAccountInformation();
+          const v = verifyBrokerAccountInfo(info as any, { login: parsed.login, server: entity.server });
+          const now = new Date().toISOString();
+          this.registerClient({
+            userId: parsed.userId,
+            accountId: entity.id,
+            login: parsed.login,
+            server: entity.server,
+            status: 'ACTIVE',
+            account: entity,
+            rpcConnection: rpc,
+            balance: v.balance,
+            equity: v.equity,
+            freeMargin: v.freeMargin,
+            currency: v.currency,
+            leverage: v.leverage,
+            lastSync: now,
+            isSimulated: false,
+            accountHolderName: v.accountHolderName,
+            brokerName: v.brokerName,
+            isBrokerVerified: true,
+            tradeAllowed: v.tradeAllowed,
+            investorMode: v.investorMode,
+            accountType: v.accountType,
+            verificationTimestamp: now,
+          });
+          console.log(`♻️ [MT5_CONNECTION_MANAGER] Restored client #${parsed.login} after restart.`);
+        } catch (err: any) {
+          console.warn(`⚠️ [MT5_CONNECTION_MANAGER] Could not restore #${parsed.login}:`, err?.message);
+        }
+      }
+    } catch (err: any) {
+      console.warn('⚠️ [MT5_CONNECTION_MANAGER] Client restore skipped:', err?.message);
+    }
+  }
+
   private startHeartbeatMonitor(): void {
+    if (this.clientRefreshTimer) clearInterval(this.clientRefreshTimer);
+    this.clientRefreshTimer = setInterval(() => void this.refreshAllClients(), 10000);
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
     this.heartbeatInterval = setInterval(async () => {
       if (this.masterState === 'CONNECTED' && !this.isSimulatedMode) {

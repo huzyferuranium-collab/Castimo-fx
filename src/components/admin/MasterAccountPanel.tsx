@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { tradingEngine } from '../../services/tradingEngine';
 import { MasterMt5Account } from '../../types';
+import { authHeaders } from '../../services/apiAuth';
 import {
   Server,
   Zap,
@@ -109,7 +110,7 @@ export const MasterAccountPanel: React.FC<MasterAccountPanelProps> = ({
     setIsDeployingMaster(true);
     setDeployFeedback(null);
     try {
-      const res = await fetch('/api/trade/retry-master', { method: 'POST' });
+      const res = await fetch('/api/trade/retry-master', { method: 'POST', headers: await authHeaders() });
       const data = await res.json();
       if (data.success) {
         setDeployFeedback('✅ ' + (data.message || 'Master MT5 successfully deployed and connected via live WebSocket streaming!'));
