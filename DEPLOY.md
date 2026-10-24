@@ -19,3 +19,9 @@ This repo has a Dockerfile, so any Docker host works (Render, Railway, Google Cl
 Sign in with a real account, connect one HFM **demo** MT5 login. A wrong password or fake number
 must be rejected. A right one shows the balance the broker reports.
 Your HFM account must be a hedging account; netting accounts are not supported by MetaApi.
+
+## Cost limits (MetaApi charges per account)
+Set these on Render next to `METAAPI_TOKEN`:
+- `MAX_CLIENT_ACCOUNTS` = most client accounts allowed in total (default 5, `0` = no limit). Set it to what your MetaApi plan includes.
+- `MAX_ACCOUNTS_PER_USER` = accounts per client (default 1).
+Clients who disconnect are removed from MetaApi, which stops their charge. Admins can see usage at `/api/trade/capacity`.

@@ -1673,7 +1673,7 @@ class TradingEngine {
 
     // Step 2: closing_positions
     this.mt5Account.status = 'closing_positions';
-    if (onProgress) onProgress('Liquidating and closing all open copied positions on MT5 bridge...');
+    if (onProgress) onProgress('Removing your account from the copier. Open trades stay open in your MT5 and are not closed for you...');
     this.logAudit(
       userId,
       'MT5 Copier Service',
@@ -1684,6 +1684,26 @@ class TradingEngine {
     );
     this.notify();
     await new Promise((res) => setTimeout(res, 1200));
+
+    // Ask the server to stop copying and remove the account from MetaApi. Only continue if it worked.
+    try {
+      const headers = await authHeaders();
+      const res = await fetch('/api/trade/disconnect-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        this.mt5Account.status = 'disconnect_failed' as any;
+        this.notify();
+        return { success: false, error: data?.error || 'Could not disconnect right now. Please try again.' };
+      }
+    } catch {
+      this.mt5Account.status = 'disconnect_failed' as any;
+      this.notify();
+      return { success: false, error: 'Could not reach the server. Please try again.' };
+    }
 
     // Close all open trades
     const now = new Date().toISOString();
@@ -1709,13 +1729,13 @@ class TradingEngine {
       profitShareDueAt: undefined,
       lastProfitGenerated: 0.0,
     };
-    if (onProgress) onProgress('All positions closed. MT5 copier bridge disconnected successfully.');
+    if (onProgress) onProgress('Disconnected. Copying has stopped and your account was removed.');
     this.logAudit(
       userId,
       'MT5 Bridge',
       'MT5_DISCONNECTED_SUCCESSFULLY',
       'MT5',
-      'Account disconnected safely. Open positions count: 0.',
+      'Copying stopped and account removed from the copier. Open trades on the broker account were not closed.',
       'SUCCESS'
     );
 

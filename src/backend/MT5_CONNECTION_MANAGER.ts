@@ -25,6 +25,8 @@ import {
   validateSubmittedCredentials,
   normalizeBrokerServer,
   pickServerAlias,
+  countClientAccounts,
+  readLimit,
   verifyBrokerAccountInfo,
 } from './brokerVerification';
 
@@ -527,6 +529,25 @@ export class Mt5ConnectionManager {
       const allAccounts = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
       const existing = allAccounts.find((a) => sameLogin(a.login, login) && sameServer(a.server));
 
+      // Cost guard: MetaApi charges per account, so limits are set by you (0 = no limit).
+      const maxTotal = readLimit(process.env.MAX_CLIENT_ACCOUNTS, 5);
+      const maxPerUser = readLimit(process.env.MAX_ACCOUNTS_PER_USER, 1);
+      const mine = allAccounts.filter((a) => isOwnedBy(a.name, userId));
+      if (!existing) {
+        if (maxPerUser > 0 && mine.length >= maxPerUser) {
+          throw new BrokerVerificationError(
+            'CAPACITY',
+            'You already have a connected account. Disconnect it first to connect a different one.'
+          );
+        }
+        if (maxTotal > 0 && countClientAccounts(allAccounts) >= maxTotal) {
+          throw new BrokerVerificationError(
+            'CAPACITY',
+            'We have reached our limit for new connections right now. Please contact support to be added.'
+          );
+        }
+      }
+
       if (existing) {
         if (!isOwnedBy(existing.name, userId)) {
           throw new BrokerVerificationError(
@@ -636,6 +657,41 @@ export class Mt5ConnectionManager {
       console.warn(`❌ [MT5_CONNECTION_MANAGER] Verification failed for #${login} (${safe.code}); raw: ${error?.message || error}`);
       throw safe;
     }
+  }
+
+  /**
+   * Removes a user's broker account from MetaApi (stops the per-account charge) and stops copying to it.
+   * Only accounts created for this user are touched; the master and other users are never affected.
+   */
+  public async removeClientTerminal(userId: string): Promise<{ removed: number }> {
+    if (!userId) return { removed: 0 };
+    let removed = 0;
+    if (this.api && !this.isSimulatedMode) {
+      const all = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
+      for (const a of all.filter((x) => isOwnedBy(x.name, userId))) {
+        try {
+          const acc = await this.api.metatraderAccountApi.getAccount(a.id);
+          await acc.remove();
+          removed++;
+        } catch (err: any) {
+          console.warn('⚠️ [MT5_CONNECTION_MANAGER] Could not remove account', a.id, err?.message);
+          throw new BrokerVerificationError('BROKER_UNREACHABLE', 'Could not disconnect the account right now. Please try again.');
+        }
+      }
+    }
+    for (const [key, rec] of Array.from(this.clientPool.entries())) {
+      if (rec.userId === userId) this.clientPool.delete(key);
+    }
+    return { removed };
+  }
+
+  /** Admin view of how many client accounts exist in MetaApi versus the limit. */
+  public async getCapacity(): Promise<{ used: number; limit: number; perUserLimit: number }> {
+    const limit = readLimit(process.env.MAX_CLIENT_ACCOUNTS, 5);
+    const perUserLimit = readLimit(process.env.MAX_ACCOUNTS_PER_USER, 1);
+    if (!this.api || this.isSimulatedMode) return { used: 0, limit, perUserLimit };
+    const all = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
+    return { used: countClientAccounts(all), limit, perUserLimit };
   }
 
   /**

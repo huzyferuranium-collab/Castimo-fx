@@ -270,6 +270,40 @@ tradeRouter.post('/reverify-client', requireUser, async (req: Request, res: Resp
 });
 
 /**
+ * POST /api/trade/disconnect-client  (signed-in users; administrators may name any user)
+ * Removes the broker account from the platform and from MetaApi, which stops its monthly charge.
+ */
+tradeRouter.post('/disconnect-client', requireUser, async (req: Request, res: Response) => {
+  try {
+    const user = getAuthUser(req);
+    let targetId = user.uid;
+    const requested = req.body?.userId;
+    if (requested && requested !== user.uid) {
+      if (!(await isAdminUser(user))) {
+        return res.status(403).json({ success: false, error: 'You can only disconnect your own account.' });
+      }
+      targetId = String(requested);
+    }
+    const result = await connectionManager.removeClientTerminal(targetId);
+    return res.status(200).json({ success: true, removed: result.removed });
+  } catch (error: any) {
+    if (error instanceof BrokerVerificationError) {
+      return res.status(STATUS_BY_CODE[error.code] ?? 400).json({ success: false, code: error.code, error: error.message });
+    }
+    return res.status(500).json({ success: false, error: 'Failed to disconnect the account' });
+  }
+});
+
+/** GET /api/trade/capacity  (administrators only): accounts used versus your limit. */
+tradeRouter.get('/capacity', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    return res.status(200).json({ success: true, ...(await connectionManager.getCapacity()) });
+  } catch {
+    return res.status(500).json({ success: false, error: 'Could not read capacity' });
+  }
+});
+
+/**
  * GET /api/trade/my-account  (signed-in users)
  * The caller's own broker-verified account, or connected:false.
  */

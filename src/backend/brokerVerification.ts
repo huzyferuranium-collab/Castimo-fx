@@ -232,3 +232,19 @@ export function pickServerAlias(requested: string, suggestions: string[]): strin
   });
   return hit && hit !== requested ? hit : null;
 }
+
+// ---------- account capacity (MetaApi charges per account) ----------
+
+export function isPlatformClientAccount(accountName: unknown): boolean {
+  return typeof accountName === 'string' && accountName.startsWith('CastimoFX Client');
+}
+
+/** How many of the given MetaApi accounts were created for clients (not the master). */
+export function countClientAccounts(accounts: Array<{ name?: unknown }>): number {
+  return accounts.filter((a) => isPlatformClientAccount(a?.name)).length;
+}
+
+export function readLimit(raw: string | undefined, fallback: number): number {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : fallback;
+}

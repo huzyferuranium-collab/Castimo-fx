@@ -108,3 +108,19 @@ test('pickServerAlias only returns names from the supplied list', () => {
   assert.equal(pickServerAlias('Fake-Server', ['Exness-MT5Real9']), null);
   assert.equal(pickServerAlias('Exness-MT5Real9', ['Exness-MT5Real9']), null);
 });
+
+import { countClientAccounts, readLimit } from '../src/backend/brokerVerification.ts';
+
+test('countClientAccounts counts only client accounts, not the master', () => {
+  assert.equal(
+    countClientAccounts([{ name: 'CastimoFX Client u1 #1234' }, { name: 'Master' }, { name: 'CastimoFX Client u2 #5678' }, {}]),
+    2
+  );
+});
+
+test('readLimit uses fallback unless a whole number is given', () => {
+  assert.equal(readLimit(undefined, 5), 5);
+  assert.equal(readLimit('12', 5), 12);
+  assert.equal(readLimit('0', 5), 0);
+  assert.equal(readLimit('abc', 5), 5);
+});
