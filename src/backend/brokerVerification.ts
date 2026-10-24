@@ -248,3 +248,10 @@ export function readLimit(raw: string | undefined, fallback: number): number {
   const n = Number(raw);
   return Number.isInteger(n) && n >= 0 ? n : fallback;
 }
+
+/** Reads the user id and MT5 login back out of the name we gave a client's MetaApi account. */
+export function parseClientAccountName(name: unknown): { userId: string; login: string } | null {
+  if (typeof name !== 'string') return null;
+  const m = name.match(/^CastimoFX Client (\S+) #(\d+)$/) || name.match(/^CastimoFX Client - (\S+) \(#(\d+)\)$/);
+  return m ? { userId: m[1], login: m[2] } : null;
+}

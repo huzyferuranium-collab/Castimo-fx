@@ -27,6 +27,7 @@ import {
   pickServerAlias,
   countClientAccounts,
   readLimit,
+  parseClientAccountName,
   verifyBrokerAccountInfo,
 } from './brokerVerification';
 
@@ -257,6 +258,8 @@ export class Mt5ConnectionManager {
       }
 
       this.startHeartbeatMonitor();
+      // Bring back clients that were connected before a restart (their MetaApi accounts still exist).
+      void this.rehydrateClients();
       return true;
     } catch (error: any) {
       console.error('❌ [MT5_CONNECTION_MANAGER] Initialization failed:', error?.message || error);
@@ -859,7 +862,85 @@ export class Mt5ConnectionManager {
   /**
    * Start periodic heartbeat checks to verify socket health and live metrics
    */
+  private clientRefreshTimer: NodeJS.Timeout | null = null;
+  private refreshingClients = false;
+
+  /**
+   * Keeps every connected client's balance, equity and free margin in step with their broker account,
+   * so deposits, withdrawals and floating profit show up on the dashboard and in lot sizing.
+   */
+  public async refreshAllClients(): Promise<void> {
+    if (this.refreshingClients || !this.api || this.isSimulatedMode) return;
+    this.refreshingClients = true;
+    try {
+      const seen = new Set<string>();
+      for (const rec of Array.from(this.clientPool.values())) {
+        if (seen.has(rec.accountId) || !rec.isBrokerVerified || rec.isSimulated) continue;
+        seen.add(rec.accountId);
+        try {
+          await withTimeout<unknown>(this.refreshClientFromBroker(rec.accountId), 8000, 'refresh timed out');
+        } catch {
+          // keep the last known values; the next round tries again
+        }
+      }
+    } finally {
+      this.refreshingClients = false;
+    }
+  }
+
+  /** Re-attaches client accounts that already exist in MetaApi (after a server restart). */
+  public async rehydrateClients(): Promise<void> {
+    if (!this.api || this.isSimulatedMode) return;
+    try {
+      const all = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
+      for (const a of all) {
+        const parsed = parseClientAccountName(a.name);
+        if (!parsed || this.clientPool.has(parsed.userId)) continue;
+        try {
+          const entity = await this.api.metatraderAccountApi.getAccount(a.id);
+          if (entity.state !== 'DEPLOYED') continue;
+          const rpc = entity.getRPCConnection();
+          await rpc.connect();
+          await rpc.waitSynchronized(30);
+          const info = await rpc.getAccountInformation();
+          const v = verifyBrokerAccountInfo(info as any, { login: parsed.login, server: entity.server });
+          const now = new Date().toISOString();
+          this.registerClient({
+            userId: parsed.userId,
+            accountId: entity.id,
+            login: parsed.login,
+            server: entity.server,
+            status: 'ACTIVE',
+            account: entity,
+            rpcConnection: rpc,
+            balance: v.balance,
+            equity: v.equity,
+            freeMargin: v.freeMargin,
+            currency: v.currency,
+            leverage: v.leverage,
+            lastSync: now,
+            isSimulated: false,
+            accountHolderName: v.accountHolderName,
+            brokerName: v.brokerName,
+            isBrokerVerified: true,
+            tradeAllowed: v.tradeAllowed,
+            investorMode: v.investorMode,
+            accountType: v.accountType,
+            verificationTimestamp: now,
+          });
+          console.log(`♻️ [MT5_CONNECTION_MANAGER] Restored client #${parsed.login} after restart.`);
+        } catch (err: any) {
+          console.warn(`⚠️ [MT5_CONNECTION_MANAGER] Could not restore #${parsed.login}:`, err?.message);
+        }
+      }
+    } catch (err: any) {
+      console.warn('⚠️ [MT5_CONNECTION_MANAGER] Client restore skipped:', err?.message);
+    }
+  }
+
   private startHeartbeatMonitor(): void {
+    if (this.clientRefreshTimer) clearInterval(this.clientRefreshTimer);
+    this.clientRefreshTimer = setInterval(() => void this.refreshAllClients(), 10000);
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
     this.heartbeatInterval = setInterval(async () => {
       if (this.masterState === 'CONNECTED' && !this.isSimulatedMode) {

@@ -124,3 +124,11 @@ test('readLimit uses fallback unless a whole number is given', () => {
   assert.equal(readLimit('0', 5), 0);
   assert.equal(readLimit('abc', 5), 5);
 });
+
+import { parseClientAccountName } from '../src/backend/brokerVerification.ts';
+
+test('parseClientAccountName reads user and login back from the account name', () => {
+  assert.deepEqual(parseClientAccountName('CastimoFX Client abc123 #477627851'), { userId: 'abc123', login: '477627851' });
+  assert.deepEqual(parseClientAccountName('CastimoFX Client - abc123 (#4776)'), { userId: 'abc123', login: '4776' });
+  assert.equal(parseClientAccountName('Master HFM'), null);
+});
