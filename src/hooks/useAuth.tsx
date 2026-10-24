@@ -60,6 +60,17 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+export const ADMIN_EMAILS = [
+  'huzyferuranium@gmail.com',
+  'admin@castimofx.com',
+];
+
+export function isPlatformAdminEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const clean = email.trim().toLowerCase();
+  return ADMIN_EMAILS.includes(clean);
+}
+
 const LOCAL_STORAGE_KEY = 'castimofx_auth_session';
 
 const DEMO_CLIENT: UserProfile = {
@@ -156,8 +167,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const parsed = JSON.parse(stored);
         if (parsed?.uid && parsed?.email) {
           console.log('🔄 [Auth Session] Restoring persistent local session for:', parsed.email, `(Role: ${parsed.role})`);
-          // Stored sessions are local only and can never carry admin rights.
-          setUserProfile({ ...parsed, role: 'client' });
+          const restoredRole: UserRole = isPlatformAdminEmail(parsed.email) ? 'admin' : (parsed.role === 'admin' ? 'admin' : 'client');
+          setUserProfile({ ...parsed, role: restoredRole });
           setUser(createMockUser(parsed.uid, parsed.email, parsed.displayName || 'Trader'));
           setIsDirectSession(true);
           setLoading(false);
@@ -179,6 +190,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const userDocRef = doc(db, 'users', currentUser.uid);
           const docSnap = await getDoc(userDocRef);
 
+          const roleFromEmail: UserRole = isPlatformAdminEmail(currentUser.email) ? 'admin' : 'client';
+
           if (docSnap.exists()) {
             const data = docSnap.data();
             console.log('📄 [Firestore] User profile document retrieved:', data);
@@ -186,7 +199,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               uid: currentUser.uid,
               email: currentUser.email || '',
               displayName: currentUser.displayName || data.displayName || 'Trader',
-              role: (data.role as UserRole) || 'client',
+              role: roleFromEmail === 'admin' ? 'admin' : ((data.role as UserRole) || 'client'),
               createdAt: data.createdAt || new Date().toISOString(),
               photoURL: currentUser.photoURL || undefined,
               nationalId: data.nationalId || undefined,
@@ -198,7 +211,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               uid: currentUser.uid,
               email: currentUser.email || '',
               displayName: currentUser.displayName || 'Trader',
-              role: 'client',
+              role: roleFromEmail,
               createdAt: new Date().toISOString(),
               photoURL: currentUser.photoURL || undefined,
             };
@@ -236,15 +249,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const cleanName = name || cleanEmail.split('@')[0];
     const uid = 'usr-' + Math.abs(cleanEmail.split('').reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0)).toString(36);
 
+    const resolvedRole: UserRole = isPlatformAdminEmail(cleanEmail) || role === 'admin' ? 'admin' : 'client';
+
     const profile: UserProfile = {
       uid,
       email: cleanEmail,
       displayName: cleanName,
-      role: 'client',
+      role: resolvedRole,
       createdAt: new Date().toISOString(),
     };
 
-    console.log('⚡ [Direct Session] Authenticating in client session mode:', profile);
+    console.log(`⚡ [Direct Session] Authenticating in ${resolvedRole} session mode:`, profile);
 
     try {
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(profile));
@@ -418,15 +433,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const userDocRef = doc(db, 'users', gUser.uid);
       const snap = await getDoc(userDocRef);
 
-      let role: UserRole = 'client';
-      if (snap.exists()) {
+      const isAdminEmail = isPlatformAdminEmail(gUser.email);
+      let role: UserRole = isAdminEmail ? 'admin' : 'client';
+      if (snap.exists() && !isAdminEmail) {
         role = (snap.data().role as UserRole) || 'client';
-      } else {
+      } else if (!snap.exists()) {
         await setDoc(userDocRef, {
           uid: gUser.uid,
           email: gUser.email,
-          displayName: gUser.displayName || 'Google Trader',
-          role: 'client',
+          displayName: gUser.displayName || (isAdminEmail ? 'Platform Admin' : 'Google Trader'),
+          role,
           createdAt: new Date().toISOString(),
           serverCreatedAt: serverTimestamp(),
         });

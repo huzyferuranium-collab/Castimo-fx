@@ -200,18 +200,22 @@ export class Mt5ConnectionManager {
   }
 
   public handleMasterDisconnected(): void {
-    console.warn('⚠️ [MT5_CONNECTION_MANAGER] Master streaming connection dropped. Scheduling auto-reconnection...');
+    console.warn('⚠️ [MT5_CONNECTION_MANAGER] Master streaming connection dropped. Allowing MetaApi SDK automatic session recovery...');
     this.masterState = 'RECONNECTING';
     this.masterMetrics.state = 'RECONNECTING';
-    this.scheduleMasterReconnect();
+    this.scheduleMasterFallbackRecovery(25000);
   }
 
   public handleMasterConnected(): void {
     console.log('✅ [MT5_CONNECTION_MANAGER] Master streaming connection restored.');
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.masterState = 'CONNECTED';
     this.masterMetrics.state = 'CONNECTED';
     this.reconnectAttempts = 0;
-    this.refreshMasterAccountMetrics().catch(console.error);
+    this.refreshMasterAccountMetrics().catch(() => {});
   }
 
   /**
@@ -252,9 +256,23 @@ export class Mt5ConnectionManager {
       }
 
       console.log('🚀 [MT5_CONNECTION_MANAGER] Initializing MetaApi SDK...');
+      try {
+        if (typeof (MetaApi as any)?.enableLog4jsLogging === 'function') {
+          (MetaApi as any).enableLog4jsLogging();
+        }
+      } catch {
+        // Ignored
+      }
+
       this.api = new MetaApi(this.apiToken, {
         requestTimeout: 60,
         connectTimeout: 60,
+        retryOpts: {
+          retries: 5,
+          minDelayInSeconds: 1,
+          maxDelayInSeconds: 15,
+        },
+        useSharedClientApi: true,
       });
 
       if (this.masterAccountId) {
@@ -269,7 +287,7 @@ export class Mt5ConnectionManager {
       console.error('❌ [MT5_CONNECTION_MANAGER] Initialization failed:', error?.message || error);
       this.masterState = 'ERROR';
       this.masterMetrics.state = 'ERROR';
-      this.scheduleMasterReconnect();
+      this.scheduleMasterFallbackRecovery(15000);
       return false;
     }
   }
@@ -319,6 +337,25 @@ export class Mt5ConnectionManager {
           }
           throw deployErr;
         }
+      }
+
+      // Clean up any existing connection handles before establishing new session
+      if (this.masterStreamingConnection) {
+        try {
+          await this.masterStreamingConnection.close();
+        } catch {
+          // Ignore close error on stale socket
+        }
+        this.masterStreamingConnection = null;
+      }
+
+      if (this.masterRpcConnection) {
+        try {
+          await this.masterRpcConnection.close();
+        } catch {
+          // Ignore close error on stale socket
+        }
+        this.masterRpcConnection = null;
       }
 
       // 1. Establish RPC connection first (instant zero-delay account metrics & position queries)
@@ -371,7 +408,7 @@ export class Mt5ConnectionManager {
       console.error(`❌ [MT5_CONNECTION_MANAGER] Failed to connect Master Terminal (${accountId}):`, error?.message || error);
       this.masterState = 'ERROR';
       this.masterMetrics.state = 'ERROR';
-      this.scheduleMasterReconnect();
+      this.scheduleMasterFallbackRecovery(20000);
       return null;
     }
   }
@@ -844,31 +881,32 @@ export class Mt5ConnectionManager {
   }
 
   /**
-   * Master Terminal automatic reconnection schedule.
-   * Continues retrying to maintain live terminal sync with exponential backoff capped at 30s.
+   * Master Terminal fallback reconnection schedule.
+   * Gives MetaApi SDK's built-in socket recovery 20-30s to re-establish before rebuilding connections.
    */
-  private scheduleMasterReconnect(): void {
+  private scheduleMasterFallbackRecovery(delayMs: number = 25000): void {
     if (this.reconnectTimer) return;
     if (this.topUpNotice?.required) {
-      console.log('ℹ️ [MT5_CONNECTION_MANAGER] Master reconnect timer bypassed: Top-up required.');
+      console.log('ℹ️ [MT5_CONNECTION_MANAGER] Master recovery timer bypassed: Top-up required.');
       return;
     }
 
-    this.reconnectAttempts++;
-    this.masterState = 'RECONNECTING';
-    this.masterMetrics.state = 'RECONNECTING';
-
-    const delay = Math.min(this.reconnectIntervalMs * Math.pow(1.3, Math.min(this.reconnectAttempts, 8) - 1), 30000);
-    console.log(`🔄 [MT5_CONNECTION_MANAGER] Master terminal disconnected. Scheduling auto-reconnect attempt #${this.reconnectAttempts} in ${Math.round(delay / 1000)}s...`);
+    const delay = Math.min(Math.max(delayMs, this.reconnectIntervalMs * Math.pow(1.2, Math.min(this.reconnectAttempts, 6))), 45000);
+    console.log(`🔄 [MT5_CONNECTION_MANAGER] MetaApi SDK auto-recovery active. Fallback reconnection check in ${Math.round(delay / 1000)}s...`);
 
     this.reconnectTimer = setTimeout(async () => {
       this.reconnectTimer = null;
-      if (this.masterAccountId && !this.topUpNotice?.required) {
-        try {
-          await this.connectMasterTerminal(this.masterAccountId);
-        } catch (err: any) {
-          console.warn('⚠️ [MT5_CONNECTION_MANAGER] Reconnect attempt failed, will re-schedule:', err?.message || err);
-          this.scheduleMasterReconnect();
+      // Reconnect only if still in RECONNECTING or ERROR state
+      if (this.masterState === 'RECONNECTING' || this.masterState === 'ERROR') {
+        this.reconnectAttempts++;
+        console.log(`🔄 [MT5_CONNECTION_MANAGER] Auto-recovery timed out. Performing clean reconnect attempt #${this.reconnectAttempts}...`);
+        if (this.masterAccountId && !this.topUpNotice?.required) {
+          try {
+            await this.connectMasterTerminal(this.masterAccountId);
+          } catch (err: any) {
+            console.warn('⚠️ [MT5_CONNECTION_MANAGER] Clean reconnect failed, will re-schedule:', err?.message || err);
+            this.scheduleMasterFallbackRecovery(30000);
+          }
         }
       }
     }, delay);

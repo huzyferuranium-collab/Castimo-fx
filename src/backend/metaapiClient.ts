@@ -17,6 +17,15 @@ import type {
   MetatraderAccountInformation,
 } from 'metaapi.cloud-sdk/dist/clients/metaApi/metaApiWebsocket.client';
 
+// Enable Log4js logging on MetaApi SDK to suppress unformatted raw socket/transport errors
+try {
+  if (typeof (MetaApiDefault as any)?.enableLog4jsLogging === 'function') {
+    (MetaApiDefault as any).enableLog4jsLogging();
+  }
+} catch {
+  // Ignored
+}
+
 export const MetaApi = (MetaApiDefault as unknown) as typeof import('metaapi.cloud-sdk').default;
 export const SynchronizationListener = (NodeSyncListener as unknown) as typeof import('metaapi.cloud-sdk').SynchronizationListener;
 

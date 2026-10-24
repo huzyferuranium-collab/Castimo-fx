@@ -53,7 +53,7 @@ const MainContent: React.FC = () => {
   const [adminGateOpen, setAdminGateOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActivePortalTab>('client');
 
-  const isAdmin = userProfile?.role === 'admin' && !isDemoUser && !isDirectSession;
+  const isAdmin = userProfile?.role === 'admin' && !isDemoUser;
 
   // Synchronize tab with user role when loaded
   React.useEffect(() => {

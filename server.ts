@@ -22,6 +22,35 @@ const __dirname = path.dirname(__filename);
 const isProduction = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.PORT) || 3000;
 
+// Prevent transient WebSocket/XHR socket reconnection hiccups from crashing Node
+process.on('unhandledRejection', (reason: any) => {
+  const msg = reason?.message || String(reason);
+  if (
+    msg.includes('xhr post error') ||
+    msg.includes('RestoreRejectError') ||
+    msg.includes('Socket does not have mapped wrapper') ||
+    msg.includes('TransportError')
+  ) {
+    console.log('ℹ️ [SOCKET_SUPERVISOR] MetaApi cloud socket recovery event handled gracefully.');
+    return;
+  }
+  console.warn('⚠️ [SERVER] Handled unhandled rejection:', reason);
+});
+
+process.on('uncaughtException', (err: any) => {
+  const msg = err?.message || String(err);
+  if (
+    msg.includes('xhr post error') ||
+    msg.includes('RestoreRejectError') ||
+    msg.includes('Socket does not have mapped wrapper') ||
+    msg.includes('TransportError')
+  ) {
+    console.log('ℹ️ [SOCKET_SUPERVISOR] Transient socket exception handled gracefully.');
+    return;
+  }
+  console.error('❌ [SERVER] Uncaught exception:', err);
+});
+
 async function startServer() {
   const app = express();
 
