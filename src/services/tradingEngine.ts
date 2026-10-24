@@ -32,10 +32,10 @@ export const DEFAULT_PLANS: SubscriptionPlan[] = [
     description: 'Entry pass for active forex & commodities trade copying.',
     features: [
       'Institutional trade replication (EURUSD, XAUUSD, GBPUSD)',
-      'Sub-50ms execution bridge',
+      'Real-time MT5 trade replication',
       'Built-in $200 equity safety stop',
       'Daily High-Water Mark profit settlement',
-      'Full TRC20 USDT automated verification',
+      'Pay in USDT (TRC20)',
     ],
   },
   {
@@ -45,12 +45,10 @@ export const DEFAULT_PLANS: SubscriptionPlan[] = [
     durationDays: 30,
     description: 'Most popular plan for full monthly automated copiers.',
     features: [
-      'Priority bridge server routing',
       'All major, minor & gold pairs',
-      'Dynamic lot scaling based on equity',
+      'Lot size scaled to your account balance',
       'Continuous margin & drawdown guard',
       'Exportable financial ledger & tax reports',
-      'Dedicated 24/7 technical monitoring',
     ],
   },
 ];

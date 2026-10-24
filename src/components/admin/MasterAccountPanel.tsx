@@ -350,7 +350,7 @@ export const MasterAccountPanel: React.FC<MasterAccountPanelProps> = ({
             {masterAccount.activeCopiersCount || 0} Client MT5s
           </div>
           <div className="text-[10px] text-slate-400 font-mono">
-            {masterAccount.activeCopiersCount ? 'Sub-50ms Synchronized Replication' : 'Awaiting Client Connections'}
+            {masterAccount.activeCopiersCount ? 'Synchronized Replication' : 'Awaiting Client Connections'}
           </div>
         </div>
 
