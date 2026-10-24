@@ -94,3 +94,17 @@ test('broker error translation never leaks raw errors', () => {
   assert.equal(other.code, 'BROKER_UNREACHABLE');
   assert.ok(!other.message.includes('10.0.0.5'));
 });
+
+import { normalizeBrokerServer, pickServerAlias } from '../src/backend/brokerVerification.ts';
+
+test('normalizeBrokerServer fixes common spellings and leaves others alone', () => {
+  assert.equal(normalizeBrokerServer('Exness-Real9'), 'Exness-MT5Real9');
+  assert.equal(normalizeBrokerServer('HFMarkets-Live20'), 'HFMarketsGlobal-Live20');
+  assert.equal(normalizeBrokerServer('  Some-Broker-Live  '), 'Some-Broker-Live');
+});
+
+test('pickServerAlias only returns names from the supplied list', () => {
+  assert.equal(pickServerAlias('exness-real9', ['Exness-MT5Real9', 'Exness-MT5Real10']), 'Exness-MT5Real9');
+  assert.equal(pickServerAlias('Fake-Server', ['Exness-MT5Real9']), null);
+  assert.equal(pickServerAlias('Exness-MT5Real9', ['Exness-MT5Real9']), null);
+});

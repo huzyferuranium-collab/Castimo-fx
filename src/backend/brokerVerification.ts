@@ -201,3 +201,34 @@ export function translateBrokerError(
     'Could not reach your broker to verify this account. Please try again in a minute.'
   );
 }
+
+// ---------- broker server names ----------
+
+/** Fixes common short or old spellings of broker server names. Unknown names pass through unchanged. */
+export function normalizeBrokerServer(raw: string): string {
+  const server = String(raw ?? '').trim();
+  let m: RegExpMatchArray | null;
+  if ((m = server.match(/^exness-?real(\d+)$/i))) return `Exness-MT5Real${m[1]}`;
+  if ((m = server.match(/^exness-?trial(\d+)$/i))) return `Exness-MT5Trial${m[1]}`;
+  if ((m = server.match(/^icmarkets-?live(\d+)$/i))) return `ICMarketsSC-Live${m[1].padStart(2, '0')}`;
+  if ((m = server.match(/^hfmarkets-?live(\d+)$/i))) return `HFMarketsGlobal-Live${m[1]}`;
+  if ((m = server.match(/^xm(?:global)?-?mt5-?(\d+)$/i))) return `XMGlobal-MT5-${m[1]}`;
+  return server;
+}
+
+const strip = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * If MetaApi says a server name is unknown but lists real servers, pick the one that is the same
+ * name written differently (case, dashes, "MT5" inserted). Only names from MetaApi's own list are
+ * ever returned, so this can never point an account at an invented server.
+ */
+export function pickServerAlias(requested: string, suggestions: string[]): string | null {
+  const target = strip(requested);
+  if (!target) return null;
+  const hit = suggestions.find((s) => {
+    const t = strip(s);
+    return t === target || t === target.replace('real', 'mt5real') || t === target.replace('trial', 'mt5trial');
+  });
+  return hit && hit !== requested ? hit : null;
+}
