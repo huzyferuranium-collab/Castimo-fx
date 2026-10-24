@@ -175,9 +175,12 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   useEffect(() => {
     fetchMetaApiStatus();
     tradingEngine.syncClientsFromBackend();
+    tradingEngine.syncInvoicesFromBackend();
+    let tick = 0;
     const interval = setInterval(() => {
       fetchMetaApiStatus();
       tradingEngine.syncClientsFromBackend();
+      if (++tick % 6 === 0) tradingEngine.syncInvoicesFromBackend();
     }, 4000);
     return () => clearInterval(interval);
   }, []);

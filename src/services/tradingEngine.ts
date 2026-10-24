@@ -969,35 +969,107 @@ class TradingEngine {
     this.notify();
   }
 
-  // --- 50% PROFIT SHARE SETTLEMENT & 24H WATCHER ENGINE ---
+  // --- 50% PROFIT SHARE (real: invoices come from the server, payments are checked on the TRON blockchain) ---
+  private billingInfo: { enabled: boolean; treasuryAddress: string; feePct: number; periodDays: number } = {
+    enabled: false,
+    treasuryAddress: '',
+    feePct: 50,
+    periodDays: 7,
+  };
+
+  public getBillingInfo() {
+    return this.billingInfo;
+  }
+
+  /** Loads this user's invoices (or all invoices for an administrator) from the server. */
+  public async syncInvoicesFromBackend(asAdmin = false): Promise<void> {
+    try {
+      const headers = await authHeaders();
+      if (!headers.Authorization) return;
+      const res = await fetch(asAdmin ? '/api/trade/admin/invoices' : '/api/trade/invoices', { headers });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!asAdmin) {
+        this.billingInfo = {
+          enabled: Boolean(data.billingEnabled),
+          treasuryAddress: String(data.treasuryAddress || ''),
+          feePct: Number(data.feePct) || 50,
+          periodDays: Number(data.periodDays) || 7,
+        };
+      }
+      const rows: any[] = Array.isArray(data.invoices) ? data.invoices : [];
+      this.profitInvoices = rows.map((r) => ({
+        id: String(r.id),
+        userId: String(r.userId),
+        accountNumber: String(r.accountLogin ?? ''),
+        grossProfit: Number(r.grossProfit) || 0,
+        profitSharePct: Number(r.feePct) || 50,
+        amountDueUsdt: Number(r.amountDueUsdt) || 0,
+        recipientAddress: String(r.recipientAddress || ''),
+        status: r.status === 'paid' ? 'paid' : Date.parse(r.dueAt) <= Date.now() ? 'overdue_blocked' : 'pending',
+        createdAt: String(r.createdAt),
+        dueAt: String(r.dueAt),
+        paidAt: r.paidAt,
+        txHash: r.txHash,
+      }));
+      if (!asAdmin) {
+        const open = this.profitInvoices.filter((i) => i.status !== 'paid');
+        const due = open.reduce((t, i) => t + i.amountDueUsdt, 0);
+        this.mt5Account.unpaidProfitShareUsdt = Math.round(due * 100) / 100;
+        this.mt5Account.profitShareDueAt = open.length
+          ? open.map((i) => i.dueAt).sort()[0]
+          : undefined;
+        this.mt5Account.profitShareStatus = open.some((i) => i.status === 'overdue_blocked') ? 'overdue_disconnected' : open.length ? 'payment_pending' : 'up_to_date';
+      }
+      this.notify();
+    } catch {
+      // keep what we had
+    }
+  }
+
+  /** Sends the payment's transaction ID to the server, which checks it on the TRON blockchain. */
   public async payProfitShareInvoice(
     invoiceId: string,
     txHash?: string
   ): Promise<{ success: boolean; error?: string }> {
-    const inv = this.profitInvoices.find((i) => i.id === invoiceId);
-    if (!inv) {
-      return { success: false, error: 'Invoice not found.' };
-    }
-    if (inv.status === 'paid') {
+    try {
+      const headers = await authHeaders();
+      if (!headers.Authorization) return { success: false, error: 'Please sign in with a real account first.' };
+      const res = await fetch('/api/trade/pay-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ invoiceId, txHash: txHash ?? '' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: data?.error || 'Payment could not be verified.' };
+      await this.syncInvoicesFromBackend();
+      await this.syncClientsFromBackend();
       return { success: true };
+    } catch {
+      return { success: false, error: 'Could not reach the server. Please try again.' };
     }
+  }
 
-    // Nothing is marked paid on the client's say-so. Automatic blockchain checking is not live yet,
-    // so a payment has to be confirmed by an administrator.
-    if (!PAYMENTS_ENABLED) {
-      return { success: false, error: 'Payments are not open yet. Please contact support.' };
+  /** Administrator marks an invoice paid by hand. */
+  public async adminConfirmInvoice(invoiceId: string, note?: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const headers = await authHeaders();
+      const res = await fetch('/api/trade/admin/confirm-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({ invoiceId, note }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: data?.error || 'Could not confirm the invoice.' };
+      await this.syncInvoicesFromBackend(true);
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Could not reach the server.' };
     }
-    if (!txHash || !/^[0-9a-fA-F]{64}$/.test(txHash.trim())) {
-      return { success: false, error: 'Please paste the 64-character transaction ID (TXID) of your USDT payment.' };
-    }
-    return {
-      success: false,
-      error: 'Automatic payment checking is not live yet. Send your TXID to support so an administrator can confirm it.',
-    };
   }
 
   public async submitAndVerifyProfitShareHash(
-    accountNumber: string,
+    _accountNumber: string,
     txHash: string
   ): Promise<{
     success: boolean;
@@ -1007,150 +1079,27 @@ class TradingEngine {
     invoiceId?: string;
     error?: string;
   }> {
-    if (!PAYMENTS_ENABLED) {
-      return { success: false, message: 'Payments are not open yet.', error: 'Payments are not open yet. Please contact support.' };
-    }
     const cleanHash = txHash.trim();
     if (!cleanHash) {
-      return {
-        success: false,
-        message: 'Transaction hash is required.',
-        error: 'Please paste your TRC-20 Transaction Hash (TXID).',
-      };
+      return { success: false, message: 'Transaction hash is required.', error: 'Please paste your TRC-20 Transaction Hash (TXID).' };
     }
-
-    if (cleanHash.length < 16) {
-      return {
-        success: false,
-        message: 'Invalid transaction hash length.',
-        error: 'TRC-20 transaction hashes must be at least 16 characters (standard 64 hexadecimal characters).',
-      };
+    const pending = this.profitInvoices.find((i) => i.status !== 'paid');
+    if (!pending) {
+      return { success: false, message: 'No invoice is waiting for payment.', error: 'You have no unpaid invoice.' };
     }
-
-    // Check if this hash was already used
-    const duplicate = this.profitInvoices.find(
-      (inv) => inv.status === 'paid' && inv.txHash?.toLowerCase() === cleanHash.toLowerCase()
-    );
-    if (duplicate) {
-      return {
-        success: false,
-        message: 'Transaction hash already redeemed.',
-        error: `This transaction hash (${cleanHash.slice(0, 10)}...) has already been verified and settled for invoice #${duplicate.id}.`,
-      };
-    }
-
-    // Find pending invoice for this account or user
-    let pendingInvoice = this.profitInvoices.find(
-      (i) => (i.accountNumber === accountNumber || i.userId === this.mt5Account.userId) && i.status === 'pending'
-    );
-
-    // If no explicit invoice found, but there is an outstanding balance on account
-    const dueAmount = this.mt5Account.unpaidProfitShareUsdt || 0;
-    if (!pendingInvoice && dueAmount > 0) {
-      pendingInvoice = {
-        id: `inv-${Date.now().toString(36)}`,
-        userId: this.mt5Account.userId,
-        accountNumber: accountNumber || this.mt5Account.accountNumber || '1099284',
-        grossProfit: dueAmount * 2,
-        profitSharePct: 50,
-        amountDueUsdt: dueAmount,
-        recipientAddress: CASTIMO_TREASURY_ADDRESS,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        dueAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-      };
-      this.profitInvoices.unshift(pendingInvoice);
-    }
-
-    // If still no pending invoice and no dues, create a verified settlement record for test/voluntary payment
-    if (!pendingInvoice) {
-      pendingInvoice = {
-        id: `inv-vol-${Date.now().toString(36)}`,
-        userId: this.mt5Account.userId,
-        accountNumber: accountNumber || this.mt5Account.accountNumber || '1099284',
-        grossProfit: 100,
-        profitSharePct: 50,
-        amountDueUsdt: 50,
-        recipientAddress: CASTIMO_TREASURY_ADDRESS,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        dueAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-      };
-      this.profitInvoices.unshift(pendingInvoice);
-    }
-
-    const payRes = await this.payProfitShareInvoice(pendingInvoice.id, cleanHash);
-    if (!payRes.success) {
-      return {
-        success: false,
-        message: payRes.error || 'Failed to verify transaction hash.',
-        error: payRes.error,
-      };
-    }
-
-    this.notify();
+    const r = await this.payProfitShareInvoice(pending.id, cleanHash);
+    if (!r.success) return { success: false, message: r.error || 'Verification failed.', error: r.error };
     return {
       success: true,
-      message: `Verified on TRON TRC20 network. $${pendingInvoice.amountDueUsdt.toFixed(2)} USDT 50% profit share settled. Terminal trade copying is active!`,
-      amountSettled: pendingInvoice.amountDueUsdt,
+      message: `Payment verified on the TRON network. $${pending.amountDueUsdt.toFixed(2)} USDT received.`,
+      amountSettled: pending.amountDueUsdt,
       txHash: cleanHash,
-      invoiceId: pendingInvoice.id,
+      invoiceId: pending.id,
     };
   }
 
   public trigger24hWatcherSweep(): { checked: number; disconnectedCount: number; message: string } {
-    let disconnectedCount = 0;
-    const now = Date.now();
-
-    // Check main mt5Account
-    if (
-      this.mt5Account.unpaidProfitShareUsdt &&
-      this.mt5Account.unpaidProfitShareUsdt > 0 &&
-      this.mt5Account.profitShareDueAt &&
-      new Date(this.mt5Account.profitShareDueAt).getTime() < now &&
-      this.mt5Account.status !== 'blocked_unpaid' &&
-      this.mt5Account.status !== 'disconnected'
-    ) {
-      this.mt5Account.status = 'blocked_unpaid';
-      this.mt5Account.profitShareStatus = 'overdue_disconnected';
-      this.mt5Account.blockedReason = `Auto-disconnected by 24h Watcher: 50% profit share (${this.mt5Account.unpaidProfitShareUsdt.toFixed(2)} USDT) unpaid after 24 hours of profit realization.`;
-      this.mt5Account.riskStatus = 'blocked';
-      disconnectedCount++;
-
-      this.logAudit(
-        this.mt5Account.userId,
-        'Autonomous 24h Watcher Daemon',
-        'AUTO_DISCONNECT_UNPAID_24H',
-        'RISK',
-        `Account #${this.mt5Account.accountNumber} auto-disconnected. 50% profit share overdue.`,
-        'WARNING'
-      );
-    }
-
-    // Check supervised accounts
-    for (const acc of this.supervisedAccounts) {
-      if (
-        acc.unpaidProfitShareUsdt &&
-        acc.unpaidProfitShareUsdt > 0 &&
-        acc.profitShareDueAt &&
-        new Date(acc.profitShareDueAt).getTime() < now &&
-        acc.status !== 'blocked_unpaid' &&
-        acc.status !== 'disconnected'
-      ) {
-        acc.status = 'blocked_unpaid';
-        acc.profitShareStatus = 'overdue_disconnected';
-        acc.blockedReason = `Auto-disconnected by 24h Watcher: 50% profit share (${acc.unpaidProfitShareUsdt.toFixed(2)} USDT) unpaid after 24 hours of profit realization.`;
-        acc.riskStatus = 'blocked';
-        disconnectedCount++;
-      }
-    }
-
-    this.notify();
-    return {
-      checked: this.supervisedAccounts.length,
-      disconnectedCount,
-      message: `24h Watcher sweep complete. Checked ${this.supervisedAccounts.length} accounts. ${disconnectedCount} account(s) auto-disconnected due to unpaid 50% profit share.`,
-    };
+    return { checked: 0, disconnectedCount: 0, message: 'Overdue invoices are handled automatically by the server.' };
   }
 
   public simulateNewProfits(grossProfit: number = 200.0): ProfitShareInvoice {

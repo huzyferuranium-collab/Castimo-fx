@@ -56,6 +56,8 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     tradingEngine.syncClientsFromBackend();
+    tradingEngine.syncInvoicesFromBackend(true);
+    const invTimer = setInterval(() => tradingEngine.syncInvoicesFromBackend(true), 30000);
     const unsub = tradingEngine.subscribe(() => {
       setSupervisedAccounts([...tradingEngine.getSupervisedAccounts()]);
       setInvoices([...tradingEngine.getProfitInvoices()]);
@@ -67,6 +69,7 @@ export const AdminDashboard: React.FC = () => {
     }, 4000);
 
     return () => {
+      clearInterval(invTimer);
       unsub();
       clearInterval(syncTimer);
     };
@@ -90,29 +93,24 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const handleSimulateNewProfit = () => {
-    const inv = tradingEngine.simulateNewProfits(200.0);
-    setActionSuccess(
-      `Simulated MT5 +$200 profit: 50% invoice #${inv.id} generated ($${inv.amountDueUsdt.toFixed(2)} USDT due).`
-    );
+    setActionSuccess('Test profit is switched off. Invoices are created automatically from each client\'s real broker profit.');
     setTimeout(() => setActionSuccess(null), 5000);
   };
 
   const handleSimulate24hTimeout = () => {
-    tradingEngine.simulateFastForward24h();
-    setActionSuccess('Simulated 24-hour expiration: Overdue accounts auto-disconnected.');
+    setActionSuccess('Time simulation is switched off. Overdue invoices pause copying automatically.');
     setTimeout(() => setActionSuccess(null), 5000);
   };
 
   const handleExecuteDailySettlement = () => {
-    tradingEngine.executeDailySettlement(userProfile?.displayName || 'Administrator');
-    setActionSuccess('Daily 50% profit share settlement sweep executed across accounts.');
+    setActionSuccess('Settlement runs automatically on the server each period. Nothing to run by hand.');
     setActionsMenuOpen(false);
     setTimeout(() => setActionSuccess(null), 4000);
   };
 
   const handleMarkPaid = async (invoiceId: string) => {
-    await tradingEngine.payProfitShareInvoice(invoiceId);
-    setActionSuccess(`Invoice #${invoiceId} marked as settled (TRC20 USDT). Account trade copying restored.`);
+    const r = await tradingEngine.adminConfirmInvoice(invoiceId, 'Confirmed by administrator');
+    setActionSuccess(r.success ? `Invoice #${invoiceId} marked as paid. Copying resumes shortly.` : r.error || 'Could not confirm the invoice.');
     setTimeout(() => setActionSuccess(null), 4000);
   };
 

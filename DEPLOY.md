@@ -29,3 +29,23 @@ Clients who disconnect are removed from MetaApi, which stops their charge. Admin
 ## Payments wallet
 Add `VITE_TREASURY_ADDRESS` = your real TRON (TRC20) USDT address in Render's environment variables, then redeploy.
 Until it is set, the site shows "Payment address not set yet" and refuses payments, so nobody can send money to a wrong address.
+
+## Turning on real profit-share billing
+Billing creates invoices from each client's real broker profit and checks USDT payments on the TRON blockchain.
+It stays OFF until both of these are set on Render (Environment):
+
+1. `TREASURY_ADDRESS` = your real TRON (TRC20) USDT address (use the same value as `VITE_TREASURY_ADDRESS`).
+2. `FIREBASE_SERVICE_ACCOUNT` = the full contents of a Firebase service-account key (JSON):
+   - Firebase console -> Project settings (gear) -> Service accounts -> **Generate new private key**.
+   - Open the downloaded file, copy ALL of its text, and paste it as the value. Never put this file in GitHub.
+
+Optional settings (defaults in brackets):
+- `FEE_PCT` [50] share of new profit.
+- `SETTLEMENT_PERIOD_DAYS` [7] how often invoices are made.
+- `INVOICE_DUE_HOURS` [72] time to pay before copying pauses.
+- `TRONGRID_API_KEY` free key from trongrid.io, recommended to avoid rate limits.
+
+How it works: the first time a client's broker account is verified, their equity becomes the starting
+high-water mark. Deposits and withdrawals are read from the broker and never count as profit or loss.
+At each period end, 50% of profit above the high-water mark becomes an invoice (invoices under $1 roll into the next one).
+Only USD accounts are billed automatically. Publish the updated `firestore.rules` too.

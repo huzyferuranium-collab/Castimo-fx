@@ -25,7 +25,7 @@ service cloud.firestore {
     }
     match /profit_invoices/{id} {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow write: if isAdmin();
+      allow write: if false;
     }
     match /withdrawals/{id} {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
@@ -46,6 +46,15 @@ service cloud.firestore {
     }
 
     // One account per National ID: the first account to claim an ID keeps it; nobody can change or free it.
+    // Billing records are written ONLY by the server (service account bypasses these rules).
+    match /client_ledgers/{id} {
+      allow read: if isSignedIn() && (id == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+    match /used_tx_hashes/{id} {
+      allow read, write: if false;
+    }
+
     match /national_ids/{id} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
