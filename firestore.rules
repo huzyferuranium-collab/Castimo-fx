@@ -55,6 +55,15 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Proof that a user accepted a version of the terms. Created once, never changed.
+    match /agreements/{id} {
+      allow read: if isSignedIn() && (id.matches(request.auth.uid + '_.*') || isAdmin());
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && id == request.auth.uid + '_' + request.resource.data.version;
+      allow update, delete: if false;
+    }
+
     match /national_ids/{id} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;

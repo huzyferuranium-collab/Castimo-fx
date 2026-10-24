@@ -11,6 +11,8 @@ import { TradeCopierTable } from '../mt5/TradeCopierTable';
 import { TradeHistory } from '../mt5/TradeHistory';
 import { NotificationCenter } from '../notifications/NotificationCenter';
 import { ProfitSharePaymentModal } from '../payments/ProfitSharePaymentModal';
+import { TermsModal } from '../legal/TermsModal';
+import { hasAcceptedTerms, acceptTerms } from '../../services/agreements';
 import { Mt5ConnectionModal } from '../mt5/Mt5ConnectionModal';
 import { Mt5DisconnectModal } from '../mt5/Mt5DisconnectModal';
 import { SettlementHistoryModal } from '../settlements/SettlementHistoryModal';
@@ -63,11 +65,27 @@ interface ClientDashboardProps {
 }
 
 export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToReferrals }) => {
-  const { userProfile, isEmailVerified, isAdmin, isClient, updateNationalId, isNationalIdDuplicate } = useAuth();
+  const { userProfile, isEmailVerified, isAdmin, isClient, updateNationalId, isNationalIdDuplicate, isDemoUser, isDirectSession } = useAuth();
   const isUserAdmin = isAdmin ?? (userProfile?.role === 'admin');
   const isUserClient = isClient ?? (!isUserAdmin || userProfile?.role === 'client');
 
   const [activeSection, setActiveSection] = useState<string>('overview');
+
+  // Every real client must accept the terms before using the dashboard. null = still checking.
+  const [termsAccepted, setTermsAccepted] = useState<boolean | null>(null);
+  useEffect(() => {
+    const uid = userProfile?.uid;
+    // Demo and quick-start sessions cannot connect real accounts, so they have nothing to agree to.
+    if (!uid || userProfile?.role === 'admin' || isDemoUser || isDirectSession) {
+      setTermsAccepted(true);
+      return;
+    }
+    let cancelled = false;
+    hasAcceptedTerms(uid).then((ok) => !cancelled && setTermsAccepted(ok));
+    return () => {
+      cancelled = true;
+    };
+  }, [userProfile?.uid]);
   const [account, setAccount] = useState<Mt5Account>(tradingEngine.getMt5Account());
   const [trades, setTrades] = useState<CopiedTrade[]>(tradingEngine.getTrades());
 
@@ -1406,6 +1424,15 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
           </div>
         )}
       </div>
+
+      <TermsModal
+        isOpen={termsAccepted === false}
+        onAccept={async () => {
+          const r = await acceptTerms(userProfile?.uid || '');
+          if (r.success) setTermsAccepted(true);
+          return r;
+        }}
+      />
 
       {/* Modals & Dialogs (Preserved Exactly) */}
       <ProfitSharePaymentModal

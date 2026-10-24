@@ -98,7 +98,7 @@ async function loadGoogleKeys(force = false): Promise<Record<string, KeyObject>>
 
 // ---------- project settings ----------
 
-function loadFirebaseSettings(): { projectId: string; databaseId: string } {
+export function loadFirebaseSettings(): { projectId: string; databaseId: string } {
   let projectId = process.env.FIREBASE_PROJECT_ID || '';
   let databaseId = process.env.FIREBASE_DATABASE_ID || '';
   if (!projectId || !databaseId) {

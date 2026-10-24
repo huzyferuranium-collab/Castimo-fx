@@ -14,6 +14,7 @@ import { Router, Request, Response } from 'express';
 import { Mt5ConnectionManager } from './MT5_CONNECTION_MANAGER';
 import { ReplicationEngine } from './REPLICATION_ENGINE';
 import { requireUser, requireAdmin, getAuthUser, isAdminUser } from './firebaseAuth';
+import { hasAcceptedTermsServer } from './termsCheck';
 import { BrokerVerificationError } from './brokerVerification';
 import { BillingService, BillingError, billingConfig, billingEnabled } from './billing';
 
@@ -206,6 +207,14 @@ tradeRouter.post('/provision-client', requireUser, async (req: Request, res: Res
   try {
     const user = getAuthUser(req);
     const { login, password, server, platform } = req.body || {};
+
+    if (!(await hasAcceptedTermsServer(user))) {
+      return res.status(403).json({
+        success: false,
+        code: 'TERMS_NOT_ACCEPTED',
+        error: 'Please read and accept the Terms and Risk Warning before connecting an account.',
+      });
+    }
 
     await BillingService.getInstance().assertNotOverdue(user.uid);
 
