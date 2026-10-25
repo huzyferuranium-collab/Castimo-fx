@@ -4,7 +4,7 @@
  *
  * IMPORTANT: this is a plain-language DRAFT. Have a lawyer in your country review it before launch.
  */
-export const TERMS_VERSION = '2026-10-v1';
+export const TERMS_VERSION = '2026-10-v2';
 
 export interface TermsSection {
   title: string;
@@ -77,15 +77,45 @@ export const TERMS_SECTIONS: TermsSection[] = [
     ],
   },
   {
-    title: '9. Changes and law',
+    title: '9. Third parties and conflicts of interest',
+    body: [
+      'Copying runs through third parties: your broker, our trade-connection provider (MetaApi), blockchain networks and hosting providers. We do not control them and are not responsible for their errors, outages or decisions.',
+      'The master account is traded by CASTIMOFx and may hold the same positions that you copy. We earn a fee only when you profit, but we may also trade our own money in the master account.',
+    ],
+  },
+  {
+    title: '10. Rules of use',
+    body: [
+      'You may not use the service for anything illegal, to hide the source of money, to attack or overload our systems, to share your login with others, or to connect an account that is not yours.',
+      'You are responsible for your own tax obligations on your trading results.',
+    ],
+  },
+  {
+    title: '11. Events outside our control',
+    body: [
+      'We are not responsible for failures or delays caused by events we cannot reasonably control, such as internet or power outages, broker or exchange suspensions, market gaps, cyber-attacks, government action or natural disasters.',
+    ],
+  },
+  {
+    title: '12. Messages and complaints',
+    body: [
+      'We may contact you through the app and your registered email about your account, invoices and changes to these terms.',
+      'If you have a complaint, contact us through the support channel shown in the app. We will try to answer within a reasonable time.',
+    ],
+  },
+  {
+    title: '13. Changes and law',
     body: [
       'We may update these terms. When we do, we will ask you to accept the new version before you continue.',
       'These terms are governed by the laws of the Republic of Uganda, unless the law where you live gives you stronger protection.',
+      'If any part of these terms is found to be invalid, the rest stays in force. These terms are the whole agreement between you and CASTIMOFx about the service.',
     ],
   },
 ];
 
-export const TERMS_CHECKBOXES = [
-  'I have read and agree to the Terms and the 50% Profit-Share Agreement.',
-  'I understand that trading is risky, that I can lose money, and that nothing is guaranteed.',
+/** The short statement shown next to the I Agree button. */
+export const TERMS_SUMMARY = [
+  'Trading is risky. You can lose some or all of your money, and nothing is guaranteed.',
+  'Your funds stay in your own broker account. CASTIMOFx never holds your money.',
+  'CASTIMOFx charges 50% of new profit only (nothing on losses), invoiced in USDT.',
 ];
