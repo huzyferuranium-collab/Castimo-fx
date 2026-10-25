@@ -23,15 +23,23 @@ const __dirname = path.dirname(__filename);
 const isProduction = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.PORT) || 3000;
 
+function isTransientSocketError(err: any): boolean {
+  if (!err) return false;
+  const str = `${err?.name || ''} ${err?.message || ''} ${err?.type || ''} ${err?.description || ''} ${String(err)}`.toLowerCase();
+  return (
+    str.includes('xhr post error') ||
+    str.includes('restorerejecterror') ||
+    str.includes('socket does not have mapped wrapper') ||
+    str.includes('transporterror') ||
+    str.includes('websocket client closed') ||
+    str.includes('cannot restore connection session') ||
+    str.includes('connection lost')
+  );
+}
+
 // Prevent transient WebSocket/XHR socket reconnection hiccups from crashing Node
 process.on('unhandledRejection', (reason: any) => {
-  const msg = reason?.message || String(reason);
-  if (
-    msg.includes('xhr post error') ||
-    msg.includes('RestoreRejectError') ||
-    msg.includes('Socket does not have mapped wrapper') ||
-    msg.includes('TransportError')
-  ) {
+  if (isTransientSocketError(reason)) {
     console.log('ℹ️ [SOCKET_SUPERVISOR] MetaApi cloud socket recovery event handled gracefully.');
     return;
   }
@@ -39,13 +47,7 @@ process.on('unhandledRejection', (reason: any) => {
 });
 
 process.on('uncaughtException', (err: any) => {
-  const msg = err?.message || String(err);
-  if (
-    msg.includes('xhr post error') ||
-    msg.includes('RestoreRejectError') ||
-    msg.includes('Socket does not have mapped wrapper') ||
-    msg.includes('TransportError')
-  ) {
+  if (isTransientSocketError(err)) {
     console.log('ℹ️ [SOCKET_SUPERVISOR] Transient socket exception handled gracefully.');
     return;
   }
@@ -75,22 +77,6 @@ async function startServer() {
     console.error('❌ [SERVER] METAAPI_TOKEN is not set. Broker verification is OFF: no client account can be connected until it is set.');
   }
 
-  // Initialize MT5 Connection Manager & attach Replication Engine
-  try {
-    const connectionManager = Mt5ConnectionManager.getInstance();
-    // Remember each client's account (no passwords) so they never have to reconnect after a restart.
-    connectionManager.onClientSaved = (rec) => void saveClientRecord(rec).catch((e) => console.warn('[STORE] save failed:', e?.message));
-    connectionManager.loadSavedStatus = loadSavedStatus;
-    await connectionManager.initialize();
-    
-    const replicationEngine = ReplicationEngine.getInstance();
-    replicationEngine.attachToMasterStream();
-    BillingService.getInstance().start();
-    console.log('✅ [SERVER] CastimoFX MT5 Replication Engine initialized and listening.');
-  } catch (err: any) {
-    console.warn('⚠️ [SERVER] MT5 Connection Manager initialization deferred:', err?.message || err);
-  }
-
   // Vite middleware in dev or static files in production
   if (!isProduction) {
     const { createServer } = await import('vite');
@@ -118,8 +104,27 @@ async function startServer() {
     console.log('📦 [SERVER] Serving static production build from /dist.');
   }
 
+  // Start HTTP server immediately so pre-warming check and UI are accessible without waiting on cloud RPC
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 [SERVER] CASTIMOFx Server listening on http://0.0.0.0:${PORT}`);
+
+    // Asynchronously bootstrap MT5 Connection Manager, Replication Engine, and Billing in background
+    void (async () => {
+      try {
+        console.log('🔌 [SERVER] Bootstrapping MT5 Connection Manager & Replication Engine in background...');
+        const connectionManager = Mt5ConnectionManager.getInstance();
+        connectionManager.onClientSaved = (rec) => void saveClientRecord(rec).catch((e) => console.warn('[STORE] save failed:', e?.message));
+        connectionManager.loadSavedStatus = loadSavedStatus;
+        await connectionManager.initialize();
+
+        const replicationEngine = ReplicationEngine.getInstance();
+        replicationEngine.attachToMasterStream();
+        BillingService.getInstance().start();
+        console.log('✅ [SERVER] CastimoFX MT5 Replication Engine initialized and listening.');
+      } catch (err: any) {
+        console.warn('⚠️ [SERVER] Background MT5 Connection Manager initialization deferred:', err?.message || err);
+      }
+    })();
   });
 }
 

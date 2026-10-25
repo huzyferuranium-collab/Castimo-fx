@@ -366,8 +366,12 @@ export class Mt5ConnectionManager {
       // 1. Establish RPC connection first (instant zero-delay account metrics & position queries)
       console.log(`⚡ [MT5_CONNECTION_MANAGER] Opening high-speed RPC connection to Master Terminal...`);
       this.masterRpcConnection = this.masterAccount.getRPCConnection();
-      await this.masterRpcConnection.connect();
-      await this.masterRpcConnection.waitSynchronized(15);
+      await withTimeout(this.masterRpcConnection.connect(), 20000, 'Master RPC connect timed out after 20s');
+      try {
+        await withTimeout(this.masterRpcConnection.waitSynchronized(15), 18000, 'Master RPC sync timed out');
+      } catch (syncErr: any) {
+        console.warn('ℹ️ [MT5_CONNECTION_MANAGER] Master RPC synchronization note:', syncErr?.message || syncErr);
+      }
 
       // Initial account metrics sync directly from live MT5 terminal
       await this.refreshMasterAccountMetrics();
