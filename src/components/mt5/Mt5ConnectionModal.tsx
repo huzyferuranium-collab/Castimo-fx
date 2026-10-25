@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { tradingEngine } from '../../services/tradingEngine';
-import { Shield, KeyRound, Server, CheckCircle2, Lock, AlertTriangle, ArrowRight, Radio } from 'lucide-react';
+import { KeyRound, Server, CheckCircle2, Lock, AlertTriangle, ArrowRight } from 'lucide-react';
 
 interface Mt5ConnectionModalProps {
   isOpen: boolean;
@@ -33,9 +33,8 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
   onClose,
   userId,
 }) => {
-  const masterAccount = tradingEngine.getMasterAccount();
-  const [accountNumber, setAccountNumber] = useState('');
-  const [brokerServer, setBrokerServer] = useState(COMMON_SERVERS[0]);
+    const [accountNumber, setAccountNumber] = useState('');
+  const [brokerServer, setBrokerServer] = useState('');
   const [password, setPassword] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -53,7 +52,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
         throw new Error('Please enter a valid MT5 account number.');
       }
       if (!password) {
-        throw new Error('Please enter MT5 account password.');
+        throw new Error('Please enter your trading password.');
       }
 
       await tradingEngine.connectMt5Account(userId, accountNumber, brokerServer, password);
@@ -71,104 +70,86 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
     }
   };
 
+  const inputCls =
+    'w-full pl-9 pr-3 py-2.5 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:border-blue-500 text-white';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden text-slate-100">
-        <div className="p-5 border-b border-slate-800 bg-gradient-to-r from-blue-600/20 via-slate-900 to-slate-900 flex items-center justify-between">
+      <div className="relative w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden text-slate-100">
+        <div className="p-5 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
-              <Server className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+              <Server className="w-4 h-4" />
             </div>
-            <div>
-              <h3 className="font-bold text-base text-white">Connect MT5 Terminal</h3>
-              <p className="text-xs text-slate-400">Direct low-latency bridge synchronization</p>
-            </div>
+            <h3 className="font-bold text-base text-white">Connect your MT5 account</h3>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-lg transition"
-          >
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg transition" aria-label="Close">
             ✕
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
+        <div className="p-5">
           {success ? (
-            <div className="p-6 text-center space-y-3">
+            <div className="py-6 text-center space-y-3">
               <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
-              <div className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold uppercase tracking-wider">
-                ✓ Real Broker Verified
-              </div>
-              <h4 className="text-base font-bold text-white">Live MT5 Terminal Linked</h4>
-              <p className="text-xs text-slate-300">
-                Your MT5 Account #{accountNumber} on <strong>{brokerServer}</strong> is authenticated with the broker and bound to <strong>Main Master MT5 #{masterAccount.accountNumber}</strong>.
-              </p>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-emerald-400 font-mono">
-                Institutional trade mirroring active: proportional lot scaling based on your broker-reported equity.
-              </div>
+              <h4 className="text-base font-bold text-white">Account connected</h4>
+              <p className="text-xs text-slate-400">Trades from the master account now copy to #{accountNumber}.</p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-3.5">
-              {/* Target Main Master Account Banner */}
-              <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/30 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1.5 font-bold text-purple-300">
-                    <Radio className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
-                    <span>Copying From: Main Master MT5</span>
-                  </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                    Broadcasting Live
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <div>
-                    <span className="text-white font-mono font-bold">#{masterAccount.accountNumber}</span>
-                    <span className="text-slate-400 text-[11px] block">{masterAccount.accountName}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-slate-400 text-[11px] block font-mono">{masterAccount.brokerServer}</span>
-                    <span className="text-[10px] text-emerald-400 font-mono">{masterAccount.latencyMs}ms Latency</span>
-                  </div>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed border-t border-purple-500/20 pt-1.5">
-                  Connecting your MT5 terminal allows it to replicate every trade executed by this Main Master account with zero-delay execution.
-                </p>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400 space-y-1.5">
-                <div className="flex items-center gap-1.5 font-semibold text-emerald-400">
-                  <Shield className="w-3.5 h-3.5" />
-                  <span>Security Guarantee (Section 3 & 7)</span>
-                </div>
-                <p>
-                  Your credentials are transmitted directly over encrypted TLS to the isolated Node.js MT5 bridge.
-                  The public web server <strong>never stores your password</strong> in the database or logs.
-                </p>
-              </div>
-
+            <form onSubmit={handleSubmit} className="space-y-4">
               {errorMsg && (
-                <div className="p-3 text-xs rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                <div className="p-3 text-xs rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                   <span>{errorMsg}</span>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Broker Server Name
-                </label>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Account number</label>
                 <div className="relative">
-                  <Server className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                  <KeyRound className="w-4 h-4 absolute left-3 top-3.5 text-slate-500" />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    required
+                    value={accountNumber}
+                    onChange={(e) => setAccountNumber(e.target.value)}
+                    placeholder="e.g. 133227028"
+                    className={inputCls + ' font-mono'}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Trading password</label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3 top-3.5 text-slate-500" />
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className={inputCls}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">Not the investor (read-only) password.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Broker server</label>
+                <div className="relative">
+                  <Server className="w-4 h-4 absolute left-3 top-3.5 text-slate-500" />
                   <input
                     type="text"
                     required
                     list="server-options"
                     value={brokerServer}
                     onChange={(e) => setBrokerServer(e.target.value)}
-                    placeholder="e.g. Exness-MT5Real9 or ICMarketsSC-Live02"
-                    className="w-full pl-9 pr-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl focus:border-blue-500 text-white font-mono"
+                    placeholder="e.g. HFMarketsGlobal-Live20"
+                    className={inputCls + ' font-mono'}
                   />
                   <datalist id="server-options">
                     {COMMON_SERVERS.map((s) => (
@@ -176,75 +157,23 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                     ))}
                   </datalist>
                 </div>
-                {brokerServer.toLowerCase().includes('exness') && brokerServer.toLowerCase().includes('real') && !brokerServer.toLowerCase().includes('mt5') && (
-                  <p className="text-[10px] text-blue-400 mt-1 flex items-center gap-1 font-mono">
-                    <span>ℹ️ Auto-aliasing to official MT5 server:</span>
-                    <strong className="text-white">
-                      {brokerServer.replace(/exness-?real(\d+)/i, 'Exness-MT5Real$1')}
-                    </strong>
-                  </p>
+                <p className="text-[11px] text-slate-500 mt-1">Shown in your MT5 login screen.</p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={isConnecting}
+                className="w-full py-3 px-4 rounded-xl bg-blue-500 hover:bg-blue-400 font-semibold text-sm text-white transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isConnecting ? (
+                  <span>Connecting...</span>
+                ) : (
+                  <>
+                    <span>Connect</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
                 )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  MT5 Account Login ID
-                </label>
-                <div className="relative">
-                  <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
-                  <input
-                    type="text"
-                    required
-                    value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
-                    placeholder="e.g. 133227028"
-                    className="w-full pl-9 pr-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl focus:border-blue-500 text-white font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-slate-300 leading-relaxed">
-                Your balance and equity are read directly from your broker after the login is confirmed.
-                They cannot be typed in. Only real broker accounts (demo or live) can connect, and the
-                login must have trading permission (use your trading password, not the investor password).
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  MT5 Password (Master or Investor)
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••••••"
-                    className="w-full pl-9 pr-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl focus:border-blue-500 text-white"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Forwarded securely to MT5 copier process.
-                </p>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={isConnecting}
-                  className="w-full py-2.5 px-4 rounded-xl bg-blue-500 hover:bg-blue-400 font-semibold text-xs text-white shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isConnecting ? (
-                    <span>Authenticating Real MT5 with Broker...</span>
-                  ) : (
-                    <>
-                      <span>Verify Broker & Link Copier</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </>
-                  )}
-                </button>
-              </div>
+              </button>
             </form>
           )}
         </div>
