@@ -6,10 +6,9 @@ import { UserRole } from '../../types';
 
 interface UserMenuProps {
   onOpenAuth: () => void;
-  onOpenAdminGate?: () => void;
 }
 
-export const UserMenu: React.FC<UserMenuProps> = ({ onOpenAuth, onOpenAdminGate }) => {
+export const UserMenu: React.FC<UserMenuProps> = ({ onOpenAuth }) => {
   const { userProfile, signOutUser, switchRole, isEmailVerified } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -115,24 +114,6 @@ export const UserMenu: React.FC<UserMenuProps> = ({ onOpenAuth, onOpenAdminGate 
                 <span className="flex items-center gap-2">
                   <User className="w-3.5 h-3.5" />
                   Preview Client Trader View
-                </span>
-              </button>
-            </div>
-          ) : onOpenAdminGate ? (
-            <div className="py-1.5 border-b border-slate-800/80">
-              <button
-                onClick={() => {
-                  setDropdownOpen(false);
-                  onOpenAdminGate();
-                }}
-                className="w-full flex items-center justify-between px-3 py-1.5 text-xs rounded-lg transition text-purple-300 hover:bg-purple-950/40"
-              >
-                <span className="flex items-center gap-2">
-                  <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Administrator Gateway</span>
-                </span>
-                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  Staff
                 </span>
               </button>
             </div>

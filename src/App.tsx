@@ -4,7 +4,6 @@ import { ThemeToggle, ThemeSegmentedControl } from './components/common/ThemeTog
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { UserMenu } from './components/auth/UserMenu';
 import { AuthModal } from './components/auth/AuthModal';
-import { AdminGateModal } from './components/auth/AdminGateModal';
 import { ClientDashboard } from './components/dashboard/ClientDashboard';
 import { AdminDashboard } from './components/dashboard/AdminDashboard';
 import { ReferralCommissionView } from './components/referrals/ReferralCommissionView';
@@ -50,43 +49,18 @@ type ActivePortalTab = 'client' | 'referrals' | 'admin';
 const MainContent: React.FC = () => {
   const { userProfile, loading, switchRole } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [adminGateOpen, setAdminGateOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActivePortalTab>('client');
 
   const isAdmin = userProfile?.role === 'admin';
 
-  // Synchronize tab with user role when loaded
+  // Admins land on the Admin Console when they sign in; everyone else never sees the admin tab.
   React.useEffect(() => {
-    if (userProfile?.role === 'admin') {
-      setActiveTab('admin');
-    } else if (activeTab === 'admin') {
-      setActiveTab('client');
-    }
-  }, [userProfile?.role, activeTab]);
-
-  // Check URL hash for direct #admin portal request
-  React.useEffect(() => {
-    const handleHash = () => {
-      if (window.location.hash === '#admin') {
-        if (!isAdmin) {
-          setAdminGateOpen(true);
-        } else {
-          setActiveTab('admin');
-        }
-      }
-    };
-    handleHash();
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
-  }, [isAdmin]);
+    setActiveTab(userProfile?.role === 'admin' ? 'admin' : 'client');
+  }, [userProfile?.role]);
 
   const handleSelectTab = (tab: ActivePortalTab) => {
     if (tab === 'admin') {
-      if (!isAdmin) {
-        setAdminGateOpen(true);
-        return;
-      }
-      setActiveTab('admin');
+      if (isAdmin) setActiveTab('admin');
       return;
     }
 
@@ -138,7 +112,6 @@ const MainContent: React.FC = () => {
               <ThemeToggle showLabel={false} />
               <UserMenu
                 onOpenAuth={() => setAuthModalOpen(true)}
-                onOpenAdminGate={() => setAdminGateOpen(true)}
               />
             </div>
           </div>
@@ -193,7 +166,6 @@ const MainContent: React.FC = () => {
             <ThemeToggle showLabel={false} />
             <UserMenu
               onOpenAuth={() => setAuthModalOpen(true)}
-              onOpenAdminGate={() => setAdminGateOpen(true)}
             />
           </div>
         </div>
@@ -276,35 +248,8 @@ const MainContent: React.FC = () => {
             {/* Platform Knowledge Base / FAQ Section */}
             <FAQSection onSelectTab={handleSelectTab} />
           </div>
-        ) : activeTab === 'admin' ? (
-          isAdmin ? (
-            <AdminDashboard />
-          ) : (
-            /* Protected Security Fallback for non-admins */
-            <div className="max-w-lg mx-auto py-12 text-center space-y-4">
-              <div className="w-16 h-16 rounded-2xl bg-purple-950/60 border border-purple-800/80 flex items-center justify-center text-purple-400 mx-auto">
-                <Lock className="w-8 h-8" />
-              </div>
-              <h3 className="text-xl font-bold text-white">Administrator Access Restricted</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                This console is reserved exclusively for system administrators and platform risk supervisors. Sign in with an administrator account to continue.
-              </p>
-              <div className="pt-2 flex justify-center gap-3">
-                <button
-                  onClick={() => setActiveTab('client')}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition cursor-pointer"
-                >
-                  Return to Client Terminal
-                </button>
-                <button
-                  onClick={() => setAdminGateOpen(true)}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-purple-600/30 cursor-pointer"
-                >
-                  Administrator Sign In
-                </button>
-              </div>
-            </div>
-          )
+        ) : activeTab === 'admin' && isAdmin ? (
+          <AdminDashboard />
         ) : activeTab === 'referrals' ? (
           <ReferralCommissionView />
         ) : (
@@ -326,25 +271,6 @@ const MainContent: React.FC = () => {
               Direct Broker Custody • Autonomous 24h Watcher • TRC20 USDT Remittance
             </span>
             <ThemeSegmentedControl />
-            {/* Direct 1-Click Project Download */}
-            <a
-              href="/castimo-fx-project.zip"
-              download="castimo-fx-project.zip"
-              className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-cyan-400 dark:hover:text-cyan-300 transition cursor-pointer border-l border-slate-800 pl-4 font-medium"
-              title="Download clean single-file ZIP archive of the entire project"
-            >
-              <Download className="w-3.5 h-3.5 text-cyan-500" />
-              <span>Download (.zip)</span>
-            </a>
-            {/* Discreet Staff / Admin Gateway Link */}
-            <button
-              onClick={() => setAdminGateOpen(true)}
-              className="flex items-center gap-1.5 text-[11px] text-slate-600 hover:text-purple-400 transition cursor-pointer border-l border-slate-800 pl-4"
-              title="Restricted Staff & Admin Gateway"
-            >
-              <Lock className="w-3 h-3" />
-              <span>Staff Gateway</span>
-            </button>
           </div>
         </div>
       </footer>
@@ -352,14 +278,6 @@ const MainContent: React.FC = () => {
       {/* Global Auth Modal */}
       <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
 
-      {/* Administrator Security Gateway Modal */}
-      <AdminGateModal
-        isOpen={adminGateOpen}
-        onClose={() => setAdminGateOpen(false)}
-        onSuccess={() => {
-          setActiveTab('admin');
-        }}
-      />
     </div>
   );
 };
