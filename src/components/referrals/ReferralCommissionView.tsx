@@ -48,14 +48,6 @@ export const ReferralCommissionView: React.FC = () => {
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  const handleSimulate = (phase: ReferralPhase) => {
-    const ev = tradingEngine.simulateReferralSettlement(phase, 500.0);
-    setSimMessage(
-      `Simulated 24h settlement for Phase ${phase} referral! Credited $${ev.commissionEarnedUsdt.toFixed(2)} USDT (${ev.phasePct}% of $${ev.profitShareAmount.toFixed(2)} profit share).`
-    );
-    setTimeout(() => setSimMessage(null), 4500);
-  };
-
   const handleClaimPayout = async (e: React.FormEvent) => {
     e.preventDefault();
     setClaimError(null);
@@ -201,15 +193,6 @@ export const ReferralCommissionView: React.FC = () => {
             </p>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-800/80">
-            <button
-              onClick={() => handleSimulate(1)}
-              className="w-full py-2 px-3 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-semibold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>Simulate Phase 1 Settlement (+$12.50)</span>
-            </button>
-          </div>
         </div>
 
         {/* Phase 2 Card */}
@@ -245,15 +228,6 @@ export const ReferralCommissionView: React.FC = () => {
             </p>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-800/80">
-            <button
-              onClick={() => handleSimulate(2)}
-              className="w-full py-2 px-3 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-300 font-semibold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>Simulate Phase 2 Settlement (+$7.50)</span>
-            </button>
-          </div>
         </div>
 
         {/* Phase 3 Card */}
@@ -289,15 +263,6 @@ export const ReferralCommissionView: React.FC = () => {
             </p>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-800/80">
-            <button
-              onClick={() => handleSimulate(3)}
-              className="w-full py-2 px-3 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 font-semibold text-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>Simulate Phase 3 Settlement (+$5.00)</span>
-            </button>
-          </div>
         </div>
       </div>
 

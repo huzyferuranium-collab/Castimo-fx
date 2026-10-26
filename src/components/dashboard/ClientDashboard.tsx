@@ -65,7 +65,7 @@ interface ClientDashboardProps {
 }
 
 export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToReferrals }) => {
-  const { userProfile, isEmailVerified, isAdmin, isClient, updateNationalId, isNationalIdDuplicate, isDemoUser, isDirectSession } = useAuth();
+  const { userProfile, isEmailVerified, isAdmin, isClient, updateNationalId, isNationalIdDuplicate } = useAuth();
   const isUserAdmin = isAdmin ?? (userProfile?.role === 'admin');
   const isUserClient = isClient ?? (!isUserAdmin || userProfile?.role === 'client');
 
@@ -75,8 +75,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const [termsAccepted, setTermsAccepted] = useState<boolean | null>(null);
   useEffect(() => {
     const uid = userProfile?.uid;
-    // Demo and quick-start sessions cannot connect real accounts, so they have nothing to agree to.
-    if (!uid || userProfile?.role === 'admin' || isDemoUser || isDirectSession) {
+    // Administrators do not connect client accounts, so they have nothing to agree to.
+    if (!uid || userProfile?.role === 'admin') {
       setTermsAccepted(true);
       return;
     }
@@ -628,9 +628,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                   <div>
                     <div className="font-bold text-amber-300 text-xs sm:text-sm flex items-center gap-2">
                       <span>MetaApi Cloud Notice: Account Top-up Required</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono border border-emerald-500/30">
-                        Simulation Bridge Active
-                      </span>
                     </div>
                     <p className="text-[11px] text-amber-200/80 mt-0.5">
                       {metaApiStatus.topUpNotice.message}
@@ -1015,19 +1012,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                         value={txHashInput}
                         onChange={(e) => setTxHashInput(e.target.value)}
                         placeholder="Paste 64-character TRC20 TXID (e.g. 8f4a12bc90...)"
-                        className="w-full pl-9 pr-24 py-2.5 text-xs bg-slate-950 border border-slate-700/80 rounded-xl focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white placeholder-slate-500 font-mono tracking-tight"
+                        className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-950 border border-slate-700/80 rounded-xl focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white placeholder-slate-500 font-mono tracking-tight"
                       />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const demo = '7b9e' + Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2) + '4c8f';
-                          setTxHashInput(demo.slice(0, 64));
-                        }}
-                        className="absolute right-2 top-2 px-2 py-1 text-[10px] rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-                        title="Fill sample 64-char transaction hash for demonstration"
-                      >
-                        Demo Hash
-                      </button>
                     </div>
                   </div>
 

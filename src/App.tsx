@@ -48,12 +48,12 @@ const TickerBar: React.FC = () => {
 type ActivePortalTab = 'client' | 'referrals' | 'admin';
 
 const MainContent: React.FC = () => {
-  const { userProfile, loading, isDemoUser, isDirectSession, demoLogin, switchRole } = useAuth();
+  const { userProfile, loading, switchRole } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [adminGateOpen, setAdminGateOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActivePortalTab>('client');
 
-  const isAdmin = userProfile?.role === 'admin' && !isDemoUser;
+  const isAdmin = userProfile?.role === 'admin';
 
   // Synchronize tab with user role when loaded
   React.useEffect(() => {
@@ -90,8 +90,10 @@ const MainContent: React.FC = () => {
       return;
     }
 
+    // Only signed-in accounts can open the terminals.
     if (!userProfile) {
-      demoLogin('client');
+      setAuthModalOpen(true);
+      return;
     }
     setActiveTab(tab);
   };
@@ -189,12 +191,6 @@ const MainContent: React.FC = () => {
           {/* Desktop Right Action / Profile Menu */}
           <div className="hidden sm:flex items-center gap-2 sm:gap-3 shrink-0">
             <ThemeToggle showLabel={false} />
-            {isDemoUser && (
-              <span className="hidden lg:inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                <Sparkles className="w-3 h-3" />
-                <span>Simulation Active</span>
-              </span>
-            )}
             <UserMenu
               onOpenAuth={() => setAuthModalOpen(true)}
               onOpenAdminGate={() => setAdminGateOpen(true)}
@@ -291,7 +287,7 @@ const MainContent: React.FC = () => {
               </div>
               <h3 className="text-xl font-bold text-white">Administrator Access Restricted</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                This console is reserved exclusively for system administrators and platform risk supervisors. Enter master passkey credentials to unlock oversight privileges.
+                This console is reserved exclusively for system administrators and platform risk supervisors. Sign in with an administrator account to continue.
               </p>
               <div className="pt-2 flex justify-center gap-3">
                 <button
@@ -304,7 +300,7 @@ const MainContent: React.FC = () => {
                   onClick={() => setAdminGateOpen(true)}
                   className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-purple-600/30 cursor-pointer"
                 >
-                  Enter Admin Passkey
+                  Administrator Sign In
                 </button>
               </div>
             </div>

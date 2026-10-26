@@ -1319,11 +1319,11 @@ class TradingEngine {
     brokerServer: string,
     passwordSecure: string // sent once over HTTPS to the server, never stored here
   ): Promise<boolean> {
-    // Only a real, signed-in account can connect. Demo / quick-start sessions have no token.
+    // Only a real, signed-in account can connect.
     const headers = await authHeaders();
     if (!headers.Authorization) {
       throw new Error(
-        'Please sign in with your email or Google account first. Demo and quick-start sessions cannot connect a real MT5 account.'
+        'Please sign in with your email account first.'
       );
     }
 

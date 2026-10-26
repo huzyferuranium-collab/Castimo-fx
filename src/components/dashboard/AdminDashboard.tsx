@@ -92,15 +92,6 @@ export const AdminDashboard: React.FC = () => {
     setTimeout(() => setActionSuccess(null), 4000);
   };
 
-  const handleSimulateNewProfit = () => {
-    setActionSuccess('Test profit is switched off. Invoices are created automatically from each client\'s real broker profit.');
-    setTimeout(() => setActionSuccess(null), 5000);
-  };
-
-  const handleSimulate24hTimeout = () => {
-    setActionSuccess('Time simulation is switched off. Overdue invoices pause copying automatically.');
-    setTimeout(() => setActionSuccess(null), 5000);
-  };
 
   const handleExecuteDailySettlement = () => {
     setActionSuccess('Settlement runs automatically on the server each period. Nothing to run by hand.');
@@ -783,7 +774,7 @@ export const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Simulation Testing Buttons */}
+                {/* Billing tools */}
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
@@ -793,24 +784,6 @@ export const AdminDashboard: React.FC = () => {
                   >
                     <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
                     <span>Run Sweep</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSimulateNewProfit}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 transition flex items-center gap-1.5 cursor-pointer"
-                    title="Simulates +$200 trade profit"
-                  >
-                    <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Simulate Profit (+$200)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSimulate24hTimeout}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 transition flex items-center gap-1.5 cursor-pointer"
-                    title="Simulates 24h expiration"
-                  >
-                    <Clock className="w-3.5 h-3.5 text-rose-400" />
-                    <span>Simulate 24h Timeout</span>
                   </button>
                 </div>
               </div>

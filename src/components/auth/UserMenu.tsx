@@ -10,7 +10,7 @@ interface UserMenuProps {
 }
 
 export const UserMenu: React.FC<UserMenuProps> = ({ onOpenAuth, onOpenAdminGate }) => {
-  const { userProfile, signOutUser, switchRole, isDirectSession, isEmailVerified } = useAuth();
+  const { userProfile, signOutUser, switchRole, isEmailVerified } = useAuth();
   const { theme, isDark, toggleTheme } = useTheme();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);

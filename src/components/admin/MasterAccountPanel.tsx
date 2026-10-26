@@ -406,7 +406,7 @@ export const MasterAccountPanel: React.FC<MasterAccountPanelProps> = ({
                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                     : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
                 }`}>
-                  {metaApiCloud?.mode === 'LIVE_METAAPI' ? 'LIVE CLOUD STREAMING' : 'SIMULATION BRIDGE (Awaiting Subscription)'}
+                  {metaApiCloud?.mode === 'LIVE_METAAPI' ? 'LIVE CLOUD STREAMING' : 'NOT CONNECTED TO METAAPI'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-400 mt-0.5">

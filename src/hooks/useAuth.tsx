@@ -3,8 +3,6 @@ import {
   User,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInWithPopup,
-  GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
   updateProfile,
@@ -44,71 +42,24 @@ interface AuthContextType {
   error: string | null;
   lastErrorCode: string | null;
   diagnosticAdvice: string | null;
-  apiNeedsActivation: boolean;
-  activationUrl: string | null;
-  isDemoUser: boolean;
-  isDirectSession: boolean;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string, role?: UserRole) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  signInDirectSession: (email: string, name?: string, role?: UserRole) => void;
   signOutUser: () => Promise<void>;
   switchRole: (role: UserRole) => Promise<void>;
-  demoLogin: (role: UserRole) => void;
   clearError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const ADMIN_EMAILS = [
-  'huzyferuranium@gmail.com',
-  'admin@castimofx.com',
-];
-
-export function isPlatformAdminEmail(email?: string | null): boolean {
-  if (!email) return false;
-  const clean = email.trim().toLowerCase();
-  return ADMIN_EMAILS.includes(clean);
-}
-
-const LOCAL_STORAGE_KEY = 'castimofx_auth_session';
-
-const DEMO_CLIENT: UserProfile = {
-  uid: 'demo-client-castimo-001',
-  email: 'trader@castimofx.com',
-  displayName: 'David Vance (Client)',
-  role: 'client',
-  createdAt: new Date().toISOString(),
-};
-
-function createMockUser(uid: string, email: string, displayName: string): User {
-  return {
-    uid,
-    email,
-    displayName,
-    emailVerified: true,
-    isAnonymous: false,
-    metadata: {},
-    providerData: [],
-    refreshToken: 'mock-token',
-    tenantId: null,
-    delete: async () => {},
-    getIdToken: async () => 'mock-token',
-    getIdTokenResult: async () => ({} as any),
-    reload: async () => {},
-    toJSON: () => ({}),
-    phoneNumber: null,
-    photoURL: null,
-    providerId: 'castimofx-session',
-  } as unknown as User;
-}
+// Older versions kept a browser-only "quick" session here. It is no longer used and is cleared on start.
+const OLD_SESSION_KEY = 'castimofx_auth_session';
 
 function getDiagnosticAdvice(code?: string, message?: string): string {
   const c = code || '';
   const m = message || '';
 
   if (c.includes('identity-toolkit') || m.includes('identity-toolkit') || m.includes('identitytoolkit.googleapis.com')) {
-    return 'The Google Cloud Identity Toolkit API is currently disabled on project 700597994216. Enable it in Google Cloud Console or continue using Direct Session mode.';
+    return 'Sign-in is not switched on for this Firebase project yet. Please contact support.';
   }
   if (c === 'auth/operation-not-allowed') {
     return 'Email/Password sign-in method is not enabled in Firebase Console. Go to Firebase Console > Build > Authentication > Sign-in method to turn on Email/Password.';
@@ -141,10 +92,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [error, setError] = useState<string | null>(null);
   const [lastErrorCode, setLastErrorCode] = useState<string | null>(null);
   const [diagnosticAdvice, setDiagnosticAdvice] = useState<string | null>(null);
-  const [apiNeedsActivation, setApiNeedsActivation] = useState<boolean>(false);
-  const [activationUrl, setActivationUrl] = useState<string | null>(null);
-  const [isDemoUser, setIsDemoUser] = useState<boolean>(false);
-  const [isDirectSession, setIsDirectSession] = useState<boolean>(false);
 
   // Initialize and check Firestore connection on mount
   useEffect(() => {
@@ -160,37 +107,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     testFirestoreConnection();
 
-    // Check localStorage for active session
+    // Remove any browser-only session left by older versions. Only real Firebase sign-ins count now.
     try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.uid && parsed?.email) {
-          console.log('🔄 [Auth Session] Restoring persistent local session for:', parsed.email, `(Role: ${parsed.role})`);
-          const restoredRole: UserRole = isPlatformAdminEmail(parsed.email) ? 'admin' : (parsed.role === 'admin' ? 'admin' : 'client');
-          setUserProfile({ ...parsed, role: restoredRole });
-          setUser(createMockUser(parsed.uid, parsed.email, parsed.displayName || 'Trader'));
-          setIsDirectSession(true);
-          setLoading(false);
-          return;
-        }
-      }
-    } catch (e) {
-      console.warn('Session parse notice:', e);
+      localStorage.removeItem(OLD_SESSION_KEY);
+    } catch {
+      // storage may be unavailable; nothing to clear
     }
 
     // Listen to Firebase Auth state
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       console.log('🔔 [Firebase Auth] onAuthStateChanged fired. CurrentUser:', currentUser ? currentUser.uid : 'null');
       if (currentUser) {
-        setIsDemoUser(false);
-        setIsDirectSession(false);
         setUser(currentUser);
         try {
           const userDocRef = doc(db, 'users', currentUser.uid);
           const docSnap = await getDoc(userDocRef);
-
-          const roleFromEmail: UserRole = isPlatformAdminEmail(currentUser.email) ? 'admin' : 'client';
 
           if (docSnap.exists()) {
             const data = docSnap.data();
@@ -199,7 +130,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               uid: currentUser.uid,
               email: currentUser.email || '',
               displayName: currentUser.displayName || data.displayName || 'Trader',
-              role: roleFromEmail === 'admin' ? 'admin' : ((data.role as UserRole) || 'client'),
+              role: data.role === 'admin' ? 'admin' : 'client',
               createdAt: data.createdAt || new Date().toISOString(),
               photoURL: currentUser.photoURL || undefined,
               nationalId: data.nationalId || undefined,
@@ -211,7 +142,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               uid: currentUser.uid,
               email: currentUser.email || '',
               displayName: currentUser.displayName || 'Trader',
-              role: roleFromEmail,
+              role: 'client',
               createdAt: new Date().toISOString(),
               photoURL: currentUser.photoURL || undefined,
             };
@@ -232,49 +163,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           });
         }
       } else {
-        const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-        if (!stored) {
-          setUser(null);
-          setUserProfile(null);
-        }
+        setUser(null);
+        setUserProfile(null);
       }
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
-
-  const signInDirectSession = (email: string, name?: string, role: UserRole = 'client') => {
-    const cleanEmail = email.trim();
-    const cleanName = name || cleanEmail.split('@')[0];
-    const uid = 'usr-' + Math.abs(cleanEmail.split('').reduce((a, b) => ((a << 5) - a + b.charCodeAt(0)) | 0, 0)).toString(36);
-
-    const resolvedRole: UserRole = isPlatformAdminEmail(cleanEmail) || role === 'admin' ? 'admin' : 'client';
-
-    const profile: UserProfile = {
-      uid,
-      email: cleanEmail,
-      displayName: cleanName,
-      role: resolvedRole,
-      createdAt: new Date().toISOString(),
-    };
-
-    console.log(`⚡ [Direct Session] Authenticating in ${resolvedRole} session mode:`, profile);
-
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(profile));
-    } catch (e) {
-      console.warn('Storage notice:', e);
-    }
-
-    setUserProfile(profile);
-    setUser(createMockUser(uid, cleanEmail, cleanName));
-    setIsDirectSession(true);
-    setIsDemoUser(false);
-    setError(null);
-    setLastErrorCode(null);
-    setDiagnosticAdvice(null);
-  };
 
   const signInWithEmail = async (email: string, pass: string) => {
     setError(null);
@@ -312,16 +208,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setError(message);
       setDiagnosticAdvice(advice);
 
-      if (
-        message.includes('identity-toolkit-api') ||
-        message.includes('identitytoolkit.googleapis.com') ||
-        code.includes('identity-toolkit')
-      ) {
-        setApiNeedsActivation(true);
-        setActivationUrl(
-          'https://console.developers.google.com/apis/api/identitytoolkit.googleapis.com/overview?project=700597994216'
-        );
-      }
 
       throw err;
     } finally {
@@ -396,93 +282,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setError(message);
       setDiagnosticAdvice(advice);
 
-      if (
-        message.includes('identity-toolkit-api') ||
-        message.includes('identitytoolkit.googleapis.com') ||
-        code.includes('identity-toolkit')
-      ) {
-        setApiNeedsActivation(true);
-        setActivationUrl(
-          'https://console.developers.google.com/apis/api/identitytoolkit.googleapis.com/overview?project=700597994216'
-        );
-      }
-
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const signInWithGoogle = async () => {
-    setError(null);
-    setLastErrorCode(null);
-    setDiagnosticAdvice(null);
-    setLoading(true);
-
-    console.group('🌐 [Firebase Auth] Attempting signInWithPopup (Google Provider)');
-    try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const gUser = result.user;
-      console.log('✅ [Firebase Auth] Google Sign-in Succeeded!', {
-        uid: gUser.uid,
-        email: gUser.email,
-        displayName: gUser.displayName,
-      });
-
-      const userDocRef = doc(db, 'users', gUser.uid);
-      const snap = await getDoc(userDocRef);
-
-      const isAdminEmail = isPlatformAdminEmail(gUser.email);
-      let role: UserRole = isAdminEmail ? 'admin' : 'client';
-      if (snap.exists() && !isAdminEmail) {
-        role = (snap.data().role as UserRole) || 'client';
-      } else if (!snap.exists()) {
-        await setDoc(userDocRef, {
-          uid: gUser.uid,
-          email: gUser.email,
-          displayName: gUser.displayName || (isAdminEmail ? 'Platform Admin' : 'Google Trader'),
-          role,
-          createdAt: new Date().toISOString(),
-          serverCreatedAt: serverTimestamp(),
-        });
-      }
-
-      setUserProfile({
-        uid: gUser.uid,
-        email: gUser.email || '',
-        displayName: gUser.displayName || 'Google Trader',
-        role,
-        createdAt: new Date().toISOString(),
-        photoURL: gUser.photoURL || undefined,
-      });
-      console.groupEnd();
-    } catch (err: any) {
-      const code = err?.code || 'unknown';
-      const message = err?.message || String(err);
-      const advice = getDiagnosticAdvice(code, message);
-
-      console.error('❌ [Firebase Auth] Google Sign-in Failed with error:', {
-        code,
-        message,
-        diagnosticAdvice: advice,
-      });
-      console.groupEnd();
-
-      setLastErrorCode(code);
-      setError(message);
-      setDiagnosticAdvice(advice);
-
-      if (
-        message.includes('identity-toolkit-api') ||
-        message.includes('identitytoolkit.googleapis.com') ||
-        code.includes('identity-toolkit')
-      ) {
-        setApiNeedsActivation(true);
-        setActivationUrl(
-          'https://console.developers.google.com/apis/api/identitytoolkit.googleapis.com/overview?project=700597994216'
-        );
-      }
 
       throw err;
     } finally {
@@ -496,9 +295,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setDiagnosticAdvice(null);
     console.log('🚪 [Auth] Signing out user...');
     try {
-      localStorage.removeItem(LOCAL_STORAGE_KEY);
-      setIsDemoUser(false);
-      setIsDirectSession(false);
       setUser(null);
       setUserProfile(null);
       await signOut(auth);
@@ -515,25 +311,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setUserProfile({ ...userProfile, role: newRole === 'admin' ? userProfile.role : newRole });
   };
 
-  const demoLogin = (_role?: UserRole) => {
-    setIsDemoUser(true);
-    setIsDirectSession(false);
-    const demoProfile = DEMO_CLIENT; // demo sessions are always plain clients
-    console.log('🎮 [Demo Mode] Activating demo session:', demoProfile);
-    setUserProfile(demoProfile);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(demoProfile));
-    } catch (e) {
-      // Ignored
-    }
-    setUser(createMockUser(demoProfile.uid, demoProfile.email, demoProfile.displayName));
-    setError(null);
-    setLastErrorCode(null);
-    setDiagnosticAdvice(null);
-  };
-
   // ---- Email verification (real: Firebase sends a link, Firebase records the result) ----
-  const isRealUser = !!user && !isDirectSession && !isDemoUser;
+  const isRealUser = !!user;
   const isEmailVerified = isRealUser && !!user?.emailVerified;
   const [verifyTick, setVerifyTick] = useState(0);
   void verifyTick;
@@ -602,7 +381,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setError(null);
     setLastErrorCode(null);
     setDiagnosticAdvice(null);
-    setApiNeedsActivation(false);
   };
 
   return (
@@ -614,17 +392,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         error,
         lastErrorCode,
         diagnosticAdvice,
-        apiNeedsActivation,
-        activationUrl,
-        isDemoUser,
-        isDirectSession,
         signInWithEmail,
         signUpWithEmail,
-        signInWithGoogle,
-        signInDirectSession,
         signOutUser,
         switchRole,
-        demoLogin,
         clearError,
         isAdmin,
         isClient,
