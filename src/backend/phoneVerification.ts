@@ -219,8 +219,10 @@ export async function startVerification(uid: string, rawPhone: unknown, d?: Phon
   }
   const r = await twilio(deps, cfg!, 'Verifications', { To: phone, Channel: 'whatsapp' });
   if (!r.ok) {
-    console.warn(`[PHONE] Twilio send failed (HTTP ${r.status}, code ${r.body?.code ?? 'n/a'}).`);
-    throw new PhoneError('Could not send the WhatsApp code. Check the number and that it has WhatsApp.', 502, 'PHONE_SEND_FAILED');
+    console.warn(`[PHONE] Twilio send failed (HTTP ${r.status}, code ${r.body?.code ?? 'n/a'}): ${r.body?.message ?? ''}`);
+    // Twilio's error code and text contain no secrets, and they tell the site owner exactly what to fix.
+    const why = r.body?.code ? ` (Twilio ${r.body.code}: ${String(r.body.message ?? '').slice(0, 160)})` : ` (Twilio HTTP ${r.status})`;
+    throw new PhoneError('Could not send the WhatsApp code. Check the number and that it has WhatsApp.' + why, 502, 'PHONE_SEND_FAILED');
   }
   return { sent: true as const };
 }
