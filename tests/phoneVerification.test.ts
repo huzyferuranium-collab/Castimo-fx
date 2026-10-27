@@ -82,3 +82,36 @@ test('malformed code is rejected before calling Twilio', async () => {
   await assert.rejects(() => checkVerification('u4', '+256700123458', 'abc', deps), (e: any) => e.code === 'CODE_INVALID');
   assert.equal(calls.length, 0);
 });
+
+test('Meta mode: code is stored hashed, works once, and wrong guesses lock out', async () => {
+  __resetThrottleForTests();
+  process.env.WHATSAPP_API_TOKEN = 'tok';
+  process.env.WHATSAPP_PHONE_NUMBER_ID = '123';
+  try {
+    const { deps, db } = makeDeps();
+    let sent = '';
+    deps.fetchFn = async (_u: string, init: any) => {
+      sent = JSON.parse(init.body).template.components[0].parameters[0].text;
+      return { ok: true, status: 200, json: async () => ({}) };
+    };
+    await startVerification('m1', '+256700123456', deps);
+    assert.match(sent, /^\d{6}$/);
+    assert.ok(!JSON.stringify(db.get('phone_otps/m1')).includes(sent));
+    const wrong = sent === '000000' ? '111111' : '000000';
+    await assert.rejects(() => checkVerification('m1', '+256700123456', wrong, deps), (e: any) => e.code === 'CODE_WRONG');
+    const r = await checkVerification('m1', '+256700123456', sent, deps);
+    assert.equal(r.verified, true);
+    await assert.rejects(() => checkVerification('m1', '+256700123456', sent, deps), (e: any) => e.code === 'CODE_WRONG');
+
+    __resetThrottleForTests();
+    await startVerification('m2', '+256711000111', deps);
+    const bad = sent === '000000' ? '111111' : '000000';
+    for (let i = 0; i < 5; i++) {
+      await assert.rejects(() => checkVerification('m2', '+256711000111', bad, deps), (e: any) => e.code === 'CODE_WRONG');
+    }
+    await assert.rejects(() => checkVerification('m2', '+256711000111', sent, deps), (e: any) => e.code === 'CODE_LOCKED');
+  } finally {
+    delete process.env.WHATSAPP_API_TOKEN;
+    delete process.env.WHATSAPP_PHONE_NUMBER_ID;
+  }
+});

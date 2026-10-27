@@ -8,7 +8,7 @@
  *   accounts can never both hold the same number, even if they verify at the same moment.
  *   Only an HMAC of the number is stored there, never the number itself.
  */
-import { createHmac } from 'node:crypto';
+import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 
 export class PhoneError extends Error {
   status: number;
@@ -54,9 +54,63 @@ export function twilioConfig(): TwilioConfig | null {
   return accountSid && authToken && serviceSid ? { accountSid, authToken, serviceSid } : null;
 }
 
-/** True when codes can actually be sent and stored. */
+export interface MetaConfig {
+  token: string;
+  phoneNumberId: string;
+  template: string;
+  language: string;
+}
+
+/** Meta WhatsApp Cloud API. Needs an approved "authentication" template with one code parameter. */
+export function metaConfig(): MetaConfig | null {
+  const token = process.env.WHATSAPP_API_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneNumberId) return null;
+  return {
+    token,
+    phoneNumberId,
+    template: process.env.WHATSAPP_TEMPLATE_NAME || 'castimofx_verification',
+    language: process.env.WHATSAPP_TEMPLATE_LANG || 'en',
+  };
+}
+
+/** True when codes can actually be sent and stored. Meta is used when set, otherwise Twilio. */
 export function phoneVerificationConfigured(): boolean {
-  return twilioConfig() !== null && Boolean(process.env.FIREBASE_SERVICE_ACCOUNT);
+  return (metaConfig() !== null || twilioConfig() !== null) && Boolean(process.env.FIREBASE_SERVICE_ACCOUNT);
+}
+
+const OTP_TTL_MS = 10 * 60_000;
+const MAX_ATTEMPTS = 5;
+
+function codeHash(code: string, phone: string, uid: string, secret: string): string {
+  return createHmac('sha256', secret).update(`otp|${uid}|${phone}|${code}`).digest('hex');
+}
+
+async function metaSend(deps: PhoneDeps, cfg: MetaConfig, phone: string, code: string) {
+  const res = await deps.fetchFn(`https://graph.facebook.com/v20.0/${encodeURIComponent(cfg.phoneNumberId)}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: phone.replace(/^\+/, ''),
+      type: 'template',
+      template: {
+        name: cfg.template,
+        language: { code: cfg.language },
+        components: [
+          { type: 'body', parameters: [{ type: 'text', text: code }] },
+          { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] },
+        ],
+      },
+    }),
+  });
+  let body: any = null;
+  try {
+    body = await res.json();
+  } catch {
+    // ignore
+  }
+  return { ok: res.ok, status: res.status, body };
 }
 
 type Doc = Record<string, unknown>;
@@ -134,8 +188,9 @@ export async function startVerification(uid: string, rawPhone: unknown, d?: Phon
   if (!phone) {
     throw new PhoneError('Enter your WhatsApp number with the country code, for example +256700123456.', 400, 'PHONE_INVALID');
   }
+  const meta = metaConfig();
   const cfg = twilioConfig();
-  if (!cfg) throw new PhoneError('WhatsApp verification is not available yet.', 503, 'PHONE_NOT_CONFIGURED');
+  if (!meta && !cfg) throw new PhoneError('WhatsApp verification is not available yet.', 503, 'PHONE_NOT_CONFIGURED');
   const secret = deps.secret ?? hashSecret();
 
   if ((await getPhoneStatus(uid, deps)).verified) {
@@ -147,7 +202,22 @@ export async function startVerification(uid: string, rawPhone: unknown, d?: Phon
   }
 
   throttle(uid, deps.now());
-  const r = await twilio(deps, cfg, 'Verifications', { To: phone, Channel: 'whatsapp' });
+  if (meta) {
+    // We make the code, send it, and keep only a keyed hash of it.
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    await deps.store.setDoc('phone_otps', uid, {
+      codeHash: codeHash(code, phone, uid, secret),
+      expiresAt: deps.now() + OTP_TTL_MS,
+      attempts: 0,
+    });
+    const m = await metaSend(deps, meta, phone, code);
+    if (!m.ok) {
+      console.warn(`[PHONE] Meta send failed (HTTP ${m.status}, code ${m.body?.error?.code ?? 'n/a'}).`);
+      throw new PhoneError('Could not send the WhatsApp code. Check the number and that it has WhatsApp.', 502, 'PHONE_SEND_FAILED');
+    }
+    return { sent: true as const };
+  }
+  const r = await twilio(deps, cfg!, 'Verifications', { To: phone, Channel: 'whatsapp' });
   if (!r.ok) {
     console.warn(`[PHONE] Twilio send failed (HTTP ${r.status}, code ${r.body?.code ?? 'n/a'}).`);
     throw new PhoneError('Could not send the WhatsApp code. Check the number and that it has WhatsApp.', 502, 'PHONE_SEND_FAILED');
@@ -163,16 +233,35 @@ export async function checkVerification(uid: string, rawPhone: unknown, code: un
   if (typeof code !== 'string' || !/^\d{4,10}$/.test(code.trim())) {
     throw new PhoneError('Enter the numeric code from WhatsApp.', 400, 'CODE_INVALID');
   }
+  const meta = metaConfig();
   const cfg = twilioConfig();
-  if (!cfg) throw new PhoneError('WhatsApp verification is not available yet.', 503, 'PHONE_NOT_CONFIGURED');
+  if (!meta && !cfg) throw new PhoneError('WhatsApp verification is not available yet.', 503, 'PHONE_NOT_CONFIGURED');
   const secret = deps.secret ?? hashSecret();
 
-  const r = await twilio(deps, cfg, 'VerificationCheck', { To: phone, Code: code.trim() });
-  if (!r.ok && r.status !== 404) {
-    throw new PhoneError('Could not check the code. Please try again.', 502, 'PHONE_CHECK_FAILED');
-  }
-  if (!r.ok || r.body?.status !== 'approved') {
-    throw new PhoneError('That code is wrong or has expired. Request a new one.', 400, 'CODE_WRONG');
+  if (meta) {
+    const otp = await deps.store.getDoc('phone_otps', uid);
+    const wrong = () => new PhoneError('That code is wrong or has expired. Request a new one.', 400, 'CODE_WRONG');
+    if (!otp || typeof otp.codeHash !== 'string' || Number(otp.expiresAt) < deps.now()) throw wrong();
+    const attempts = Number(otp.attempts) || 0;
+    if (attempts >= MAX_ATTEMPTS) {
+      throw new PhoneError('Too many wrong codes. Request a new code.', 429, 'CODE_LOCKED');
+    }
+    const given = Buffer.from(codeHash(code.trim(), phone, uid, secret));
+    const want = Buffer.from(otp.codeHash);
+    if (given.length !== want.length || !timingSafeEqual(given, want)) {
+      await deps.store.setDoc('phone_otps', uid, { ...otp, attempts: attempts + 1 });
+      throw wrong();
+    }
+    // Single use: burn the code before anything else.
+    await deps.store.setDoc('phone_otps', uid, { codeHash: '', expiresAt: 0, attempts: MAX_ATTEMPTS });
+  } else {
+    const r = await twilio(deps, cfg!, 'VerificationCheck', { To: phone, Code: code.trim() });
+    if (!r.ok && r.status !== 404) {
+      throw new PhoneError('Could not check the code. Please try again.', 502, 'PHONE_CHECK_FAILED');
+    }
+    if (!r.ok || r.body?.status !== 'approved') {
+      throw new PhoneError('That code is wrong or has expired. Request a new one.', 400, 'CODE_WRONG');
+    }
   }
 
   const hash = phoneHash(phone, secret);
