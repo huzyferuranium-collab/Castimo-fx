@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useAuth, validateNationalIdFormat } from '../../hooks/useAuth';
+import { useAuth } from '../../hooks/useAuth';
+import { getPhoneStatus, PhoneStatus } from '../../services/phoneApi';
 import { tradingEngine, CASTIMO_TREASURY_ADDRESS } from '../../services/tradingEngine';
 import { authHeaders } from '../../services/apiAuth';
 import {
@@ -64,7 +65,7 @@ interface ClientDashboardProps {
 }
 
 export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToReferrals }) => {
-  const { userProfile, isEmailVerified, isAdmin, isClient, updateNationalId, isNationalIdDuplicate } = useAuth();
+  const { userProfile, isEmailVerified, isAdmin, isClient } = useAuth();
   const isUserAdmin = isAdmin ?? (userProfile?.role === 'admin');
   const isUserClient = isClient ?? (!isUserAdmin || userProfile?.role === 'client');
 
@@ -112,11 +113,18 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<boolean>(false);
 
-  // Client Profile & National ID Anti-Duplicate State
-  const [profileNationalIdInput, setProfileNationalIdInput] = useState<string>('');
-  const [isSavingNationalId, setIsSavingNationalId] = useState<boolean>(false);
-  const [nationalIdError, setNationalIdError] = useState<string | null>(null);
-  const [nationalIdSuccess, setNationalIdSuccess] = useState<string | null>(null);
+  // WhatsApp verification (decided by the server, never by the browser)
+  const [phoneStatus, setPhoneStatus] = useState<PhoneStatus | null>(null);
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  useEffect(() => {
+    if (!userProfile?.uid || userProfile.role === 'admin') return;
+    let cancelled = false;
+    getPhoneStatus().then((st) => !cancelled && setPhoneStatus(st));
+    return () => {
+      cancelled = true;
+    };
+  }, [userProfile?.uid, showPhoneModal]);
+  const phoneVerified = phoneStatus?.verified === true;
 
   // Real-time MetaApi WebSocket Synchronizer & Mirror State
   const [metaApiStatus, setMetaApiStatus] = useState<{
@@ -287,63 +295,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     }
   };
 
-  // Real-time alphanumeric validation for Client Profile National ID
-  const profileNationalIdValidation = useMemo(() => {
-    if (!profileNationalIdInput) return null;
-    const format = validateNationalIdFormat(profileNationalIdInput);
-    if (!format.isValid) {
-      return { isValid: false, message: format.error, isDuplicate: false };
-    }
-    const isDup = isNationalIdDuplicate(format.normalized, userProfile?.uid);
-    if (isDup) {
-      return {
-        isValid: false,
-        message: `National ID (${format.normalized}) is already registered to another account. Only 1 account is permitted.`,
-        isDuplicate: true,
-      };
-    }
-    return {
-      isValid: true,
-      message: 'Valid Alphanumeric Format • Single Account Verified',
-      isDuplicate: false,
-    };
-  }, [profileNationalIdInput, userProfile?.uid]);
-
-  const handleSaveNationalId = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setNationalIdError(null);
-    setNationalIdSuccess(null);
-
-    const cleanId = profileNationalIdInput.trim().toUpperCase();
-    const formatCheck = validateNationalIdFormat(cleanId);
-    if (!formatCheck.isValid) {
-      setNationalIdError(formatCheck.error || 'Please enter a valid alphanumeric National ID.');
-      return;
-    }
-
-    if (isNationalIdDuplicate(formatCheck.normalized, userProfile?.uid)) {
-      setNationalIdError(
-        `National ID (${formatCheck.normalized}) is already linked to another CastimoFX trading account. In accordance with policy, only 1 account is permitted per National ID to prevent multiple accounts.`
-      );
-      return;
-    }
-
-    setIsSavingNationalId(true);
-    try {
-      const res = await updateNationalId(formatCheck.normalized);
-      if (res.success) {
-        setNationalIdSuccess(`National ID (${formatCheck.normalized}) successfully verified and locked to your trader profile.`);
-        setProfileNationalIdInput('');
-      } else {
-        setNationalIdError(res.error || 'Failed to update National ID.');
-      }
-    } catch (err: any) {
-      setNationalIdError(err?.message || 'Failed to update National ID.');
-    } finally {
-      setIsSavingNationalId(false);
-    }
-  };
-
   // Update countdown to 24h deadline if profit share is pending
   useEffect(() => {
     const updateCountdown = () => {
@@ -414,10 +365,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         },
         {
           id: 'profile',
-          label: 'Profile & Verification',
+          label: 'Profile & WhatsApp',
           icon: ShieldCheck,
-          badge: userProfile?.nationalId ? 'ID Verified' : 'Action Needed',
-          badgeVariant: userProfile?.nationalId ? 'success' : 'warning',
+          badge: phoneStatus ? (phoneVerified ? 'Verified' : phoneStatus.available ? 'Action Needed' : undefined) : undefined,
+          badgeVariant: phoneVerified ? 'success' : 'warning',
         },
       ],
     },
@@ -493,6 +444,22 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             >
               <Send className="w-3.5 h-3.5" />
               <span>Verify Email Now</span>
+            </button>
+          </div>
+        )}
+
+        {phoneStatus?.available && !phoneVerified && userProfile && userProfile.role !== 'admin' && (
+          <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h4 className="font-bold text-xs text-amber-300">Verify your WhatsApp number</h4>
+              <p className="text-[11px] text-amber-200/80 mt-0.5">Required before you can connect an MT5 account.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPhoneModal(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 font-bold text-xs text-slate-950 transition shrink-0 cursor-pointer"
+            >
+              Verify now
             </button>
           </div>
         )}
@@ -997,12 +964,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold">
                         CLIENT TRADER
                       </span>
-                      {userProfile?.nationalId && (
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-purple-500/15 border border-purple-500/30 text-purple-300 font-bold flex items-center gap-1">
-                          <Lock className="w-2.5 h-2.5" />
-                          <span>1 Trader = 1 Terminal</span>
-                        </span>
-                      )}
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       {userProfile?.email} • Account Custody Active
@@ -1017,158 +978,40 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 </div>
               </div>
 
-              {/* Identity & Anti-Duplicate Account Section */}
-              <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-                <div className="flex items-center justify-between">
+              {/* WhatsApp verification */}
+              <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                       <ShieldCheck className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-white">National ID & Singular Account Verification</h4>
-                      <p className="text-xs text-slate-400">Institutional protocol strictly enforcing 1 Trader = 1 Account</p>
+                      <h4 className="text-sm font-bold text-white">WhatsApp Verification</h4>
+                      <p className="text-xs text-slate-400">One verified WhatsApp number per account</p>
                     </div>
                   </div>
-
                   <span
                     className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-full border ${
-                      userProfile?.nationalId
+                      phoneVerified
                         ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
                         : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
                     }`}
                   >
-                    {userProfile?.nationalId ? 'VERIFIED IDENTITY' : 'ACTION REQUIRED'}
+                    {phoneStatus === null ? 'CHECKING' : phoneVerified ? 'VERIFIED' : phoneStatus.available ? 'ACTION REQUIRED' : 'UNAVAILABLE'}
                   </span>
                 </div>
-
-                <p className="text-xs text-slate-300 leading-relaxed">
-                  To prevent multi-accounting, safeguard copy trade liquidity, and adhere to financial compliance rules, each client must verify their singular National ID Number. Once registered, this National ID cannot be used to open additional accounts.
-                </p>
-
-                {/* If National ID is set */}
-                {userProfile?.nationalId ? (
-                  <div className="p-4 rounded-xl bg-slate-950 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="space-y-1">
-                      <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-mono">
-                        Registered National ID / Passport Number
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-base font-black font-mono text-emerald-300 tracking-wider">
-                          {userProfile.nationalId}
-                        </span>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      </div>
-                      <p className="text-[11px] text-slate-400">
-                        Cryptographically locked to terminal #{account.accountNumber}. Anti-duplicate protection active.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2 self-start sm:self-auto">
-                      <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/80 px-2.5 py-1 rounded-lg">
-                        Singular Terminal Locked
-                      </span>
-                    </div>
-                  </div>
+                {phoneVerified ? (
+                  <p className="text-xs text-slate-300">Verified number ending in {phoneStatus?.phoneLast4}.</p>
+                ) : phoneStatus?.available ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowPhoneModal(true)}
+                    className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer"
+                  >
+                    Verify WhatsApp number
+                  </button>
                 ) : (
-                  /* Form to register National ID if missing */
-                  <form onSubmit={handleSaveNationalId} className="p-4 rounded-xl bg-slate-950 border border-amber-500/30 space-y-3">
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="text-xs font-semibold text-white">
-                          Enter Your National ID / Passport Number
-                        </label>
-                        <div className="flex items-center gap-1.5 font-mono text-[10px]">
-                          {profileNationalIdValidation ? (
-                            profileNationalIdValidation.isValid ? (
-                              <span className="text-emerald-400 font-bold flex items-center gap-1">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                <span>Format Valid</span>
-                              </span>
-                            ) : (
-                              <span className="text-rose-400 font-bold flex items-center gap-1">
-                                <AlertTriangle className="w-3 h-3 text-rose-400" />
-                                <span>{profileNationalIdValidation.isDuplicate ? 'Duplicate' : 'Invalid Format'}</span>
-                              </span>
-                            )
-                          ) : (
-                            <span className="text-amber-400">
-                              Required for Anti-Duplicate Protection
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="relative">
-                        <CreditCard className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
-                        <input
-                          type="text"
-                          required
-                          maxLength={20}
-                          value={profileNationalIdInput}
-                          onChange={(e) => {
-                            // Enforce real-time alphanumeric uppercase pattern (A-Z, 0-9, single hyphens)
-                            const raw = e.target.value.toUpperCase();
-                            const filtered = raw.replace(/[^A-Z0-9-]/g, '');
-                            setProfileNationalIdInput(filtered);
-                          }}
-                          placeholder="e.g. CM-884920-K or ID884920"
-                          className={`w-full pl-9 pr-9 py-2 text-xs bg-slate-900 border rounded-xl text-white placeholder-slate-500 font-mono uppercase tracking-wider transition ${
-                            profileNationalIdValidation
-                              ? profileNationalIdValidation.isValid
-                                ? 'border-emerald-500/80 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'
-                                : 'border-rose-500/80 focus:border-rose-500 focus:ring-1 focus:ring-rose-500'
-                              : 'border-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500'
-                          }`}
-                        />
-                        {profileNationalIdValidation && (
-                          <div className="absolute right-3 top-2.5">
-                            {profileNationalIdValidation.isValid ? (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-400 animate-in fade-in" />
-                            ) : (
-                              <AlertCircle className="w-4 h-4 text-rose-400 animate-in fade-in" />
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {profileNationalIdValidation ? (
-                        <p
-                          className={`text-[11px] mt-1 font-mono flex items-center gap-1.5 leading-snug animate-in fade-in ${
-                            profileNationalIdValidation.isValid ? 'text-emerald-400' : 'text-rose-400'
-                          }`}
-                        >
-                          <span className="font-bold">{profileNationalIdValidation.isValid ? '✓' : '✕'}</span>
-                          <span>{profileNationalIdValidation.message}</span>
-                        </p>
-                      ) : (
-                        <p className="text-[10px] text-slate-500 mt-1">
-                          Standard alphanumeric format (5–20 characters, A-Z, 0-9, hyphens allowed). Strictly binds identity to this terminal.
-                        </p>
-                      )}
-                    </div>
-
-                    {nationalIdError && (
-                      <div className="p-2.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-200 text-xs flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                        <span>{nationalIdError}</span>
-                      </div>
-                    )}
-
-                    {nationalIdSuccess && (
-                      <div className="p-2.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-200 text-xs flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span>{nationalIdSuccess}</span>
-                      </div>
-                    )}
-
-                    <button
-                      type="submit"
-                      disabled={isSavingNationalId || (profileNationalIdValidation !== null && !profileNationalIdValidation.isValid)}
-                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>{isSavingNationalId ? 'Registering ID...' : 'Lock & Bind National ID'}</span>
-                    </button>
-                  </form>
+                  <p className="text-xs text-slate-400">WhatsApp verification is not available yet.</p>
                 )}
               </div>
 
@@ -1271,6 +1114,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         onClose={() => setShowLedgerModal(false)}
         ledger={tradingEngine.getLedger()}
         auditLogs={tradingEngine.getAuditLogs()}
+      />
+
+      <AuthModal
+        isOpen={showPhoneModal}
+        onClose={() => setShowPhoneModal(false)}
+        defaultTab="phone"
+        prefillPhone={userProfile?.phone}
       />
 
       <AuthModal

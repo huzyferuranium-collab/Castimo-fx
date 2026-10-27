@@ -13,29 +13,12 @@ import { auth, db, testFirestoreConnection } from '../config/firebase';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 import { UserProfile, UserRole } from '../types';
 
-/** National ID: letters and digits only, 5 to 20 characters. Stored upper-case. */
-export function validateNationalIdFormat(
-  raw: string
-): { isValid: boolean; normalized: string; error?: string } {
-  const normalized = String(raw ?? '').trim().toUpperCase();
-  if (!/^[A-Z0-9]{5,20}$/.test(normalized)) {
-    return {
-      isValid: false,
-      normalized,
-      error: 'National ID must be 5 to 20 letters or digits, with no spaces or symbols.',
-    };
-  }
-  return { isValid: true, normalized };
-}
-
 interface AuthContextType {
   isAdmin: boolean;
   isClient: boolean;
   isEmailVerified: boolean;
   sendVerificationEmail: () => Promise<{ success: boolean; error?: string }>;
   refreshEmailVerified: () => Promise<boolean>;
-  isNationalIdDuplicate: (id: string, uid?: string) => boolean;
-  updateNationalId: (id: string) => Promise<{ success: boolean; error?: string }>;
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
@@ -43,7 +26,7 @@ interface AuthContextType {
   lastErrorCode: string | null;
   diagnosticAdvice: string | null;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
-  signUpWithEmail: (email: string, pass: string, name: string, role?: UserRole) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string, name: string, role?: UserRole, phone?: string) => Promise<void>;
   signOutUser: () => Promise<void>;
   switchRole: (role: UserRole) => Promise<void>;
   clearError: () => void;
@@ -133,8 +116,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               role: data.role === 'admin' ? 'admin' : 'client',
               createdAt: data.createdAt || new Date().toISOString(),
               photoURL: currentUser.photoURL || undefined,
-              nationalId: data.nationalId || undefined,
-              nationalIdVerified: !!data.nationalId,
+              phone: data.phone || undefined,
             });
           } else {
             console.log('📄 [Firestore] User profile document does not exist yet. Creating default doc...');
@@ -219,7 +201,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     email: string,
     pass: string,
     displayName: string,
-    role: UserRole = 'client'
+    role: UserRole = 'client',
+    phone?: string
   ) => {
     setError(null);
     setLastErrorCode(null);
@@ -249,6 +232,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         email: createdUser.email || email,
         displayName: displayName || 'Trader',
         role: 'client',
+        // Saved for display only. Whether it is verified is decided by the server.
+        ...(phone ? { phone } : {}),
         createdAt: new Date().toISOString(),
       };
 
@@ -345,35 +330,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return !!auth.currentUser?.emailVerified;
   };
 
-  // ---- National ID (one account per ID, enforced by the database rules) ----
-  // Duplicates cannot be known without asking the database, so the real check is in updateNationalId.
-  const isNationalIdDuplicate = (_id: string, _uid?: string) => false;
-
-  const updateNationalId = async (rawId: string) => {
-    const current = auth.currentUser;
-    if (!current || !isRealUser) return { success: false, error: 'Please sign in with a real account first.' };
-    const check = validateNationalIdFormat(rawId);
-    if (!check.isValid) return { success: false, error: check.error };
-    try {
-      const idRef = doc(db, 'national_ids', check.normalized);
-      const existing = await getDoc(idRef);
-      if (existing.exists() && existing.data().userId !== current.uid) {
-        return {
-          success: false,
-          error: `National ID (${check.normalized}) is already linked to another CastimoFX account. Only 1 account is permitted per National ID.`,
-        };
-      }
-      if (!existing.exists()) {
-        await setDoc(idRef, { userId: current.uid, createdAt: new Date().toISOString() });
-      }
-      await updateDoc(doc(db, 'users', current.uid), { nationalId: check.normalized });
-      setUserProfile((p) => (p ? { ...p, nationalId: check.normalized, nationalIdVerified: true } : p));
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Could not save the National ID.' };
-    }
-  };
-
   const isAdmin = !!userProfile && userProfile.role === 'admin' && isRealUser;
   const isClient = !!userProfile && !isAdmin;
 
@@ -402,8 +358,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isEmailVerified,
         sendVerificationEmail,
         refreshEmailVerified,
-        isNationalIdDuplicate,
-        updateNationalId,
       }}
     >
       {children}
