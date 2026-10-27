@@ -12,6 +12,7 @@ export type BrokerErrorCode =
   | 'BROKER_SERVER_NOT_FOUND'
   | 'BROKER_AUTH_FAILED'
   | 'BROKER_UNREACHABLE'
+  | 'BROKER_SLOW'
   | 'BAD_BROKER_RESPONSE'
   | 'LOGIN_MISMATCH'
   | 'TRADING_NOT_ALLOWED'
@@ -23,6 +24,10 @@ export type BrokerErrorCode =
 
 export class BrokerVerificationError extends Error {
   code: BrokerErrorCode;
+  /** Short reference a client can quote to support; never contains secrets. */
+  ref?: string;
+  /** The connect step that was running when it failed. */
+  stage?: string;
   constructor(code: BrokerErrorCode, message: string) {
     super(message);
     this.name = 'BrokerVerificationError';
@@ -198,6 +203,26 @@ export function translateBrokerError(
   const msg: string = String(err?.message || '');
   const code: string = String(err?.details?.code || err?.code || '');
 
+  // Our own MetaApi token being refused is OUR problem, never the client's password.
+  const status = Number(err?.status ?? err?.statusCode ?? 0);
+  if (
+    status === 401 ||
+    String(err?.name || '') === 'UnauthorizedError' ||
+    (/\btoken\b/i.test(msg) && /(invalid|expired|unauthori[sz]ed|not valid)/i.test(msg))
+  ) {
+    return new BrokerVerificationError(
+      'VERIFICATION_UNAVAILABLE',
+      'Account verification is temporarily unavailable. Please try again in a few minutes.'
+    );
+  }
+
+  // Too many requests: a busy moment, not a wrong password and not a full quota.
+  if (status === 429 || /too ?many ?requests/i.test(msg)) {
+    const busy = new BrokerVerificationError('BROKER_SLOW', 'Our verification service is busy. Please try again in a minute.');
+    busy.ref = 'RATE_LIMITED';
+    return busy;
+  }
+
   if (msg.includes('.dat file for server') || code === 'E_SRV_NOT_FOUND') {
     const suggestions: string[] = err?.details?.serversByBrokers
       ? (Object.values(err.details.serversByBrokers).flat() as string[]).slice(0, 5)
@@ -225,20 +250,13 @@ export function translateBrokerError(
       'We cannot add new accounts right now. Please try again later or contact support.'
     );
   }
-  if (String(err?.name || '') === 'TimeoutError') {
-    return new BrokerVerificationError(
-      'BROKER_UNREACHABLE',
-      'Your account is still starting up with the broker. Please press Connect again in about a minute. (ref: TimeoutError)'
-    );
-  }
-  // Short, non-sensitive reference so a failure can be matched to the server log (never the raw text).
-  const ref = (code || String(err?.name || '') || (/time(d)? ?out/i.test(msg) ? 'TIMEOUT' : 'UNKNOWN'))
-    .replace(/[^A-Za-z0-9_]/g, '')
-    .slice(0, 40);
-  return new BrokerVerificationError(
+  // Anything else: keep the wording calm and attach a short reference that matches the server log.
+  const e = new BrokerVerificationError(
     'BROKER_UNREACHABLE',
-    `Could not reach your broker to verify this account. Please try again in a minute.${ref ? ` (ref: ${ref})` : ''}`
+    'Could not reach your broker to verify this account. Please try again in a minute.'
   );
+  e.ref = (code || String(err?.name || '') || 'UNKNOWN').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
+  return e;
 }
 
 // ---------- broker server names ----------

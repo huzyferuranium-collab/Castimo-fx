@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
-import { tradingEngine } from '../../services/tradingEngine';
-import { KeyRound, Server, CheckCircle2, Lock, AlertTriangle, ArrowRight } from 'lucide-react';
+import { tradingEngine, ConnectError, type ConnectProgress } from '../../services/tradingEngine';
+import { KeyRound, Server, CheckCircle2, Lock, AlertTriangle, ArrowRight, Eye, EyeOff, Loader2, Circle } from 'lucide-react';
+
+const STEPS: Array<{ stage: string; text: string }> = [
+  { stage: 'checking', text: 'Checking your details' },
+  { stage: 'creating', text: 'Broker confirms your login' },
+  { stage: 'deploying', text: 'Starting your trading terminal' },
+  { stage: 'syncing', text: 'Syncing with your broker' },
+  { stage: 'verifying', text: 'Reading your account' },
+];
+const stepIndex = (stage: string) => STEPS.findIndex((x) => x.stage === stage);
 
 interface Mt5ConnectionModalProps {
   isOpen: boolean;
@@ -39,12 +48,20 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
   const [isConnecting, setIsConnecting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorHint, setErrorHint] = useState<string | null>(null);
+  const [errorRef, setErrorRef] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [progress, setProgress] = useState<ConnectProgress | null>(null);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isConnecting) return; // a second tap never starts a second connection
     setErrorMsg(null);
+    setErrorHint(null);
+    setErrorRef(null);
+    setProgress({ stage: 'queued', label: 'Starting…', percent: 3, elapsedSeconds: 0 });
     setIsConnecting(true);
 
     try {
@@ -55,7 +72,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
         throw new Error('Please enter your trading password.');
       }
 
-      await tradingEngine.connectMt5Account(userId, accountNumber, brokerServer, password);
+      await tradingEngine.connectMt5Account(userId, accountNumber.trim(), brokerServer.trim(), password, setProgress);
       // Password is immediately discarded from memory
       setPassword('');
       setSuccess(true);
@@ -65,8 +82,13 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
       }, 1500);
     } catch (err: any) {
       setErrorMsg(err.message || 'Connection failed.');
+      if (err instanceof ConnectError) {
+        setErrorHint(err.hint || null);
+        setErrorRef(err.ref || null);
+      }
     } finally {
       setIsConnecting(false);
+      setProgress(null);
     }
   };
 
@@ -102,7 +124,11 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
               {errorMsg && (
                 <div className="p-3 text-xs rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  <span>{errorMsg}</span>
+                  <div className="space-y-1">
+                    <p>{errorMsg}</p>
+                    {errorHint && <p className="text-rose-200/80">{errorHint}</p>}
+                    {errorRef && <p className="text-[10px] text-rose-300/60 font-mono">Reference: {errorRef}</p>}
+                  </div>
                 </div>
               )}
 
@@ -116,6 +142,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                     required
                     value={accountNumber}
                     onChange={(e) => setAccountNumber(e.target.value)}
+                    disabled={isConnecting}
                     placeholder="e.g. 133227028"
                     className={inputCls + ' font-mono'}
                   />
@@ -127,13 +154,23 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                 <div className="relative">
                   <Lock className="w-4 h-4 absolute left-3 top-3.5 text-slate-500" />
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className={inputCls}
+                    autoComplete="off"
+                    disabled={isConnecting}
+                    className={inputCls + ' pr-10'}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-blue-400"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1">Not the investor (read-only) password.</p>
               </div>
@@ -148,6 +185,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                     list="server-options"
                     value={brokerServer}
                     onChange={(e) => setBrokerServer(e.target.value)}
+                    disabled={isConnecting}
                     placeholder="e.g. HFMarketsGlobal-Live20"
                     className={inputCls + ' font-mono'}
                   />
@@ -160,13 +198,42 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                 <p className="text-[11px] text-slate-500 mt-1">Shown in your MT5 login screen.</p>
               </div>
 
+              {isConnecting && progress && (
+                <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-3 space-y-2.5" aria-live="polite">
+                  <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 transition-all duration-700"
+                      style={{ width: `${Math.max(3, progress.percent)}%` }}
+                    />
+                  </div>
+                  <ul className="space-y-1.5">
+                    {STEPS.map((st, i) => {
+                      const cur = stepIndex(progress.stage);
+                      const done = cur > i;
+                      const active = cur === i || (cur === -1 && i === 0);
+                      return (
+                        <li key={st.stage} className={`flex items-center gap-2 text-xs ${done ? 'text-emerald-400' : active ? 'text-white' : 'text-slate-500'}`}>
+                          {done ? <CheckCircle2 className="w-3.5 h-3.5" /> : active ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Circle className="w-3.5 h-3.5" />}
+                          <span>{st.text}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <p className="text-[11px] text-slate-400">
+                    This usually takes under a minute but can take up to three, depending on your broker. Please keep this window open.
+                  </p>
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={isConnecting}
-                className="w-full py-3 px-4 rounded-xl bg-blue-500 hover:bg-blue-400 font-semibold text-sm text-white transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full py-3 px-4 rounded-xl bg-blue-500 hover:bg-blue-400 font-semibold text-sm text-white transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isConnecting ? (
-                  <span>Connecting...</span>
+                  <span>{progress?.label || 'Connecting…'}</span>
+                ) : errorMsg ? (
+                  <span>Try again</span>
                 ) : (
                   <>
                     <span>Connect</span>

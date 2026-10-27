@@ -16,13 +16,16 @@ import { ReplicationEngine } from './REPLICATION_ENGINE';
 import { requireUser, requireAdmin, getAuthUser, isAdminUser } from './firebaseAuth';
 import { hasAcceptedTermsServer } from './termsCheck';
 import { recordEvent } from './referralService';
-import { BrokerVerificationError } from './brokerVerification';
+import { BrokerVerificationError, validateSubmittedCredentials, normalizeBrokerServer } from './brokerVerification';
+import { ConnectJobs } from './clientBridge';
 import { BillingService, BillingError, billingConfig, billingEnabled } from './billing';
 
 export const tradeRouter = Router();
 
 const connectionManager = Mt5ConnectionManager.getInstance();
 const replicationEngine = ReplicationEngine.getInstance();
+/** One background connection per user, polled by the browser (see clientBridge.ts). */
+export const connectJobs = new ConnectJobs<ReturnType<typeof toPublicClient>>();
 
 /** Only fields that are safe to show. Never expose connection objects or credentials. */
 function toPublicClient(c: any) {
@@ -56,6 +59,7 @@ const STATUS_BY_CODE: Record<string, number> = {
   BROKER_SERVER_NOT_FOUND: 400,
   BROKER_AUTH_FAILED: 400,
   BROKER_UNREACHABLE: 502,
+  BROKER_SLOW: 504,
   BAD_BROKER_RESPONSE: 502,
   LOGIN_MISMATCH: 400,
   TRADING_NOT_ALLOWED: 400,
@@ -230,25 +234,39 @@ tradeRouter.post('/provision-client', requireUser, async (req: Request, res: Res
 
     await BillingService.getInstance().assertMayConnect(user.uid);
 
-    const clientRecord = await connectionManager.provisionClientTerminal({
-      userId: user.uid,
-      login: String(login ?? ''),
-      password: typeof password === 'string' ? password : '',
-      server: String(server ?? ''),
-      platform: platform === 'mt4' ? 'mt4' : 'mt5',
-    });
+    // Typing mistakes are reported straight away; the slow broker check then runs in the background.
+    const checked = validateSubmittedCredentials({ login, password, server });
+    const serverName = normalizeBrokerServer(checked.server);
 
-    // Only the first successful connection is announced, and only because it really happened.
-    void recordEvent('ACCOUNT_CONNECTED', user.uid, `connected-${user.uid}`);
+    const { job, started } = connectJobs.start(
+      user.uid,
+      { login: checked.login, server: serverName, secrets: [checked.password] },
+      async (report) => {
+        const clientRecord = await connectionManager.provisionClientTerminal(
+          {
+            userId: user.uid,
+            login: checked.login,
+            password: checked.password,
+            server: checked.server,
+            platform: platform === 'mt4' ? 'mt4' : 'mt5',
+          },
+          report
+        );
+        // Only the first successful connection is announced, and only because it really happened.
+        void recordEvent('ACCOUNT_CONNECTED', user.uid, `connected-${user.uid}`);
+        return toPublicClient(clientRecord);
+      }
+    );
 
-    return res.status(201).json({
+    return res.status(202).json({
       success: true,
-      message: 'Broker account verified and connected.',
-      client: toPublicClient(clientRecord),
+      started,
+      message: started ? 'Connecting. This can take a minute.' : 'A connection is already in progress.',
+      job,
     });
   } catch (error: any) {
     if (error instanceof BillingError) {
-      return res.status(error.status).json({ success: false, code: 'INVOICE_OVERDUE', error: error.message });
+      return res.status(error.status).json({ success: false, code: error.status === 403 ? 'PLAN_REQUIRED' : 'INVOICE_OVERDUE', error: error.message });
     }
     if (error instanceof BrokerVerificationError) {
       return res.status(STATUS_BY_CODE[error.code] ?? 400).json({ success: false, code: error.code, error: error.message });
@@ -256,6 +274,24 @@ tradeRouter.post('/provision-client', requireUser, async (req: Request, res: Res
     console.error('❌ [API /api/trade/provision-client] Unexpected error:', error?.message || error);
     return res.status(500).json({ success: false, error: 'Could not verify this account. Nothing was connected.' });
   }
+});
+
+/**
+ * GET /api/trade/connect-status  (signed-in users)
+ * Progress of the caller's latest connection: stage, percent, and on failure a clear reason and next step.
+ * The browser polls this while the Connect popup is open.
+ */
+tradeRouter.get('/connect-status', requireUser, (req: Request, res: Response) => {
+  const user = getAuthUser(req);
+  return res.status(200).json({ success: true, job: connectJobs.get(user.uid) });
+});
+
+/**
+ * GET /api/trade/admin/connect-failures  (administrators only)
+ * The most recent failed connection attempts with the technical reason (passwords are scrubbed).
+ */
+tradeRouter.get('/admin/connect-failures', requireAdmin, (_req: Request, res: Response) => {
+  return res.status(200).json({ success: true, failures: connectJobs.recentFailures() });
 });
 
 /**

@@ -158,6 +158,26 @@ const INITIAL_NOTIFICATIONS: ClientNotification[] = [
   },
 ];
 
+/** Progress of a connection, as reported by the server. */
+export interface ConnectProgress {
+  stage: string;
+  label: string;
+  percent: number;
+  elapsedSeconds: number;
+}
+
+/** A failed connection with a plain-language reason and what to do next. */
+export class ConnectError extends Error {
+  code?: string;
+  hint?: string;
+  ref?: string;
+  retryable?: boolean;
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConnectError';
+  }
+}
+
 class TradingEngine {
   private subscription: Subscription | null = null;
   private masterAccount: MasterMt5Account = INITIAL_MASTER_ACCOUNT;
@@ -1170,7 +1190,8 @@ class TradingEngine {
     userId: string,
     accountNumber: string,
     brokerServer: string,
-    passwordSecure: string // sent once over HTTPS to the server, never stored here
+    passwordSecure: string, // sent once over HTTPS to the server, never stored here
+    onProgress?: (p: ConnectProgress) => void
   ): Promise<boolean> {
     // Only a real, signed-in account can connect.
     const headers = await authHeaders();
@@ -1183,7 +1204,14 @@ class TradingEngine {
     this.mt5Account.status = 'connecting';
     this.notify();
 
-    // The server asks the broker to confirm the account. We send credentials only: no balance, equity or names.
+    // The server starts the connection in the background and we follow its progress.
+    // We send credentials only: no balance, equity or names.
+    const fail = (message: string, extra: Partial<ConnectError> = {}): never => {
+      this.mt5Account.status = 'connection_failed';
+      this.notify();
+      throw Object.assign(new ConnectError(message), extra);
+    };
+
     let res: Response;
     try {
       res = await fetch('/api/trade/provision-client', {
@@ -1197,26 +1225,54 @@ class TradingEngine {
         }),
       });
     } catch {
-      this.mt5Account.status = 'connection_failed';
-      this.notify();
-      throw new Error('Could not reach the verification server. Please try again.');
+      return fail('Could not reach the server. Check your internet connection and try again.');
     }
 
+    const started = await res.json().catch(() => ({} as any));
     if (!res.ok) {
-      const errorJson = await res.json().catch(() => ({}));
-      this.mt5Account.status = 'connection_failed';
-      this.notify();
-      throw new Error(errorJson.error || 'The broker could not verify this account. Nothing was connected.');
+      return fail(started.error || 'The broker could not verify this account. Nothing was connected.', { code: started.code });
     }
 
-    const data = await res.json().catch(() => ({}));
-    const c = data?.client;
+    // Poll until the connection finishes. A dropped request does not stop the connection, so we just ask again.
+    const POLL_MS = 2000;
+    const GIVE_UP_MS = 10 * 60_000;
+    const began = Date.now();
+    let job = started.job;
+    let missing = 0;
+    while (job && job.status === 'running') {
+      onProgress?.({ stage: job.stage, label: job.label, percent: job.percent, elapsedSeconds: job.elapsedSeconds });
+      if (Date.now() - began > GIVE_UP_MS) {
+        return fail('This is taking longer than expected. Close this window and press Connect again in a minute.', { retryable: true });
+      }
+      await new Promise((r) => setTimeout(r, POLL_MS));
+      try {
+        const poll = await fetch('/api/trade/connect-status', { headers: await authHeaders() });
+        if (poll.ok) {
+          const body = await poll.json().catch(() => ({} as any));
+          job = body.job;
+          if (!job && ++missing >= 3) break;
+        }
+      } catch {
+        // network blip: keep waiting
+      }
+    }
+
+    if (!job || job.status === 'failed') {
+      const e = job?.error;
+      return fail(e?.message || 'We lost track of this connection. Please press Connect again.', {
+        code: e?.code,
+        hint: e?.hint,
+        ref: e?.ref,
+        retryable: e ? Boolean(e.retryable) : true,
+      });
+    }
+
+    const c = job.result;
     // Defence in depth: accept only an answer the broker verified.
     if (!c || c.isBrokerVerified !== true || c.isSimulated === true) {
-      this.mt5Account.status = 'connection_failed';
-      this.notify();
-      throw new Error('The broker could not verify this account. Nothing was connected.');
+      return fail('The broker could not verify this account. Nothing was connected.');
     }
+    onProgress?.({ stage: 'done', label: 'Connected', percent: 100, elapsedSeconds: job.elapsedSeconds });
 
     // Start copying (the server checks that this user owns a verified account).
     try {
