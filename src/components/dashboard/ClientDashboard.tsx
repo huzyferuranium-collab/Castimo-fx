@@ -514,17 +514,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                     <Power className="w-3 h-3 text-rose-500" />
                     <span>Manage</span>
                   </button>
-                ) : (
-                  /* KEEP GREEN CONNECT MT5 BUTTON VISIBLE TO CLIENTS */
-                  <button
-                    type="button"
-                    onClick={openConnect}
-                    className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-emerald-500/20 flex items-center gap-1.5"
-                  >
-                    <Server className="w-3.5 h-3.5" />
-                    <span>Connect MT5</span>
-                  </button>
-                )}
+                ) : null}
               </div>
 
               {/* Center / Summary Financial Metrics: HIDE FROM CLIENT IF NO ACCOUNT IS LINKED */}
@@ -633,6 +623,31 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 </button>
               </div>
             )}
+            {/* Prompt for clients when MT5 is not yet connected (the only Connect button on this page) */}
+            {!isConnected && (
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/30 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md animate-in fade-in">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">
+                    <Server className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-sm text-white">Link Your MT5 Terminal to Start Copying</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Connect using your MT5 Login & Broker Server to automatically mirror institutional signals with balance-scaled lots.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={openConnect}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer shrink-0"
+                >
+                  <Server className="w-4 h-4" />
+                  <span>Connect MT5</span>
+                </button>
+              </div>
+            )}
+
             <RobotConsole />
           </div>
         )}
@@ -1029,6 +1044,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 </div>
 
                 <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={openConnect}
+                    className="px-3.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-medium transition cursor-pointer"
+                  >
+                    Change MT5 Terminal Connection
+                  </button>
                   {isConnected && (
                     <button
                       type="button"
