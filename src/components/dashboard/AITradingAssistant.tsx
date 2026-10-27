@@ -1,33 +1,28 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useAiRobot } from '../../hooks/useAiRobot';
 import { ArrowUpRight, ArrowDownRight, Zap } from 'lucide-react';
 
-export type AssistantState = 'SCANNING' | 'ANALYZING' | 'CONFIRMING' | 'SIGNAL DETECTED';
+export type ConsoleState = 'SEARCHING' | 'TRADE' | 'NO_TRADE' | 'UNAVAILABLE';
 
-export interface AITradingAssistantProps {
-  symbol?: string;
-  status?: AssistantState;
-  confidence?: number;
-  signal?: 'BUY' | 'SELL' | null;
-  task?: string;
-  progress?: number;
-  className?: string;
-  onMirrorSignal?: (symbol: string, direction: 'BUY' | 'SELL') => void;
+export interface MasterTrade {
+  id: string;
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  volume: number;
+  openPrice: number;
+  openedAt: string | null;
 }
 
-export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({
-  symbol: propSymbol,
-  status: propStatus,
-  confidence: propConfidence,
-  signal: propSignal,
-  task: propTask,
-  progress: propProgress,
-  className = '',
-  onMirrorSignal,
-}) => {
-  // Use state from hook if props are not explicitly provided
-  const { state: aiState } = useAiRobot();
+export interface AITradingAssistantProps {
+  state: ConsoleState;
+  trades: MasterTrade[];
+  className?: string;
+}
 
+/**
+ * The robot card. The animation is decorative; every word and figure shown comes from the
+ * master account's real open positions. No confidence figure is shown because none exists.
+ */
+export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, trades, className = '' }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -53,24 +48,21 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({
     };
   }, []);
 
-  const symbol = propSymbol || 'XAU/USD';
-  const rawStatus = propStatus ?? aiState.state;
-  const status: AssistantState =
-    rawStatus === 'SIGNAL_DETECTED' || rawStatus === 'SIGNAL DETECTED'
-      ? 'SIGNAL DETECTED'
-      : rawStatus === 'CONFIRMING'
-      ? 'CONFIRMING'
-      : rawStatus === 'ANALYZING'
-      ? 'ANALYZING'
-      : 'SCANNING';
-
-  const confidence = propConfidence ?? aiState.confidence;
-  const signal = propSignal !== undefined ? propSignal : aiState.currentSignal?.direction || null;
-  const task = propTask ?? (aiState.currentTask || 'Scanning XAU/USD order book depth & liquidity pools...');
-  const progress = propProgress ?? aiState.progress;
-
-  const isSignal = status === 'SIGNAL DETECTED' || (signal !== null && status === 'CONFIRMING');
-  const isAnalyzing = status === 'ANALYZING';
+  const first = trades[0];
+  const isSignal = state === 'TRADE' && !!first;
+  const isAnalyzing = state === 'SEARCHING';
+  const signal = isSignal ? first.side : null;
+  const statusLabel =
+    state === 'TRADE' ? 'TRADE FOUND' : state === 'NO_TRADE' ? 'NO ACTIVE TRADE' : state === 'UNAVAILABLE' ? 'DATA UNAVAILABLE' : 'SEARCHING';
+  const symbol = first?.symbol || '';
+  const task =
+    state === 'TRADE'
+      ? `${trades.length} open on the master account`
+      : state === 'NO_TRADE'
+      ? 'No active trade found'
+      : state === 'UNAVAILABLE'
+      ? 'Live trade data could not be read'
+      : 'Searching…';
 
   return (
     <div
@@ -253,7 +245,7 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({
                 isSignal ? 'bg-amber-500' : isAnalyzing ? 'bg-cyan-500' : 'bg-emerald-500'
               }`}
             />
-            <span>{status}</span>
+            <span>{statusLabel}</span>
           </span>
         </div>
 
@@ -268,62 +260,39 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({
             </span>
           </div>
 
-          {/* Confidence Score */}
-          <div className="flex items-center gap-1 shrink-0">
-            <Zap className={`w-3 h-3 ${isSignal ? 'text-amber-500' : 'text-cyan-600 dark:text-cyan-400'}`} />
-            <span
-              className={`font-black ${
-                confidence >= 80 ? 'text-emerald-600 dark:text-emerald-400' : isSignal ? 'text-amber-600 dark:text-amber-400' : 'text-cyan-700 dark:text-cyan-300'
-              }`}
-            >
-              {confidence}% Confidence
-            </span>
-          </div>
-        </div>
-
-        {/* Bottom Line: Small Progress Bar & Optional Signal Quick Action */}
-        <div className="flex items-center gap-3 pt-0.5">
-          <div className="flex-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 overflow-hidden">
-            <div
-              className={`h-full transition-all duration-300 ${
-                isSignal
-                  ? 'bg-gradient-to-r from-amber-500 to-emerald-400'
-                  : 'bg-gradient-to-r from-blue-600 to-cyan-400'
-              }`}
-              style={{ width: `${Math.min(100, Math.max(10, progress))}%` }}
-            />
-          </div>
-
-          {/* Quick Signal Badge / Mirror Action if Detected */}
-          {isSignal && signal && (
-            <div className="flex items-center gap-2 shrink-0">
+          {/* Trade found (replaces the old confidence figure) */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {isSignal && signal ? (
               <span
-                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-black border ${
                   signal === 'BUY'
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                    : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                    ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/40'
+                    : 'bg-rose-500/20 text-rose-600 dark:text-rose-300 border-rose-500/40'
                 }`}
               >
-                {signal === 'BUY' ? (
-                  <ArrowUpRight className="w-3 h-3" />
-                ) : (
-                  <ArrowDownRight className="w-3 h-3" />
-                )}
-                <span>{signal}</span>
+                {signal === 'BUY' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                <span>TRADE FOUND {signal}</span>
               </span>
-
-              {onMirrorSignal && (
-                <button
-                  type="button"
-                  onClick={() => onMirrorSignal(symbol, signal)}
-                  className="px-2 py-0.5 rounded bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-[10px] transition cursor-pointer shadow-xs"
-                >
-                  Mirror
-                </button>
-              )}
-            </div>
-          )}
+            ) : (
+              <span className="flex items-center gap-1 text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                <Zap className="w-3 h-3" />
+                <span>{state === 'UNAVAILABLE' ? 'Unavailable' : state === 'NO_TRADE' ? 'No trade' : '…'}</span>
+              </span>
+            )}
+          </div>
         </div>
+
+        {isSignal && (
+          <ul className="space-y-1 pt-0.5">
+            {trades.map((t) => (
+              <li key={t.id} className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300">
+                <span className={t.side === 'SELL' ? 'font-bold text-rose-500' : 'font-bold text-emerald-500'}>{t.side}</span>
+                <span>{t.symbol}</span>
+                <span className="text-slate-500">{t.volume} lot @ {t.openPrice}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
