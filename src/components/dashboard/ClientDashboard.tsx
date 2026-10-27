@@ -21,6 +21,8 @@ import { SidebarNav, NavGroup } from '../common/SidebarNav';
 import { AuthModal } from '../auth/AuthModal';
 
 import { RobotConsole } from './RobotConsole';
+import { ServicePlanPage } from './ServicePlanPage';
+import { getPlanView, PlanView } from '../../services/servicePlanApi';
 
 import {
   Wallet,
@@ -111,6 +113,22 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     error?: string;
   } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<boolean>(false);
+
+  // Which service plan the client chose (kept on the server). undefined = still loading.
+  const [planView, setPlanView] = useState<PlanView | null | undefined>(undefined);
+  const refreshPlan = () => {
+    if (!userProfile?.uid || userProfile.role === 'admin') return;
+    getPlanView().then(setPlanView);
+  };
+  useEffect(refreshPlan, [userProfile?.uid]);
+  const planChosen = planView === undefined || planView === null || !planView.available || planView.model !== null;
+  const openConnect = () => {
+    if (!planChosen) {
+      setActiveSection('plan');
+      return;
+    }
+    setShowConnectModal(true);
+  };
 
   // Real-time MetaApi WebSocket Synchronizer & Mirror State
   const [metaApiStatus, setMetaApiStatus] = useState<{
@@ -326,6 +344,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
           icon: Cpu,
         },
         {
+          id: 'plan',
+          label: 'Service Plan',
+          icon: Wallet,
+          badge: planView?.model ? (planView.model === 'subscription' ? 'Monthly' : '50% Share') : planView?.available ? 'Choose' : undefined,
+          badgeVariant: planView?.model ? 'success' : 'warning',
+        },
+        {
           id: 'positions',
           label: 'Active Trades',
           icon: Activity,
@@ -460,6 +485,12 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         {/* ========================================================
             SUB-SECTION 1: SUMMARISED ESSENTIALS DASHBOARD
             ======================================================== */}
+        {activeSection === 'plan' && (
+          <div className="space-y-4 animate-in fade-in duration-150">
+            <ServicePlanPage onChanged={refreshPlan} />
+          </div>
+        )}
+
         {activeSection === 'overview' && (
           <div className="space-y-4 animate-in fade-in duration-150">
             {/* 1. HIGH-PRECISION EQUITY & ACCOUNT SUMMARY BAR */}
@@ -509,7 +540,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                   /* KEEP GREEN CONNECT MT5 BUTTON VISIBLE TO CLIENTS */
                   <button
                     type="button"
-                    onClick={() => setShowConnectModal(true)}
+                    onClick={openConnect}
                     className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer shadow-md shadow-emerald-500/20 flex items-center gap-1.5"
                   >
                     <Server className="w-3.5 h-3.5" />
@@ -612,6 +643,18 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             </div>
 
             {/* 2. COMPACT AI TRADING ASSISTANT (ESSENTIAL CENTERPIECE OF AI DASHBOARD) */}
+            {!planChosen && !isConnected && (
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <p className="text-xs">Choose a service plan (Monthly or 50% Profit Share) before connecting your MT5 account.</p>
+                <button
+                  type="button"
+                  onClick={() => setActiveSection('plan')}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 font-bold text-xs text-slate-950 transition shrink-0 cursor-pointer"
+                >
+                  Choose plan
+                </button>
+              </div>
+            )}
             <RobotConsole />
           </div>
         )}

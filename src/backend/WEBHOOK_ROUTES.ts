@@ -218,7 +218,7 @@ tradeRouter.post('/provision-client', requireUser, async (req: Request, res: Res
       });
     }
 
-    await BillingService.getInstance().assertNotOverdue(user.uid);
+    await BillingService.getInstance().assertMayConnect(user.uid);
 
     const clientRecord = await connectionManager.provisionClientTerminal({
       userId: user.uid,
@@ -349,6 +349,51 @@ tradeRouter.post('/pay-invoice', requireUser, async (req: Request, res: Response
     if (error instanceof BillingError) return res.status(error.status).json({ success: false, error: error.message });
     console.error('❌ [API /pay-invoice]', error?.message || error);
     return res.status(500).json({ success: false, error: 'Could not verify the payment. Please try again.' });
+  }
+});
+
+/**
+ * Service plan: choose Monthly or 50% Profit Share, pay for the monthly plan, or stop renewing it.
+ */
+tradeRouter.get('/service-plan', requireUser, async (req: Request, res: Response) => {
+  try {
+    return res.status(200).json({ success: true, ...(await BillingService.getInstance().planView(getAuthUser(req).uid)) });
+  } catch (error: any) {
+    console.error('❌ [API /service-plan]', error?.message || error);
+    return res.status(500).json({ success: false, error: 'Could not load your plan.' });
+  }
+});
+
+function planError(res: Response, error: any, label: string) {
+  if (error instanceof BillingError) return res.status(error.status).json({ success: false, error: error.message });
+  console.error(`❌ [API ${label}]`, error?.message || error);
+  return res.status(500).json({ success: false, error: 'Something went wrong. Please try again.' });
+}
+
+tradeRouter.post('/service-plan/select', requireUser, async (req: Request, res: Response) => {
+  try {
+    await BillingService.getInstance().selectModel(getAuthUser(req).uid, req.body?.model);
+    return res.status(200).json({ success: true });
+  } catch (e) {
+    return planError(res, e, '/service-plan/select');
+  }
+});
+
+tradeRouter.post('/service-plan/pay-subscription', requireUser, async (req: Request, res: Response) => {
+  try {
+    await BillingService.getInstance().paySubscription(getAuthUser(req).uid, String(req.body?.txHash ?? ''));
+    return res.status(200).json({ success: true });
+  } catch (e) {
+    return planError(res, e, '/service-plan/pay-subscription');
+  }
+});
+
+tradeRouter.post('/service-plan/cancel', requireUser, async (req: Request, res: Response) => {
+  try {
+    await BillingService.getInstance().cancelSubscription(getAuthUser(req).uid);
+    return res.status(200).json({ success: true });
+  } catch (e) {
+    return planError(res, e, '/service-plan/cancel');
   }
 });
 

@@ -84,6 +84,8 @@ export interface ClientLedger {
   lastInvoiceId?: string;
   /** True while an unpaid invoice is past its due time. */
   blocked?: boolean;
+  /** Set when the client leaves profit share. A new ledger (fresh starting equity) is made if they return. */
+  closed?: boolean;
 }
 
 export interface Invoice {

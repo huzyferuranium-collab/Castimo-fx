@@ -24,6 +24,17 @@ import {
   sumAccountFlows,
 } from './profitShare';
 import { readLimit } from './brokerVerification';
+import {
+  DEFAULT_SUBSCRIPTION_PERIOD_DAYS,
+  DEFAULT_SUBSCRIPTION_PRICE_USDT,
+  PlanRecord,
+  ServiceModel,
+  canSelectModel,
+  daysLeft,
+  isServiceModel,
+  nextPeriod,
+  subscriptionActive,
+} from './servicePlan';
 import { checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron';
 import {
   DocExistsError,
@@ -54,6 +65,8 @@ export function billingConfig() {
     periodDays: Math.max(1, readLimit(process.env.SETTLEMENT_PERIOD_DAYS, 7)),
     dueHours: Math.max(1, readLimit(process.env.INVOICE_DUE_HOURS, 72)),
     treasury: treasury(),
+    subscriptionPriceUsdt: Math.max(1, readLimit(process.env.SUBSCRIPTION_PRICE_USDT, DEFAULT_SUBSCRIPTION_PRICE_USDT)),
+    subscriptionDays: Math.max(1, readLimit(process.env.SUBSCRIPTION_PERIOD_DAYS, DEFAULT_SUBSCRIPTION_PERIOD_DAYS)),
   };
 }
 
@@ -92,7 +105,12 @@ export class BillingService {
       console.warn('⚠️ [BILLING] Billing is OFF: set FIREBASE_SERVICE_ACCOUNT and TREASURY_ADDRESS to turn it on.');
       return;
     }
-    this.manager.onClientVerified = (rec) => void this.openLedger(rec).catch((e) => console.warn('[BILLING] ledger:', e?.message));
+    this.manager.onClientVerified = (rec) =>
+      void (async () => {
+        const plan = await this.getPlan(rec.userId);
+        if (plan?.model === 'subscription') return; // subscribers have no profit-share ledger
+        await this.openLedger(rec);
+      })().catch((e) => console.warn('[BILLING] ledger:', e?.message));
     setTimeout(() => void this.sweep(), 60_000);
     this.timer = setInterval(() => void this.sweep(), 10 * 60_000);
     console.log('💰 [BILLING] Profit-share billing is ON.');
@@ -100,7 +118,7 @@ export class BillingService {
 
   private async openLedger(rec: ClientConnectionRecord): Promise<ClientLedger> {
     const existing = (await getDoc('client_ledgers', rec.userId)) as ClientLedger | null;
-    if (existing) return existing;
+    if (existing && !existing.closed) return existing;
     const now = new Date().toISOString();
     const ledger: ClientLedger = {
       userId: rec.userId,
@@ -111,7 +129,8 @@ export class BillingService {
       createdAt: now,
     };
     try {
-      await createDoc('client_ledgers', rec.userId, ledger as any);
+      if (existing?.closed) await setDoc('client_ledgers', rec.userId, ledger as any);
+      else await createDoc('client_ledgers', rec.userId, ledger as any);
     } catch (e) {
       if (e instanceof DocExistsError) return ((await getDoc('client_ledgers', rec.userId)) as unknown as ClientLedger) ?? ledger;
       throw e;
@@ -128,6 +147,11 @@ export class BillingService {
       const cfg = billingConfig();
       for (const rec of uniqueVerifiedClients(this.manager)) {
         try {
+          const plan = await this.getPlan(rec.userId);
+          if (plan?.model === 'subscription') {
+            await this.applyBlocking(rec.userId);
+            continue;
+          }
           const ledger = await this.openLedger(rec);
           if (isSettlementDue(ledger.settledThrough, Date.now(), cfg.periodDays)) {
             await this.settle(rec, ledger);
@@ -197,6 +221,11 @@ export class BillingService {
 
   /** Stops copying while any invoice is overdue; resumes when none are. */
   async applyBlocking(userId: string): Promise<void> {
+    const plan = await this.getPlan(userId);
+    if (plan?.model === 'subscription') {
+      this.manager.setBillingBlocked(userId, !subscriptionActive(plan, Date.now()));
+      return;
+    }
     const invoices = (await queryEquals('profit_invoices', 'userId', userId)) as unknown as Invoice[];
     const overdue = invoices.some((i) => isOverdue(i, Date.now()));
     this.manager.setBillingBlocked(userId, overdue);
@@ -209,6 +238,165 @@ export class BillingService {
     if (invoices.some((i) => isOverdue(i, Date.now()))) {
       throw new BillingError('You have an overdue profit-share invoice. Please pay it to resume copying.', 402);
     }
+  }
+
+  // ---------- Service plan (subscription or profit share) ----------
+
+  async getPlan(userId: string): Promise<PlanRecord | null> {
+    if (!isFirestoreAdminConfigured()) return null;
+    const doc = (await getDoc('service_plans', userId)) as unknown as PlanRecord | null;
+    return doc && isServiceModel(doc.model) ? doc : null;
+  }
+
+  /** Before connecting: a plan must be chosen, and it must be in good standing. */
+  async assertMayConnect(userId: string): Promise<void> {
+    if (!isFirestoreAdminConfigured()) return;
+    const plan = await this.getPlan(userId);
+    if (!plan) throw new BillingError('Please choose a service plan (Monthly or 50% Profit Share) before connecting an account.', 403);
+    if (plan.model === 'subscription') {
+      if (!subscriptionActive(plan, Date.now())) {
+        throw new BillingError('Your monthly subscription is not active. Please pay for the plan to connect.', 402);
+      }
+      return;
+    }
+    await this.assertNotOverdue(userId);
+  }
+
+  private async isConnected(userId: string): Promise<boolean> {
+    const c = this.manager.getClientConnection(userId) ?? (await this.manager.restoreClientForUser(userId));
+    return !!(c && c.isBrokerVerified && !c.isSimulated);
+  }
+
+  async selectModel(userId: string, modelRaw: unknown): Promise<PlanRecord> {
+    if (!isFirestoreAdminConfigured()) throw new BillingError('Plans are not open yet. Please contact support.', 503);
+    if (!isServiceModel(modelRaw)) throw new BillingError('Unknown service plan.');
+    const model: ServiceModel = modelRaw;
+    const current = await this.getPlan(userId);
+    const invoices = (await queryEquals('profit_invoices', 'userId', userId)) as unknown as Invoice[];
+    const verdict = canSelectModel(current, model, {
+      connected: await this.isConnected(userId),
+      hasPendingInvoice: invoices.some((i) => i.status === 'pending'),
+      nowMs: Date.now(),
+    });
+    if (!verdict.ok) throw new BillingError(verdict.reason || 'You cannot change plan right now.', 409);
+    if (current && current.model === model) return current;
+
+    const plan: PlanRecord = { userId, model, selectedAt: new Date().toISOString() };
+    await setDoc('service_plans', userId, plan as any);
+    if (model === 'subscription') {
+      // Leaving profit share: close the ledger so profit made on a subscription is never billed later.
+      const ledger = (await getDoc('client_ledgers', userId)) as unknown as ClientLedger | null;
+      if (ledger && !ledger.closed) await setDoc('client_ledgers', userId, { ...ledger, closed: true } as any);
+    }
+    return plan;
+  }
+
+  /** Verifies a USDT payment on the TRON blockchain and starts or extends the monthly plan. */
+  async paySubscription(userId: string, txHashRaw: string): Promise<PlanRecord> {
+    if (!billingEnabled()) throw new BillingError('Payments are not open yet. Please contact support.', 503);
+    const cfg = billingConfig();
+    const txHash = String(txHashRaw || '').trim().toLowerCase();
+    if (!HASH.test(txHash)) throw new BillingError('Please paste the 64-character transaction ID (TXID) of your USDT payment.');
+    const plan = await this.getPlan(userId);
+    if (!plan || plan.model !== 'subscription') throw new BillingError('Choose the Monthly plan first.', 409);
+
+    let events: any[];
+    let final: boolean;
+    try {
+      [events, final] = await Promise.all([fetchTxEvents(txHash), isTxFinalAndSuccessful(txHash)]);
+    } catch {
+      throw new BillingError('Could not reach the TRON network to check this payment. Please try again in a minute.', 502);
+    }
+    const check = checkUsdtPayment(events, { treasury: cfg.treasury, minUsdt: cfg.subscriptionPriceUsdt });
+    if (!check.ok) throw new BillingError(check.error || 'Payment could not be verified.');
+    if (!final) throw new BillingError('That payment is not fully confirmed on the network yet. Wait a few minutes and try again.', 409);
+
+    // One transaction can pay one thing only, ever.
+    try {
+      await createDoc('used_tx_hashes', txHash, { invoiceId: `subscription-${userId}`, userId, at: new Date().toISOString() });
+    } catch (e) {
+      if (!(e instanceof DocExistsError)) throw e;
+      const used: any = await getDoc('used_tx_hashes', txHash);
+      if (!used || used.invoiceId !== `subscription-${userId}`) throw new BillingError('This transaction was already used for another payment.', 409);
+      if (plan.subscription?.lastTxHash === txHash) return plan; // same payment pasted twice
+    }
+
+    const now = Date.now();
+    const period = nextPeriod(plan.subscription?.periodEnd, now, cfg.subscriptionDays);
+    const updated: PlanRecord = {
+      ...plan,
+      subscription: {
+        periodStart: period.start,
+        periodEnd: period.end,
+        cancelAtPeriodEnd: false,
+        lastTxHash: txHash,
+        paidUsdt: check.amountUsdt,
+      },
+    };
+    await setDoc('service_plans', userId, updated as any);
+    await setDoc('subscription_payments', txHash, {
+      userId,
+      txHash,
+      amountUsdt: check.amountUsdt,
+      periodStart: period.start,
+      periodEnd: period.end,
+      at: new Date(now).toISOString(),
+    });
+    await this.applyBlocking(userId);
+    return updated;
+  }
+
+  /** Stops renewal. There are no automatic charges, so the plan simply ends on its date. */
+  async cancelSubscription(userId: string): Promise<PlanRecord> {
+    const plan = await this.getPlan(userId);
+    if (!plan || plan.model !== 'subscription' || !plan.subscription) throw new BillingError('You have no monthly subscription to cancel.', 409);
+    const updated: PlanRecord = { ...plan, subscription: { ...plan.subscription, cancelAtPeriodEnd: true } };
+    await setDoc('service_plans', userId, updated as any);
+    return updated;
+  }
+
+  /** Everything the plan page needs. Counts come only from real plan records. */
+  async planView(userId: string) {
+    const cfg = billingConfig();
+    const now = Date.now();
+    const plan = await this.getPlan(userId);
+    let activeSubscribers = 0;
+    let profitShareClients = 0;
+    if (isFirestoreAdminConfigured()) {
+      const all = (await listAll('service_plans').catch(() => [])) as unknown as PlanRecord[];
+      for (const p of all) {
+        if (p?.model === 'subscription' && subscriptionActive(p, now)) activeSubscribers++;
+        else if (p?.model === 'profit_share') profitShareClients++;
+      }
+    }
+    let canSwitch: { ok: boolean; reason?: string } = { ok: true };
+    if (isFirestoreAdminConfigured() && plan) {
+      const invoices = (await queryEquals('profit_invoices', 'userId', userId)) as unknown as Invoice[];
+      const other: ServiceModel = plan.model === 'subscription' ? 'profit_share' : 'subscription';
+      canSwitch = canSelectModel(plan, other, {
+        connected: await this.isConnected(userId),
+        hasPendingInvoice: invoices.some((i) => i.status === 'pending'),
+        nowMs: now,
+      });
+    }
+    return {
+      available: isFirestoreAdminConfigured(),
+      paymentsOpen: billingEnabled(),
+      model: plan?.model ?? null,
+      selectedAt: plan?.selectedAt ?? null,
+      subscription: plan?.subscription
+        ? {
+            active: subscriptionActive(plan, now),
+            periodEnd: plan.subscription.periodEnd,
+            daysLeft: daysLeft(plan.subscription.periodEnd, now),
+            cancelAtPeriodEnd: Boolean(plan.subscription.cancelAtPeriodEnd),
+          }
+        : null,
+      price: { subscriptionUsdt: cfg.subscriptionPriceUsdt, periodDays: cfg.subscriptionDays, feePct: cfg.feePct },
+      treasuryAddress: billingEnabled() ? cfg.treasury : '',
+      canSwitch,
+      stats: { activeSubscribers, profitShareClients },
+    };
   }
 
   async listInvoicesForUser(userId: string): Promise<Invoice[]> {
