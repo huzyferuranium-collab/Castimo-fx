@@ -37,7 +37,6 @@ export const DEFAULT_PLANS: SubscriptionPlan[] = [
     features: [
       'Institutional trade replication (EURUSD, XAUUSD, GBPUSD)',
       'Real-time MT5 trade replication',
-      'Built-in $200 equity safety stop',
       'Daily High-Water Mark profit settlement',
       'Pay in USDT (TRC20)',
     ],
@@ -691,8 +690,6 @@ class TradingEngine {
 
   // --- RISK ENGINE (Section 9) ---
   public runRiskCheck(): { riskStatus: 'normal' | 'warning' | 'blocked'; blockedReason?: string } {
-    const minEquity = this.riskSettings.minEquityToTrade; // $200
-    const equity = this.mt5Account.equity;
     const openTrades = this.getOpenTrades();
 
     let status: 'normal' | 'warning' | 'blocked' = 'normal';
@@ -704,13 +701,8 @@ class TradingEngine {
       return { riskStatus: 'normal' };
     }
 
-    if (equity < minEquity) {
-      status = 'blocked';
-      reason = `CRITICAL: Account equity ($${equity.toFixed(2)}) is below the required safety threshold ($${minEquity.toFixed(2)}). All new trade copying blocked.`;
-    } else if (equity < minEquity + 100) {
-      status = 'warning';
-      reason = `WARNING: Equity ($${equity.toFixed(2)}) is approaching the $${minEquity.toFixed(2)} minimum.`;
-    }
+    // The $200 minimum applies only when a client first connects (checked by the server).
+    // A connected account is never blocked or disconnected because its equity falls.
 
     if (openTrades.length >= this.riskSettings.maxOpenPositions) {
       if (status !== 'blocked') {

@@ -17,6 +17,8 @@ export type BrokerErrorCode =
   | 'TRADING_NOT_ALLOWED'
   | 'ALREADY_LINKED'
   | 'IS_MASTER_ACCOUNT'
+  | 'MIN_EQUITY'
+  | 'UNSUPPORTED_CURRENCY'
   | 'CAPACITY';
 
 export class BrokerVerificationError extends Error {
@@ -89,6 +91,33 @@ export function validateSubmittedCredentials(input: {
     throw new BrokerVerificationError('BAD_INPUT', 'Please enter your MT5 password.');
   }
   return { login, password, server };
+}
+
+/** Smallest equity (in USD) a client needs to START a new connection. */
+export const DEFAULT_MIN_CONNECT_EQUITY = 200;
+
+/**
+ * Eligibility for a NEW connection only. It is checked once, when the client connects, using the
+ * broker's own figures. It is never used later to disconnect: an account that connected with enough
+ * equity stays connected if its equity falls, until the client disconnects it.
+ * Only USD accounts are accepted, because the minimum and the profit share are measured in USD.
+ */
+export function checkConnectEligibility(
+  v: { equity: number; currency: string },
+  minEquity: number = DEFAULT_MIN_CONNECT_EQUITY
+): void {
+  if (String(v.currency).toUpperCase() !== 'USD') {
+    throw new BrokerVerificationError(
+      'UNSUPPORTED_CURRENCY',
+      `Only USD accounts can be connected right now. Your account is in ${v.currency}.`
+    );
+  }
+  if (!Number.isFinite(v.equity) || v.equity < minEquity) {
+    throw new BrokerVerificationError(
+      'MIN_EQUITY',
+      `Your account equity is $${Math.max(0, Number.isFinite(v.equity) ? v.equity : 0).toFixed(2)}. You need at least $${minEquity.toFixed(2)} to connect.`
+    );
+  }
 }
 
 /**

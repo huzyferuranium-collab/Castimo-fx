@@ -7,6 +7,7 @@ import {
   clientAccountName,
   translateBrokerError,
   BrokerVerificationError,
+  checkConnectEligibility,
 } from '../src/backend/brokerVerification.ts';
 
 const creds = { login: '12345678', server: 'HFMarketsGlobal-Demo' };
@@ -131,4 +132,31 @@ test('parseClientAccountName reads user and login back from the account name', (
   assert.deepEqual(parseClientAccountName('CastimoFX Client abc123 #477627851'), { userId: 'abc123', login: '477627851' });
   assert.deepEqual(parseClientAccountName('CastimoFX Client - abc123 (#4776)'), { userId: 'abc123', login: '4776' });
   assert.equal(parseClientAccountName('Master HFM'), null);
+});
+
+test('new connections need at least $200 equity (checked once, at connect time)', () => {
+  assert.equal(code(() => checkConnectEligibility({ equity: 199.99, currency: 'USD' })), 'MIN_EQUITY');
+  assert.equal(code(() => checkConnectEligibility({ equity: 0, currency: 'USD' })), 'MIN_EQUITY');
+  assert.equal(code(() => checkConnectEligibility({ equity: NaN, currency: 'USD' })), 'MIN_EQUITY');
+  assert.equal(code(() => checkConnectEligibility({ equity: 200, currency: 'USD' })), 'NO_ERROR');
+  assert.equal(code(() => checkConnectEligibility({ equity: 5000.5, currency: 'usd' })), 'NO_ERROR');
+});
+
+test('the minimum can be changed or switched off with the limit argument', () => {
+  assert.equal(code(() => checkConnectEligibility({ equity: 49, currency: 'USD' }, 50)), 'MIN_EQUITY');
+  assert.equal(code(() => checkConnectEligibility({ equity: 49, currency: 'USD' }, 0)), 'NO_ERROR');
+});
+
+test('only USD accounts can connect', () => {
+  assert.equal(code(() => checkConnectEligibility({ equity: 900, currency: 'EUR' })), 'UNSUPPORTED_CURRENCY');
+});
+
+test('the equity message names the amount and the minimum', () => {
+  try {
+    checkConnectEligibility({ equity: 150, currency: 'USD' });
+    assert.fail('should have thrown');
+  } catch (e: any) {
+    assert.match(e.message, /\$150\.00/);
+    assert.match(e.message, /\$200\.00/);
+  }
 });

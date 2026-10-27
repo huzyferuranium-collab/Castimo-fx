@@ -29,6 +29,8 @@ import {
   readLimit,
   parseClientAccountName,
   verifyBrokerAccountInfo,
+  checkConnectEligibility,
+  DEFAULT_MIN_CONNECT_EQUITY,
 } from './brokerVerification';
 
 /** Rejects if the promise takes longer than ms. */
@@ -664,6 +666,8 @@ export class Mt5ConnectionManager {
       // Everything below comes from the broker's own answer.
       const info = await rpcConn.getAccountInformation();
       const verified = verifyBrokerAccountInfo(info as any, creds);
+      // New connections only: the minimum equity is never re-checked later to disconnect anyone.
+      checkConnectEligibility(verified, readLimit(process.env.MIN_CONNECT_EQUITY, DEFAULT_MIN_CONNECT_EQUITY));
       const now = new Date().toISOString();
 
       const record: ClientConnectionRecord = {

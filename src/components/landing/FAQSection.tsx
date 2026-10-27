@@ -81,10 +81,10 @@ const FAQ_ITEMS: FAQItem[] = [
   {
     id: 'sec-risk-floor',
     category: 'custody_security',
-    question: 'What is the mandatory $200 equity safety stop?',
+    question: 'What is the minimum equity to connect?',
     answer:
-      'To prevent account blowout and preserve trader capital, Castimofx enforces a built-in $200.00 USD equity safety floor. If market volatility causes account equity to approach or fall below $200, the system risk engine automatically blocks new trade copying until adequate margin is restored.',
-    highlight: 'Automatic trading halt below $200 equity floor prevents severe drawdown.',
+      'You need at least $200.00 USD of equity in your MT5 account to start a new connection. The check is made once, when you connect. After that, your account stays connected until you disconnect it yourself.',
+    highlight: '$200 minimum to connect. Checked once, at connection.',
   },
 ];
 

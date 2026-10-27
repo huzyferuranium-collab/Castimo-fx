@@ -18,7 +18,7 @@ import {
 } from './MT5_CONNECTION_MANAGER';
 
 export interface ReplicationRiskConfig {
-  minEquityFloor: number;       // Mandatory $200.00 floor
+  minEquityFloor: number;       // Technical floor only: below this, lots cannot be sized. Never disconnects anyone.
   maxLotCap: number;            // Absolute safety lot ceiling
   minLotSize: number;           // Standard broker floor (0.01)
   lotStep: number;              // Lot rounding increment (0.01)
@@ -268,7 +268,7 @@ export class ReplicationEngine {
     const posId = String(position.id);
     const isBuy = position.type === 'POSITION_TYPE_BUY' || position.type.includes('BUY');
 
-    // Pre-execution Check 1: Mandatory $200.00 Capital Floor
+    // Pre-execution Check 1: technical floor (the $200 minimum applies only when a client first connects)
     if (client.equity < this.riskConfig.minEquityFloor || client.balance < this.riskConfig.minEquityFloor) {
       console.warn(`🛑 [RISK_GUARD] Client ${client.userId} blocked from copying: equity ($${client.equity.toFixed(2)}) is below the $${this.riskConfig.minEquityFloor} safety floor.`);
       return {

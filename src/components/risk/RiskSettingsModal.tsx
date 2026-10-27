@@ -76,7 +76,7 @@ export const RiskSettingsModal: React.FC<RiskSettingsModalProps> = ({
               <span>Strict Rule Enforcement:</span>
             </div>
             <p>
-              New trade copying is immediately blocked when client equity falls below the minimum threshold (default <strong>$200.00</strong>). If open trades exist below this floor, withdrawals are locked completely.
+              The minimum equity (default <strong>$200.00</strong>) is checked once, when a client first connects. A connected account is never paused or disconnected because its equity falls.
             </p>
           </div>
 
@@ -101,7 +101,7 @@ export const RiskSettingsModal: React.FC<RiskSettingsModalProps> = ({
               className="w-full px-3 py-2 text-xs font-mono bg-slate-950 border border-slate-700 rounded-xl focus:border-red-500 text-white"
             />
             <span className="text-[10px] text-slate-500 mt-0.5 block">
-              Default $200.00. Mandatory safety stop.
+              Default $200.00. Applies to new connections only.
             </span>
           </div>
 

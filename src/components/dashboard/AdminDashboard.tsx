@@ -254,7 +254,7 @@ export const AdminDashboard: React.FC = () => {
                     >
                       <Sliders className="w-4 h-4 text-rose-400 shrink-0" />
                       <div>
-                        <span className="font-semibold block">Risk Guard Floor ($200)</span>
+                        <span className="font-semibold block">Risk Settings</span>
                         <span className="text-[10px] text-slate-400 block">Configure drawdown & lot limits</span>
                       </div>
                     </button>
@@ -798,14 +798,14 @@ export const AdminDashboard: React.FC = () => {
                     <Sliders className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">Risk Safety Floor ($200.00 Floor)</h4>
-                    <p className="text-xs text-slate-400">Enforced capital preservation limit</p>
+                    <h4 className="text-sm font-bold text-white">Minimum Equity to Connect</h4>
+                    <p className="text-xs text-slate-400">Checked once, when a client connects</p>
                   </div>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 grid grid-cols-2 gap-2 text-xs font-mono">
                   <div>
-                    <span className="text-[10px] text-slate-500 block">Critical Floor:</span>
+                    <span className="text-[10px] text-slate-500 block">Connection minimum:</span>
                     <span className="font-bold text-red-400">$200.00 USD</span>
                   </div>
                   <div className="text-right">
