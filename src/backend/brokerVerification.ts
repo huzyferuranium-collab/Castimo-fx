@@ -225,9 +225,13 @@ export function translateBrokerError(
       'We cannot add new accounts right now. Please try again later or contact support.'
     );
   }
+  // Short, non-sensitive reference so a failure can be matched to the server log (never the raw text).
+  const ref = (code || String(err?.name || '') || (/time(d)? ?out/i.test(msg) ? 'TIMEOUT' : 'UNKNOWN'))
+    .replace(/[^A-Za-z0-9_]/g, '')
+    .slice(0, 40);
   return new BrokerVerificationError(
     'BROKER_UNREACHABLE',
-    'Could not reach your broker to verify this account. Please try again in a minute.'
+    `Could not reach your broker to verify this account. Please try again in a minute.${ref ? ` (ref: ${ref})` : ''}`
   );
 }
 
