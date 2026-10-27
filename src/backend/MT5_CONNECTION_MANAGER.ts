@@ -657,11 +657,11 @@ export class Mt5ConnectionManager {
       }
 
       if (accountEntity.state !== 'DEPLOYED') {
-        await accountEntity.waitDeployed(45, 1000);
+        await accountEntity.waitDeployed(readLimit(process.env.CONNECT_DEPLOY_WAIT_SECONDS, 90) || 90, 1000);
       }
       rpcConn = accountEntity.getRPCConnection();
       await rpcConn.connect();
-      await rpcConn.waitSynchronized(45);
+      await rpcConn.waitSynchronized(readLimit(process.env.CONNECT_SYNC_WAIT_SECONDS, 90) || 90);
 
       // Everything below comes from the broker's own answer.
       const info = await rpcConn.getAccountInformation();
@@ -702,7 +702,10 @@ export class Mt5ConnectionManager {
       return record;
     } catch (error: any) {
       // Do not leave half-created accounts behind in MetaApi (they cost money and could be re-used).
-      const idToRemove = createdId;
+      // A timeout after the broker accepted the login only means the terminal is still starting up.
+      // Keep it so the client's next try resumes quickly (one account per user is enforced, so it cannot pile up).
+      const stillStarting = String(error?.name || '') === 'TimeoutError' && !!accountEntity;
+      const idToRemove = stillStarting ? undefined : createdId;
       if (idToRemove) {
         try {
           const acc = accountEntity ?? (await this.api.metatraderAccountApi.getAccount(idToRemove));

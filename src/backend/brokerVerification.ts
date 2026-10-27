@@ -225,6 +225,12 @@ export function translateBrokerError(
       'We cannot add new accounts right now. Please try again later or contact support.'
     );
   }
+  if (String(err?.name || '') === 'TimeoutError') {
+    return new BrokerVerificationError(
+      'BROKER_UNREACHABLE',
+      'Your account is still starting up with the broker. Please press Connect again in about a minute. (ref: TimeoutError)'
+    );
+  }
   // Short, non-sensitive reference so a failure can be matched to the server log (never the raw text).
   const ref = (code || String(err?.name || '') || (/time(d)? ?out/i.test(msg) ? 'TIMEOUT' : 'UNKNOWN'))
     .replace(/[^A-Za-z0-9_]/g, '')
