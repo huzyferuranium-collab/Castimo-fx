@@ -19,6 +19,7 @@ import {
   NotificationType,
 } from '../types';
 import { authHeaders } from './apiAuth';
+import { normalizePending, type ConnectOutcome, type PendingConnectionView } from './pendingConnection';
 
 export const TRC20_USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 // The wallet that receives USDT. Set VITE_TREASURY_ADDRESS to YOUR real TRON (TRC20) address at build time.
@@ -201,9 +202,27 @@ class TradingEngine {
 
   private listeners: (() => void)[] = [];
 
+  /**
+   * A connection the server is still looking after (or has given up on), as the server reports it.
+   * It is null whenever the account is connected or nothing is being connected.
+   */
+  private pendingConnection: PendingConnectionView | null = null;
+
   constructor() {
     this.subscription = null;
     this.runRiskCheck();
+  }
+
+  public getPendingConnection(): PendingConnectionView | null {
+    return this.pendingConnection;
+  }
+
+  /** Stores what the server says about an unfinished connection. Returns true when it changed. */
+  private setPending(raw: unknown): boolean {
+    const next = normalizePending(raw);
+    if (JSON.stringify(next) === JSON.stringify(this.pendingConnection)) return false;
+    this.pendingConnection = next;
+    return true;
   }
 
   public subscribe(listener: () => void) {
@@ -1185,6 +1204,9 @@ class TradingEngine {
   /**
    * Safe onboarding: Credentials are sent via secure HTTPS to the private bridge.
    * NEVER store password in plaintext or in frontend state!
+   *
+   * Resolves to 'connected' when the account is live, or to 'background' when the broker is slow and the
+   * server keeps connecting it without the browser (the dashboard then follows it by itself).
    */
   public async connectMt5Account(
     userId: string,
@@ -1192,7 +1214,7 @@ class TradingEngine {
     brokerServer: string,
     passwordSecure: string, // sent once over HTTPS to the server, never stored here
     onProgress?: (p: ConnectProgress) => void
-  ): Promise<boolean> {
+  ): Promise<ConnectOutcome> {
     // Only a real, signed-in account can connect.
     const headers = await authHeaders();
     if (!headers.Authorization) {
@@ -1202,6 +1224,8 @@ class TradingEngine {
     }
 
     this.mt5Account.status = 'connecting';
+    // A new attempt replaces an old "could not connect" notice.
+    if (this.pendingConnection?.kind === 'failed') this.pendingConnection = null;
     this.notify();
 
     // The server starts the connection in the background and we follow its progress.
@@ -1239,6 +1263,8 @@ class TradingEngine {
     const began = Date.now();
     let job = started.job;
     let missing = 0;
+    // The server also says whether it is still looking after a terminal for this client.
+    let lastPending: unknown = null;
     while (job && job.status === 'running') {
       onProgress?.({ stage: job.stage, label: job.label, percent: job.percent, elapsedSeconds: job.elapsedSeconds });
       if (Date.now() - began > GIVE_UP_MS) {
@@ -1250,11 +1276,23 @@ class TradingEngine {
         if (poll.ok) {
           const body = await poll.json().catch(() => ({} as any));
           job = body.job;
+          if (body.pending !== undefined) lastPending = body.pending;
           if (!job && ++missing >= 3) break;
         }
       } catch {
         // network blip: keep waiting
       }
+    }
+
+    if (job && job.status === 'background') {
+      // Not a failure: the terminal exists and the server keeps connecting it by itself.
+      // The dashboard follows it from here and shows the account as soon as it is ready.
+      this.mt5Account.status = 'connecting';
+      this.setPending(
+        lastPending ?? { kind: 'working', label: 'Getting your terminal ready…', login: accountNumber.trim(), server: brokerServer.trim() }
+      );
+      this.notify();
+      return 'background';
     }
 
     if (!job || job.status === 'failed') {
@@ -1272,6 +1310,7 @@ class TradingEngine {
     if (!c || c.isBrokerVerified !== true || c.isSimulated === true) {
       return fail('The broker could not verify this account. Nothing was connected.');
     }
+    this.pendingConnection = null; // connected: there is nothing left to wait for
     onProgress?.({ stage: 'done', label: 'Connected', percent: 100, elapsedSeconds: job.elapsedSeconds });
 
     // Start copying (the server checks that this user owns a verified account).
@@ -1332,12 +1371,13 @@ class TradingEngine {
 
     this.runRiskCheck();
     this.notify();
-    return true;
+    return 'connected';
   }
 
   /**
    * Syncs broker-verified accounts from the server. Administrators receive every client;
    * everyone else receives only their own account. Nothing else is trusted.
+   * A client whose terminal is still connecting (or could not) also learns that here.
    */
   public async syncClientsFromBackend(): Promise<void> {
     try {
@@ -1345,6 +1385,9 @@ class TradingEngine {
       if (!headers.Authorization) return; // demo / quick-start sessions have nothing to sync
 
       let clients: any[] = [];
+      // True when the answer is the signed-in user's own account (not a list for an administrator).
+      let own = false;
+      let pendingChanged = false;
       const all = await fetch('/api/trade/clients', { headers });
       if (all.ok) {
         const data = await all.json();
@@ -1353,7 +1396,10 @@ class TradingEngine {
         const mine = await fetch('/api/trade/my-account', { headers });
         if (!mine.ok) return;
         const data = await mine.json();
+        own = true;
         clients = data.connected && data.client ? [data.client] : [];
+        // Nothing is connected yet: the server may still be bringing a terminal up, or have given up on one.
+        pendingChanged = this.setPending(data.connected ? null : data.pending);
       }
 
       for (const c of clients) {
@@ -1396,9 +1442,12 @@ class TradingEngine {
           this.supervisedAccounts.push(mappedAcc);
         }
 
-        if (this.mt5Account.userId === c.userId) {
+        // Our own account answers for the signed-in user even after a page reload, when the in-memory
+        // account does not know the user id yet.
+        if (own || this.mt5Account.userId === c.userId) {
           this.mt5Account = {
             ...this.mt5Account,
+            userId: c.userId,
             accountNumber: mappedAcc.accountNumber,
             brokerServer: mappedAcc.brokerServer,
             status: mappedAcc.status,
@@ -1419,6 +1468,8 @@ class TradingEngine {
       }
       if (clients.length > 0) {
         this.masterAccount.activeCopiersCount = this.supervisedAccounts.length;
+        this.notify();
+      } else if (pendingChanged) {
         this.notify();
       }
     } catch {

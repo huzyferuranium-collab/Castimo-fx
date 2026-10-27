@@ -169,6 +169,11 @@ export async function setDoc(collection: string, id: string, data: Record<string
   await call('PATCH', `/${enc(collection)}/${enc(id)}`, { fields: toFsFields(data) });
 }
 
+/** Deletes a document. Deleting one that is already gone is not an error. */
+export async function deleteDoc(collection: string, id: string): Promise<void> {
+  await call('DELETE', `/${enc(collection)}/${enc(id)}`);
+}
+
 /** Creates a document only if it does not exist yet. Throws DocExistsError otherwise. */
 export async function createDoc(collection: string, id: string, data: Record<string, unknown>): Promise<void> {
   await call('PATCH', `/${enc(collection)}/${enc(id)}`, { fields: toFsFields(data) }, '?currentDocument.exists=false');

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { tradingEngine, CASTIMO_TREASURY_ADDRESS } from '../../services/tradingEngine';
 import { authHeaders } from '../../services/apiAuth';
+import { pendingNote, pendingAccountLine, type PendingConnectionView } from '../../services/pendingConnection';
 import {
   Mt5Account,
   CopiedTrade,
@@ -88,6 +89,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     };
   }, [userProfile?.uid]);
   const [account, setAccount] = useState<Mt5Account>(tradingEngine.getMt5Account());
+  // A connection the server is still looking after (or has given up on), so the client is never left guessing.
+  const [pending, setPending] = useState<PendingConnectionView | null>(tradingEngine.getPendingConnection());
   const [trades, setTrades] = useState<CopiedTrade[]>(tradingEngine.getTrades());
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -254,6 +257,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   useEffect(() => {
     const unsubscribe = tradingEngine.subscribe(() => {
       setAccount({ ...tradingEngine.getMt5Account() });
+      setPending(tradingEngine.getPendingConnection());
       setTrades([...tradingEngine.getTrades()]);
       setInvoices([...tradingEngine.getProfitInvoices()]);
     });
@@ -478,11 +482,19 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 shadow-2xs">
                   <span
                     className={`w-2.5 h-2.5 rounded-full ${
-                      isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400 dark:bg-slate-600'
+                      isConnected
+                        ? 'bg-emerald-500 animate-pulse'
+                        : pending?.kind === 'working'
+                          ? 'bg-blue-400 animate-pulse'
+                          : 'bg-slate-400 dark:bg-slate-600'
                     }`}
                   />
                   <span className="font-extrabold text-slate-900 dark:text-white text-xs">
-                    {isConnected ? `MT5 #${account.accountNumber}` : 'MT5 Account: Not Connected'}
+                    {isConnected
+                      ? `MT5 #${account.accountNumber}`
+                      : pending?.kind === 'working'
+                        ? 'MT5 Account: Connecting…'
+                        : 'MT5 Account: Not Connected'}
                   </span>
                   {isConnected ? (
                     <>
@@ -633,8 +645,62 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 </button>
               </div>
             )}
+            {/* The server is still bringing the client's terminal up: said calmly, nothing for the client to do */}
+            {!isConnected && pending?.kind === 'working' && (
+              <div
+                className="p-4 rounded-2xl bg-gradient-to-r from-blue-950/40 via-slate-900 to-slate-900 border border-blue-500/30 text-white flex items-start gap-3 shadow-md animate-in fade-in"
+                aria-live="polite"
+              >
+                <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/40 flex items-center justify-center text-blue-300 shrink-0 shadow-inner">
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="font-bold text-sm text-white">Your MT5 terminal is connecting</h4>
+                  <p className="text-xs text-slate-300 mt-0.5">{pending.label}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {pendingNote(pending)} You do not need to keep this page open: it updates by itself as soon as your account is ready.
+                  </p>
+                  {pendingAccountLine(pending) && (
+                    <p className="text-[11px] text-slate-500 font-mono mt-1 break-all">{pendingAccountLine(pending)}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* The server could not finish the connection: said kindly, with one clear next step */}
+            {!isConnected && pending?.kind === 'failed' && (
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-950/30 via-slate-900 to-slate-900 border border-rose-500/30 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md animate-in fade-in">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/40 flex items-center justify-center text-rose-300 shrink-0 shadow-inner">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-sm text-white">We could not finish connecting your account</h4>
+                    <p className="text-xs text-slate-300 mt-0.5">
+                      {pending.error?.message || 'Your trading terminal did not connect in time.'}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">{pendingNote(pending)}</p>
+                    {pendingAccountLine(pending) && (
+                      <p className="text-[11px] text-slate-500 font-mono mt-1 break-all">{pendingAccountLine(pending)}</p>
+                    )}
+                    {pending.error?.ref && (
+                      <p className="text-[10px] text-slate-600 font-mono mt-0.5">Reference: {pending.error.ref}</p>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={openConnect}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer shrink-0"
+                >
+                  <Server className="w-4 h-4" />
+                  <span>Try again</span>
+                </button>
+              </div>
+            )}
+
             {/* Prompt for clients when MT5 is not yet connected (the only Connect button on this page) */}
-            {!isConnected && (
+            {!isConnected && !pending && (
               <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/30 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md animate-in fade-in">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">

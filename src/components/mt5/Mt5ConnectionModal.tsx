@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { tradingEngine, ConnectError, type ConnectProgress } from '../../services/tradingEngine';
 import { KeyRound, Server, CheckCircle2, Lock, AlertTriangle, ArrowRight, Eye, EyeOff, Loader2, Circle } from 'lucide-react';
 
@@ -52,8 +52,21 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
   const [errorRef, setErrorRef] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [progress, setProgress] = useState<ConnectProgress | null>(null);
+  // The broker is slow: the server keeps connecting the terminal and the dashboard follows it.
+  const [background, setBackground] = useState(false);
+
+  // Opening the window again starts fresh (unless a connection is still running in it).
+  useEffect(() => {
+    if (isOpen && !isConnecting) setBackground(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const closeAndReset = () => {
+    setBackground(false);
+    onClose();
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,9 +85,14 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
         throw new Error('Please enter your trading password.');
       }
 
-      await tradingEngine.connectMt5Account(userId, accountNumber.trim(), brokerServer.trim(), password, setProgress);
+      const outcome = await tradingEngine.connectMt5Account(userId, accountNumber.trim(), brokerServer.trim(), password, setProgress);
       // Password is immediately discarded from memory
       setPassword('');
+      if (outcome === 'background') {
+        // Not a failure: the server carries on and the dashboard shows the account as soon as it is ready.
+        setBackground(true);
+        return;
+      }
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
@@ -105,13 +123,32 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
             </div>
             <h3 className="font-bold text-base text-white">Connect your MT5 account</h3>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg transition" aria-label="Close">
+          <button onClick={closeAndReset} className="text-slate-400 hover:text-white p-1 rounded-lg transition" aria-label="Close">
             ✕
           </button>
         </div>
 
         <div className="p-5">
-          {success ? (
+          {background ? (
+            <div className="py-5 text-center space-y-3" aria-live="polite">
+              <div className="w-14 h-14 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/40 flex items-center justify-center mx-auto">
+                <Loader2 className="w-7 h-7 animate-spin" />
+              </div>
+              <h4 className="text-base font-bold text-white">Still connecting, no need to wait</h4>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Your trading terminal is taking a little longer to connect with your broker. We will keep going in the
+                background, and your dashboard will update by itself when it is ready.
+              </p>
+              <p className="text-[11px] text-slate-500">Your password was sent securely and is not kept on this page.</p>
+              <button
+                type="button"
+                onClick={closeAndReset}
+                className="w-full py-3 px-4 rounded-xl bg-blue-500 hover:bg-blue-400 font-semibold text-sm text-white transition cursor-pointer"
+              >
+                Got it
+              </button>
+            </div>
+          ) : success ? (
             <div className="py-6 text-center space-y-3">
               <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-8 h-8" />
@@ -220,7 +257,8 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                     })}
                   </ul>
                   <p className="text-[11px] text-slate-400">
-                    This usually takes under a minute but can take up to three, depending on your broker. Please keep this window open.
+                    This usually takes under a minute, but some brokers need a few minutes. You can close this window at any
+                    time: we keep connecting in the background and your dashboard updates by itself.
                   </p>
                 </div>
               )}

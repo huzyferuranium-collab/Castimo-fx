@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import {
   connectClient,
   ConnectJobs,
+  HandedOff,
+  ProvisionGate,
   StageTimeoutError,
   friendlyHint,
+  pendingFor,
   type BrokerGateway,
   type BridgeDeps,
   type Stage,
@@ -42,6 +45,7 @@ function makeFake(b: Behaviour = {}) {
   const accounts = [...(b.existing || [])];
   const never = () => new Promise<never>(() => {});
   let createN = 0;
+  let made = 0;
   let infoAsks = 0;
 
   const gateway: BrokerGateway = {
@@ -55,13 +59,14 @@ function makeFake(b: Behaviour = {}) {
       const queued = b.createErrors?.[createN++];
       if (queued) throw queued;
       if (b.createError) throw b.createError;
+      const id = made++ === 0 ? 'acc-new' : `acc-new-${made}`;
       if (b.createdButSlow) {
-        accounts.push({ id: 'acc-new', name: p.name, login: p.login, server: p.server });
+        accounts.push({ id, name: p.name, login: p.login, server: p.server });
         return never();
       }
       if (b.createHangs) return never();
-      accounts.push({ id: 'acc-new', name: p.name, login: p.login, server: p.server });
-      return { id: 'acc-new' };
+      accounts.push({ id, name: p.name, login: p.login, server: p.server });
+      return { id };
     },
     async getAccount(id) {
       const a = accounts.find((x) => x.id === id)!;
@@ -78,6 +83,8 @@ function makeFake(b: Behaviour = {}) {
         async snapshot() {
           return { state: 'DEPLOYED', connectionStatus: 'DISCONNECTED' };
         },
+        async deploy() {},
+        async redeploy() {},
         rpc: () => ({
           async connect() {
             if (b.connectError) throw b.connectError;
@@ -88,12 +95,15 @@ function makeFake(b: Behaviour = {}) {
           async getAccountInformation() {
             if (b.infoHangs) return never();
             if (b.infoFailsFirst && infoAsks++ < b.infoFailsFirst) throw new Error('Terminal is not connected to broker yet');
-            return b.info === undefined ? GOOD_INFO : b.info;
+            return b.info === undefined ? { ...GOOD_INFO, login: Number(a.login) } : b.info;
           },
           raw: { rpc: true },
         }),
         raw: { entity: id },
       };
+    },
+    async findAccount(id) {
+      return accounts.some((x) => x.id === id) ? gateway.getAccount(id) : null;
     },
     async removeAccount(id) {
       calls.remove.push(id);
@@ -114,7 +124,7 @@ function deps(fake: ReturnType<typeof makeFake>, over: Partial<BridgeDeps> = {})
     linkedToOtherUser: () => false,
     limits: { maxTotal: 5, maxPerUser: 1, minEquity: 200 },
     timeouts: fast,
-    log: (l, m) => logs.push(`${l}:${m}`),
+    log: (l: string, m: string) => logs.push(`${l}:${m}`),
     logs,
     ...over,
   } as any;
@@ -631,4 +641,378 @@ test('StageTimeoutError carries the stage', () => {
   const e = new StageTimeoutError('syncing');
   assert.equal(e.stage, 'syncing');
   assert.equal(e.name, 'StageTimeoutError');
+});
+
+// ---------- the gate: a queue for busy moments, and claims on the limited account slots ----------
+
+test('the gate lets only N through at once and hands slots over in order', async () => {
+  const gate = new ProvisionGate(2);
+  const order: string[] = [];
+  const releases: Array<() => void> = [];
+  let running = 0;
+  let peak = 0;
+  const job = (name: string) =>
+    gate.run(
+      async () => {
+        running++;
+        peak = Math.max(peak, running);
+        order.push(`start ${name}`);
+        await new Promise<void>((r) => releases.push(r));
+        running--;
+        order.push(`end ${name}`);
+      },
+      () => order.push(`wait ${name}`)
+    );
+  const all = ['a', 'b', 'c', 'd'].map(job);
+  await tick();
+  assert.deepEqual(order, ['start a', 'start b', 'wait c', 'wait d']);
+  releases[0]();
+  await tick();
+  assert.deepEqual(order.slice(4), ['end a', 'start c']);
+  releases[1]();
+  await tick();
+  assert.deepEqual(order.slice(6), ['end b', 'start d']);
+  releases[2]();
+  releases[3]();
+  await Promise.all(all);
+  assert.equal(peak, 2);
+});
+
+test('a task that fails still hands its slot on; 0 means no limit', async () => {
+  const gate = new ProvisionGate(1);
+  const p1 = gate.run(async () => {
+    throw new Error('boom');
+  });
+  const p2 = gate.run(async () => 'ok');
+  await assert.rejects(p1, /boom/);
+  assert.equal(await p2, 'ok');
+
+  const open = new ProvisionGate(0);
+  let waited = 0;
+  await Promise.all([1, 2, 3, 4, 5].map(() => open.run(async () => tick(2), () => waited++)));
+  assert.equal(waited, 0);
+});
+
+test('capacity claims count other users until their terminal shows in the list', () => {
+  const gate = new ProvisionGate(3);
+  gate.reserve('u1');
+  gate.reserve('u2');
+  assert.equal(gate.pendingClaimsOf('u1', []), 1, "only the other user's claim counts");
+  gate.attach('u2', 'acc-2');
+  assert.equal(gate.pendingClaimsOf('u1', []), 1, 'not listed yet, still counts');
+  assert.equal(gate.pendingClaimsOf('u1', [{ id: 'acc-2' }]), 0, 'listed: counted by the list, not twice');
+  gate.release('u2');
+  assert.equal(gate.pendingClaimsOf('u1', []), 0);
+});
+
+function slowCreate(f: ReturnType<typeof makeFake>, ms: number) {
+  const original = f.gateway.createAccount;
+  f.gateway.createAccount = async (p) => {
+    await tick(ms);
+    return original(p);
+  };
+}
+
+const OTHER = { userId: 'user-BBB222', login: '22222222', password: 'Other!pw1', server: 'Exness-MT5Real9' };
+const roomy = { ...fast, createSeconds: 2, deploySeconds: 2, connectSeconds: 2, syncSeconds: 2, infoSeconds: 2 };
+
+test('two clients racing for the last account slot: the second is told kindly, not given a free account', async () => {
+  const f = makeFake();
+  slowCreate(f, 40);
+  const d = deps(f, { gate: new ProvisionGate(3), limits: { maxTotal: 1, maxPerUser: 1, minEquity: 200 }, timeouts: roomy });
+  const first = connectClient(d, input);
+  await tick(10);
+  const e = await failure(connectClient(d, OTHER));
+  assert.equal(e.code, 'CAPACITY');
+  await first;
+  assert.equal(f.calls.create.length, 1, 'only one account was ever created');
+  // once the first exists, MetaApi's own list holds the slot
+  assert.equal((await failure(connectClient(d, OTHER))).code, 'CAPACITY');
+  assert.equal(f.calls.create.length, 1);
+});
+
+test('a failed attempt gives its slot back', async () => {
+  const gate = new ProvisionGate(3);
+  const f = makeFake({ createError: Object.assign(new Error('Authentication failed'), { details: { code: 'E_AUTH' } }) });
+  await failure(connectClient(deps(f, { gate, limits: { maxTotal: 1, maxPerUser: 1, minEquity: 200 } }), input));
+  assert.equal(gate.pendingClaimsOf('someone-else', []), 0);
+});
+
+test('a connection that has to wait its turn says so, then carries on', async () => {
+  const f = makeFake();
+  slowCreate(f, 30);
+  const d = deps(f, { gate: new ProvisionGate(1), timeouts: roomy });
+  const a = connectClient(d, input);
+  await tick(5);
+  const stages: Stage[] = [];
+  const b = connectClient(d, OTHER, (s) => stages.push(s));
+  const [ra, rb] = await Promise.all([a, b]);
+  assert.deepEqual(stages, ['checking', 'queued', 'creating', 'deploying', 'syncing', 'verifying']);
+  assert.equal(ra.account.id, 'acc-new');
+  assert.equal(rb.account.id, 'acc-new-2');
+});
+
+test('after waiting in line the limit is checked again against a fresh list', async () => {
+  const f = makeFake();
+  slowCreate(f, 40);
+  const d = deps(f, { gate: new ProvisionGate(1), limits: { maxTotal: 2, maxPerUser: 1, minEquity: 200 }, timeouts: roomy });
+  const a = connectClient(d, input);
+  await tick(5);
+  const b = connectClient(d, OTHER); // passes the first check: 0 listed + 1 claim < 2, then waits in line
+  await tick(5);
+  // someone else's account appears in MetaApi while B waits
+  f.accounts.push({ id: 'x', name: 'CastimoFX Client user-CCC333 #55555555', login: '55555555', server: 'Exness-MT5Real9' });
+  await a;
+  const e = await failure(b);
+  assert.equal(e.code, 'CAPACITY');
+  assert.equal(f.calls.create.length, 1);
+});
+
+test('a terminal cleared to make room does not count against the limit', async () => {
+  const removed: string[] = [];
+  const f = makeFake({ existing: [OLD] });
+  const r = await connectClient(
+    deps(f, { limits: { maxTotal: 1, maxPerUser: 1, minEquity: 200 }, onTerminalRemoved: (x) => { removed.push(x.accountId); } }),
+    input
+  );
+  assert.deepEqual(removed, ['acc-a']);
+  assert.equal(r.account.id, 'acc-new');
+});
+
+// ---------- hooks, reconnects and kept terminals ----------
+
+test('the terminal hook fires for new and resumed terminals, and a failing hook never fails the connection', async () => {
+  const events: any[] = [];
+  const f = makeFake();
+  const r = await connectClient(
+    deps(f, { onTerminalCreated: (e) => { events.push(e); throw new Error('store down'); } }),
+    input
+  );
+  assert.equal(r.account.id, 'acc-new');
+  assert.deepEqual(events, [
+    { userId: 'user-AAA111', accountId: 'acc-new', login: '81986889', server: 'Exness-MT5Real9', resumed: false, previouslyVerified: false },
+  ]);
+
+  const mine = { id: 'acc-me', name: 'CastimoFX Client user-AAA111 #81986889', login: '81986889', server: 'Exness-MT5Real9' };
+  const f2 = makeFake({ existing: [mine] });
+  const r2 = await connectClient(
+    deps(f2, { wasVerified: async () => true, onTerminalCreated: (e) => { events.push(e); } }),
+    input
+  );
+  assert.equal(r2.resumed, true);
+  assert.equal(r2.previouslyVerified, true);
+  assert.equal(events[1].resumed, true);
+  assert.equal(events[1].previouslyVerified, true);
+  assert.equal(events[1].accountId, 'acc-me');
+});
+
+test('a client verified on this terminal before is reconnected even below the minimum equity; a new one is not', async () => {
+  const mine = { id: 'acc-me', name: 'CastimoFX Client user-AAA111 #81986889', login: '81986889', server: 'Exness-MT5Real9' };
+  const low = { ...GOOD_INFO, equity: 120, balance: 120 };
+
+  const f1 = makeFake({ existing: [mine], info: low });
+  const e = await failure(connectClient(deps(f1), input));
+  assert.equal(e.code, 'MIN_EQUITY');
+  assert.equal(e.accountId, undefined, 'a final refusal names no kept terminal');
+
+  const f2 = makeFake({ existing: [mine], info: low });
+  const r = await connectClient(deps(f2, { wasVerified: async (u, id) => u === 'user-AAA111' && id === 'acc-me' }), input);
+  assert.equal(r.previouslyVerified, true);
+  assert.equal(r.verified.equity, 120);
+
+  // if the lookup itself fails, an explicit connect stays on the strict side
+  const f3 = makeFake({ existing: [mine], info: low });
+  const e3 = await failure(connectClient(deps(f3, { wasVerified: async () => { throw new Error('db down'); } }), input));
+  assert.equal(e3.code, 'MIN_EQUITY');
+
+  // even a reconnect must still pass the broker's own checks (here: investor password)
+  const f4 = makeFake({ existing: [mine], info: { ...GOOD_INFO, investorMode: true } });
+  const e4 = await failure(connectClient(deps(f4, { wasVerified: async () => true }), input));
+  assert.equal(e4.code, 'TRADING_NOT_ALLOWED');
+});
+
+test('a slow failure keeps the terminal and names it, so it can finish in the background', async () => {
+  const f = makeFake({ deployHangs: true });
+  const e = await failure(connectClient(deps(f), input));
+  assert.equal(e.code, 'BROKER_SLOW');
+  assert.equal(e.accountId, 'acc-new');
+  assert.equal(f.calls.remove.length, 0);
+
+  // a resumed terminal is named too
+  const mine = { id: 'acc-me', name: 'CastimoFX Client user-AAA111 #81986889', login: '81986889', server: 'Exness-MT5Real9' };
+  const f2 = makeFake({ existing: [mine], syncHangs: true, infoHangs: true });
+  const e2 = await failure(connectClient(deps(f2), input));
+  assert.equal(e2.accountId, 'acc-me');
+});
+
+test('a final refusal removes the new terminal, tells the hook, and names none', async () => {
+  const removed: string[] = [];
+  const f = makeFake({ info: { ...GOOD_INFO, equity: 50, balance: 50 } });
+  const e = await failure(connectClient(deps(f, { onTerminalRemoved: (x) => { removed.push(x.accountId); } }), input));
+  assert.equal(e.code, 'MIN_EQUITY');
+  assert.equal(e.accountId, undefined);
+  assert.deepEqual(removed, ['acc-new']);
+  assert.deepEqual(f.calls.remove, ['acc-new']);
+});
+
+test('translateBrokerError: broker settings still being detected is a wait, not a wrong password', () => {
+  const e = translateBrokerError(
+    Object.assign(new Error('Failed to detect broker server time zone, retry later'), { details: { code: 'E_SERVER_TIMEZONE' } }),
+    { login: '1', server: 'S' }
+  );
+  assert.equal(e.code, 'BROKER_SLOW');
+  assert.equal(e.ref, 'BROKER_SETTINGS_DETECTION');
+  assert.doesNotMatch(e.message, /password/i);
+});
+
+// ---------- jobs that carry on in the background ----------
+
+test('a job whose terminal carries on in the background shows a calm state, not a failure', async () => {
+  const jobs = new ConnectJobs();
+  jobs.start('u1', { login: '1', server: 's' }, async (report) => {
+    report('deploying');
+    throw new HandedOff('still going', { stage: 'deploying', ref: 'TIMEOUT_DEPLOYING', detail: 'terminal state=DEPLOYED, broker connection=DISCONNECTED' });
+  });
+  await tick();
+  const j = jobs.get('u1')!;
+  assert.equal(j.status, 'background');
+  assert.equal(j.stage, 'background');
+  assert.equal(j.percent, 50, 'keeps the progress it had reached');
+  assert.match(j.message!, /do not need to wait/i);
+  assert.equal(j.error, undefined);
+  const [f] = jobs.recentFailures();
+  assert.equal(f.background, true);
+  assert.equal(f.code, 'BACKGROUND');
+  assert.equal(f.ref, 'TIMEOUT_DEPLOYING');
+  assert.match(f.raw, /DISCONNECTED/);
+  // and pressing Connect again is allowed
+  assert.equal(jobs.start('u1', { login: '1', server: 's' }, async () => ({})).started, true);
+});
+
+test('at the overall time limit a job that can carry on goes to the background; otherwise it fails', async () => {
+  const jobs = new ConnectJobs({ maxRunMs: 20, canContinueInBackground: (u) => u === 'u1' });
+  jobs.start('u1', { login: '1', server: 's' }, () => new Promise(() => {}));
+  jobs.start('u2', { login: '2', server: 's' }, () => new Promise(() => {}));
+  await tick(60);
+  assert.equal(jobs.get('u1')!.status, 'background');
+  assert.equal(jobs.get('u2')!.status, 'failed');
+  assert.equal(jobs.get('u2')!.error!.code, 'BROKER_SLOW');
+});
+
+test('a late success after the time limit still turns the job green', async () => {
+  const jobs = new ConnectJobs({ maxRunMs: 20 });
+  let finish!: (v: any) => void;
+  jobs.start('u1', { login: '1', server: 's' }, () => new Promise((r) => (finish = r)));
+  await tick(60);
+  assert.equal(jobs.get('u1')!.status, 'failed');
+  finish({ fine: true });
+  await tick();
+  const j = jobs.get('u1')!;
+  assert.equal(j.status, 'done');
+  assert.equal(j.error, undefined);
+  assert.deepEqual(j.result, { fine: true });
+});
+
+test('a late failure after the time limit changes nothing', async () => {
+  const jobs = new ConnectJobs({ maxRunMs: 20, canContinueInBackground: () => true });
+  let fail!: (e: any) => void;
+  jobs.start('u1', { login: '1', server: 's' }, () => new Promise((_, rej) => (fail = rej)));
+  await tick(60);
+  assert.equal(jobs.get('u1')!.status, 'background');
+  fail(new BrokerVerificationError('BROKER_AUTH_FAILED', 'Rejected.'));
+  await tick();
+  assert.equal(jobs.get('u1')!.status, 'background');
+});
+
+test('the admin sees how long each step took', async () => {
+  let now = 1_000_000;
+  const jobs = new ConnectJobs({ now: () => now });
+  jobs.start('user-AAA111', { login: '81986889', server: 'S' }, async (report) => {
+    report('checking');
+    now += 2000;
+    report('creating');
+    now += 10_000;
+    report('deploying');
+    now += 30_000;
+    return {};
+  });
+  await tick();
+  const [s] = jobs.recentSuccesses();
+  assert.equal(s.totalSeconds, 42);
+  assert.deepEqual(s.timings, { queued: 0, checking: 2, creating: 10, deploying: 30 });
+  assert.equal(s.user, 'use…111');
+  assert.equal(s.login, '81986889');
+});
+
+test('failures also carry the step timings, so the slow step is visible', async () => {
+  let now = 5_000_000;
+  const jobs = new ConnectJobs({ now: () => now });
+  jobs.start('user-AAA111', { login: '1', server: 'S' }, async (report) => {
+    report('syncing');
+    now += 90_000;
+    throw new BrokerVerificationError('BROKER_SLOW', 'Slow.');
+  });
+  await tick();
+  const [f] = jobs.recentFailures();
+  assert.equal(f.timings!.syncing, 90);
+});
+
+// ---------- the MetaApi adapter, second part ----------
+
+test('the MetaApi adapter lists terminal status, finds missing terminals, restarts, and tolerates removing what is already gone', async () => {
+  const calls: string[] = [];
+  const notFound = Object.assign(new Error('Trading account gone not found'), { name: 'NotFoundError', status: 404 });
+  const entity = {
+    id: 'a1', name: 'n', login: '1', server: 'S', state: 'DEPLOYED', connectionStatus: 'DISCONNECTED',
+    async deploy() { calls.push('deploy'); },
+    async redeploy() { calls.push('redeploy'); },
+    async remove() { calls.push('remove'); },
+    async reload() {},
+    getRPCConnection() {
+      return { connect: async () => {}, waitSynchronized: async () => {}, getAccountInformation: async () => GOOD_INFO, close: async () => { calls.push('close'); } };
+    },
+  };
+  const api = {
+    metatraderAccountApi: {
+      getAccountsWithInfiniteScrollPagination: async () => [{ id: 'a1', name: 'n', login: '1', server: 'S', state: 'DEPLOYED', connectionStatus: 'DISCONNECTED' }],
+      getAccount: async (id: string) => {
+        if (id === 'gone') throw notFound;
+        if (id === 'broken') throw Object.assign(new Error('boom'), { status: 500 });
+        return entity;
+      },
+      createAccount: async () => ({ id: 'x' }),
+    },
+  };
+  const gw = metaApiGateway(api as any);
+  assert.deepEqual(await gw.listAccounts(), [{ id: 'a1', name: 'n', login: '1', server: 'S', state: 'DEPLOYED', connectionStatus: 'DISCONNECTED' }]);
+  assert.equal(await gw.findAccount('gone'), null);
+  await assert.rejects(gw.findAccount('broken'), /boom/, 'a failing lookup is not the same as "gone"');
+  const h = (await gw.findAccount('a1'))!;
+  assert.equal(h.state, 'DEPLOYED');
+  assert.equal(h.connectionStatus, 'DISCONNECTED');
+  await h.redeploy();
+  await h.deploy();
+  await h.rpc().close!();
+  await gw.removeAccount('gone');
+  await assert.rejects(gw.removeAccount('broken'), /boom/);
+  await gw.removeAccount('a1');
+  assert.deepEqual(calls, ['redeploy', 'deploy', 'close', 'remove']);
+});
+
+test('a client who reloads while connecting is told so; the supervisor\'s report wins; finished jobs add nothing', () => {
+  const watching = { kind: 'working' as const, label: 'Waiting for your broker to accept the terminal…', login: '1', server: 'S' };
+  // the supervisor already looks after the terminal: its report is used as it is
+  assert.equal(pendingFor(watching, { status: 'running', label: 'Starting…' }), watching);
+  // the connection is still running in the foreground and no terminal is remembered yet
+  assert.deepEqual(pendingFor(null, { status: 'running', label: 'Checking your details…' }), { kind: 'working', label: 'Checking your details…' });
+  assert.deepEqual(pendingFor(undefined, { status: 'running', label: 'Starting…' }), { kind: 'working', label: 'Starting…' });
+  // nothing to say once a job is over (the supervisor, not the job, speaks for background and failed ones)
+  for (const status of ['done', 'failed', 'background'] as const) {
+    assert.equal(pendingFor(null, { status, label: 'x' }), null);
+  }
+  assert.equal(pendingFor(null, null), null);
+  assert.equal(pendingFor(undefined, undefined), null);
+  // a remembered failure is still reported even if an old job is gone
+  const failed = { kind: 'failed' as const, label: 'Could not connect' };
+  assert.equal(pendingFor(failed, null), failed);
 });

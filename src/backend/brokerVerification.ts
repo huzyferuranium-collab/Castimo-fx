@@ -31,6 +31,8 @@ export class BrokerVerificationError extends Error {
   stage?: string;
   /** Technical detail for the administrator only (never shown to clients). */
   detail?: string;
+  /** Set when the client's terminal exists and was kept (the failure was not final), so it can be finished in the background. */
+  accountId?: string;
   constructor(code: BrokerErrorCode, message: string) {
     super(message);
     this.name = 'BrokerVerificationError';
@@ -224,6 +226,17 @@ export function translateBrokerError(
     const busy = new BrokerVerificationError('BROKER_SLOW', 'Our verification service is busy. Please try again in a minute.');
     busy.ref = 'RATE_LIMITED';
     return busy;
+  }
+
+  // MetaApi is still detecting the broker's server settings (time zone, DST). It says "retry later": a busy
+  // moment on the first connection to a new server, never a wrong password and never the client's doing.
+  if (code === 'E_SERVER_TIMEZONE' || /server time ?zone|broker settings detection|detect(ing)? (the )?broker('s)? settings/i.test(msg)) {
+    const detecting = new BrokerVerificationError(
+      'BROKER_SLOW',
+      "Your broker's settings are still being set up on our side. This can take a few minutes the first time for a server. Nothing is lost, so please try again in a minute or two."
+    );
+    detecting.ref = 'BROKER_SETTINGS_DETECTION';
+    return detecting;
   }
 
   if (msg.includes('.dat file for server') || code === 'E_SRV_NOT_FOUND') {

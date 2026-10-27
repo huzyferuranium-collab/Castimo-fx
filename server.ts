@@ -17,6 +17,8 @@ import { Mt5ConnectionManager } from './src/backend/MT5_CONNECTION_MANAGER';
 import { ReplicationEngine } from './src/backend/REPLICATION_ENGINE';
 import { BillingService } from './src/backend/billing';
 import { saveClientRecord, loadSavedStatus } from './src/backend/clientStore';
+import { getDoc, setDoc, deleteDoc, listAll, isFirestoreAdminConfigured } from './src/backend/firestoreAdmin';
+import { firestoreConnectionStore, verifiedTerminalLookup } from './src/backend/connectionStore';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -117,6 +119,13 @@ async function startServer() {
         const connectionManager = Mt5ConnectionManager.getInstance();
         connectionManager.onClientSaved = (rec) => void saveClientRecord(rec).catch((e) => console.warn('[STORE] save failed:', e?.message));
         connectionManager.loadSavedStatus = loadSavedStatus;
+        if (isFirestoreAdminConfigured()) {
+          // Unfinished connections are remembered, so a restart (every deploy) never loses one.
+          connectionManager.setConnectionStore(firestoreConnectionStore({ getDoc, setDoc, deleteDoc, listAll }));
+          connectionManager.wasVerified = verifiedTerminalLookup((uid) => getDoc('mt5_accounts', uid));
+        } else {
+          console.warn('⚠️ [SERVER] FIREBASE_SERVICE_ACCOUNT is not set: unfinished connections cannot be remembered across restarts.');
+        }
         await connectionManager.initialize();
 
         const replicationEngine = ReplicationEngine.getInstance();

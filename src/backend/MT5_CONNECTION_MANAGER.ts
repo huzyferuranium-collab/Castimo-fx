@@ -16,9 +16,11 @@ import MetaApi, {
   type StreamingMetaApiConnectionInstance,
   type RpcMetaApiConnectionInstance,
 } from './metaapiClient';
-import { connectClient, type BridgeDeps, type Stage } from './clientBridge';
+import { connectClient, HandedOff, ProvisionGate, type BridgeDeps, type Stage } from './clientBridge';
 import { metaApiGateway } from './metaApiGateway';
 import { checkClientHealth, newHealthState, type HealthState } from './clientHealth';
+import { TerminalSupervisor, type VerifiedClient } from './terminalSupervisor';
+import { MemoryConnectionStore, type ConnectionStore } from './connectionStore';
 import {
   BrokerVerificationError,
   clientAccountName,
@@ -30,10 +32,8 @@ import {
   pickServerAlias,
   countClientAccounts,
   readLimit,
-  parseClientAccountName,
-  verifyBrokerAccountInfo,
-  checkConnectEligibility,
   DEFAULT_MIN_CONNECT_EQUITY,
+  type VerifiedBrokerAccount,
 } from './brokerVerification';
 
 /** Rejects if the promise takes longer than ms. */
@@ -160,7 +160,23 @@ export class Mt5ConnectionManager {
   public loadSavedStatus: ((userId: string) => Promise<'ACTIVE' | 'IDLE' | null>) | null = null;
   /** True if the user has billing history; their terminals are then never cleaned up automatically. */
   public hasBillingHistory: ((userId: string) => Promise<boolean>) | null = null;
+  /**
+   * Whether this very terminal was verified for the user in the past, according to what we saved:
+   * 'yes', 'no' (sure it was not), or 'unknown'. Anyone in doubt is treated as already connected.
+   */
+  public wasVerified: ((userId: string, accountId: string) => Promise<'yes' | 'no' | 'unknown'>) | null = null;
+  /** Called once when a NEW connection completes (from the browser or in the background). */
+  public onNewConnection: ((userId: string) => void) | null = null;
   private lastLazyRestore = new Map<string, number>();
+
+  /** Looks after terminals that are not yet (or no longer) a verified, live connection. */
+  private supervisor: TerminalSupervisor | null = null;
+  /** Where unfinished connections are remembered, so a restart loses nothing. Memory-only until set. */
+  private connectionStore: ConnectionStore = new MemoryConnectionStore();
+  /** Keeps a burst of clients from overloading MetaApi and from overshooting the account limit. */
+  private provisionGate = new ProvisionGate(readLimit(process.env.CONNECT_MAX_PARALLEL, 3));
+  /** Users whose connection, started from the browser, is running right now. */
+  private connecting = new Set<string>();
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectIntervalMs = 5000;
@@ -299,8 +315,9 @@ export class Mt5ConnectionManager {
       }
 
       this.startHeartbeatMonitor();
-      // Bring back clients that were connected before a restart (their MetaApi accounts still exist).
-      void this.rehydrateClients();
+      // Bring back clients that were connected before a restart, and carry on with any connection that was
+      // still in progress (their MetaApi terminals still exist and their records were saved).
+      void this.startSupervisor();
       return true;
     } catch (error: any) {
       console.error('❌ [MT5_CONNECTION_MANAGER] Initialization failed:', error?.message || error);
@@ -552,6 +569,9 @@ export class Mt5ConnectionManager {
    * Connects a client's broker account. The pipeline itself lives in clientBridge.ts (and is tested with
    * a fake broker); this method supplies the live MetaApi connection and the platform's own rules, then
    * puts the broker-verified account into the copy pool.
+   *
+   * If the terminal is still starting when the browser's patience runs out, it is handed to the supervisor
+   * (terminalSupervisor.ts) to finish in the background, and the caller receives a HandedOff instead of a failure.
    */
   public async provisionClientTerminal(
     params: ProvisionClientParams,
@@ -590,6 +610,7 @@ export class Mt5ConnectionManager {
       return current;
     }
     const secs = (name: string, fallback: number) => readLimit(process.env[name], fallback) || fallback;
+    const sup = this.supervisor;
 
     const deps: BridgeDeps = {
       gateway: metaApiGateway(this.api as any),
@@ -602,12 +623,22 @@ export class Mt5ConnectionManager {
         return rec && rec.isBrokerVerified && !rec.isSimulated ? { login: rec.login, server: rec.server } : null;
       },
       hasBillingHistory: async (uid) => (this.hasBillingHistory ? this.hasBillingHistory(uid) : false),
+      // A client verified on this very terminal before is being reconnected, not connecting for the first time.
+      wasVerified: async (uid, accountId) => (this.wasVerified ? (await this.wasVerified(uid, accountId)) === 'yes' : false),
       // An account that another user already linked cannot be linked again.
       linkedToOtherUser: (login, server, uid) => {
         for (const rec of this.clientPool.values()) {
           if (rec.userId !== uid && sameLogin(rec.login, login) && eq(rec.server, server)) return true;
         }
         return false;
+      },
+      gate: this.provisionGate,
+      // From the moment the terminal exists it is remembered, so a restart (or a slow broker) never loses it.
+      onTerminalCreated: async (e) => {
+        await sup?.track({ userId: e.userId, accountId: e.accountId, login: e.login, server: e.server, verifiedBefore: e.previouslyVerified });
+      },
+      onTerminalRemoved: async (e) => {
+        await sup?.untrack(e.userId, e.accountId);
       },
       limits: {
         // Cost guard: MetaApi charges per account, so limits are set by you (0 = no limit).
@@ -617,8 +648,8 @@ export class Mt5ConnectionManager {
       },
       timeouts: {
         createSeconds: secs('CONNECT_CREATE_WAIT_SECONDS', 120),
-        deploySeconds: secs('CONNECT_DEPLOY_WAIT_SECONDS', 180),
-        syncSeconds: secs('CONNECT_SYNC_WAIT_SECONDS', 120),
+        deploySeconds: secs('CONNECT_DEPLOY_WAIT_SECONDS', 120),
+        syncSeconds: secs('CONNECT_SYNC_WAIT_SECONDS', 90),
       },
       log: (level, msg) => {
         const line = `[CLIENT_BRIDGE] ${msg}`;
@@ -628,45 +659,144 @@ export class Mt5ConnectionManager {
       },
     };
 
-    const r = await connectClient(
-      deps,
-      { userId, login: params.login, password: params.password, server: params.server, platform, magic, region, reliability },
-      onStage
-    );
+    // A new attempt replaces an old "could not connect" notice.
+    await sup?.clearFailure(userId).catch(() => undefined);
 
+    this.connecting.add(userId);
+    try {
+      const r = await connectClient(
+        deps,
+        { userId, login: params.login, password: params.password, server: params.server, platform, magic, region, reliability },
+        onStage
+      );
+
+      // Someone reconnecting keeps the copy on/off choice they made before; a new connection starts ON.
+      const saved = r.previouslyVerified ? ((await this.loadSavedStatus?.(userId).catch(() => null)) ?? 'ACTIVE') : 'ACTIVE';
+      const record = this.buildClientRecord({
+        userId,
+        accountId: r.account.id,
+        login: String(params.login).trim(),
+        server: r.server,
+        status: saved,
+        account: r.account.raw,
+        rpc: r.rpc.raw,
+        verified: r.verified,
+      });
+      this.registerClient(record);
+      this.onClientVerified?.(record);
+      if (!r.previouslyVerified) this.onNewConnection?.(userId);
+      await sup?.untrack(userId, r.account.id);
+      console.log(
+        `✅ [CLIENT_BRIDGE] Broker verified #${record.login}: ${r.verified.brokerName} (${r.verified.accountType}), equity $${r.verified.equity.toFixed(2)}${r.resumed ? ' [resumed]' : ''}`
+      );
+      return record;
+    } catch (error) {
+      throw await this.handOffIfSlow(userId, error);
+    } finally {
+      this.connecting.delete(userId);
+    }
+  }
+
+  /** The record that goes into the copy pool once the broker has answered for the account. */
+  private buildClientRecord(a: {
+    userId: string;
+    accountId: string;
+    login: string;
+    server: string;
+    status: 'ACTIVE' | 'IDLE';
+    account: unknown;
+    rpc: unknown;
+    verified: VerifiedBrokerAccount;
+  }): ClientConnectionRecord {
     const now = new Date().toISOString();
-    const record: ClientConnectionRecord = {
-      userId,
-      accountId: r.account.id,
-      login: String(params.login).trim(),
-      server: r.server,
-      status: 'ACTIVE',
-      account: r.account.raw as MetatraderAccount,
-      rpcConnection: r.rpc.raw as RpcMetaApiConnectionInstance,
-      balance: r.verified.balance,
-      equity: r.verified.equity,
-      freeMargin: r.verified.freeMargin,
-      currency: r.verified.currency,
-      leverage: r.verified.leverage,
+    return {
+      userId: a.userId,
+      accountId: a.accountId,
+      login: a.login,
+      server: a.server,
+      status: a.status,
+      account: a.account as MetatraderAccount,
+      rpcConnection: a.rpc as RpcMetaApiConnectionInstance,
+      balance: a.verified.balance,
+      equity: a.verified.equity,
+      freeMargin: a.verified.freeMargin,
+      currency: a.verified.currency,
+      leverage: a.verified.leverage,
       lastSync: now,
       isSimulated: false,
-      accountHolderName: r.verified.accountHolderName,
-      brokerName: r.verified.brokerName,
+      accountHolderName: a.verified.accountHolderName,
+      brokerName: a.verified.brokerName,
       isBrokerVerified: true,
-      tradeAllowed: r.verified.tradeAllowed,
-      investorMode: r.verified.investorMode,
-      accountType: r.verified.accountType,
+      tradeAllowed: a.verified.tradeAllowed,
+      investorMode: a.verified.investorMode,
+      accountType: a.verified.accountType,
       verificationTimestamp: now,
       connectionState: 'CONNECTED',
-      connectionStatus: (r.account.raw as any)?.connectionStatus,
+      connectionStatus: (a.account as any)?.connectionStatus,
       lastHeartbeat: now,
     };
+  }
+
+  /**
+   * A slow terminal is not a failure. If the terminal exists, the supervisor finishes the job in the
+   * background and the browser is told so calmly. Anything else is passed on unchanged.
+   */
+  private async handOffIfSlow(userId: string, error: unknown): Promise<unknown> {
+    if (!(error instanceof BrokerVerificationError)) return error;
+    const slow = error.code === 'BROKER_SLOW' || error.code === 'BROKER_UNREACHABLE';
+    if (!slow || !error.accountId || !this.supervisor) return error;
+    try {
+      if (await this.supervisor.handOff(userId)) {
+        console.log(`🔐 [CLIENT_BRIDGE] ${userId}: still starting at '${error.stage}'; the supervisor will finish it in the background.`);
+        return new HandedOff(error.message, { stage: error.stage as Stage | undefined, ref: error.ref, detail: error.detail });
+      }
+    } catch {
+      // fall through: report the original problem
+    }
+    return error;
+  }
+
+  /**
+   * Called when the browser's overall time limit is reached while the terminal exists: the supervisor
+   * keeps going. Returns false if there is nothing to carry on with.
+   */
+  public continueInBackground(userId: string): boolean {
+    const sup = this.supervisor;
+    if (!sup || !sup.isTracked(userId)) return false;
+    void sup.handOff(userId).catch(() => undefined);
+    return true;
+  }
+
+  /** Puts a client the supervisor has just verified into service (the same record the browser flow builds). */
+  private async adoptVerifiedClient(c: VerifiedClient): Promise<void> {
+    const { rec, handle, rpc, verified } = c;
+    const live = this.clientPool.get(rec.userId);
+    if (live && live.isBrokerVerified && !live.isSimulated) {
+      // Already in service (for example the browser's connection finished first): keep that one.
+      try {
+        await rpc.close?.();
+      } catch {
+        // nothing to close
+      }
+      return;
+    }
+    const status = rec.verifiedBefore ? ((await this.loadSavedStatus?.(rec.userId).catch(() => null)) ?? 'ACTIVE') : 'ACTIVE';
+    const record = this.buildClientRecord({
+      userId: rec.userId,
+      accountId: rec.accountId,
+      login: rec.login,
+      server: String(handle.server || rec.server),
+      status,
+      account: handle.raw,
+      rpc: rpc.raw,
+      verified,
+    });
     this.registerClient(record);
     this.onClientVerified?.(record);
+    if (!rec.verifiedBefore) this.onNewConnection?.(rec.userId);
     console.log(
-      `✅ [CLIENT_BRIDGE] Broker verified #${record.login}: ${r.verified.brokerName} (${r.verified.accountType}), equity $${r.verified.equity.toFixed(2)}${r.resumed ? ' [resumed]' : ''}`
+      `${rec.verifiedBefore ? '♻️' : '✅'} [CLIENT_BRIDGE] ${rec.verifiedBefore ? 'Restored' : 'Connected in the background'} #${rec.login} (${status}): ${verified.brokerName}, equity $${verified.equity.toFixed(2)}`
     );
-    return record;
   }
 
   /**
@@ -690,8 +820,17 @@ export class Mt5ConnectionManager {
       }
     }
     for (const [key, rec] of Array.from(this.clientPool.entries())) {
-      if (rec.userId === userId) this.clientPool.delete(key);
+      if (rec.userId === userId) {
+        this.clientPool.delete(key);
+        try {
+          await rec.rpcConnection?.close();
+        } catch {
+          // the terminal is gone; nothing left to close
+        }
+      }
     }
+    // Nothing is left to look after for this user.
+    await this.supervisor?.untrack(userId).catch(() => undefined);
     return { removed };
   }
 
@@ -977,89 +1116,104 @@ export class Mt5ConnectionManager {
     }
   }
 
-  /** Re-attaches one client's MetaApi account to the pool. Returns false if it cannot be restored. */
-  private async restoreOne(accountId: string, parsed: { userId: string; login: string }): Promise<boolean> {
-    if (!this.api || this.isSimulatedMode) return false;
-    const entity = await this.api.metatraderAccountApi.getAccount(accountId);
-    if (entity.state !== 'DEPLOYED') return false;
-    const rpc = entity.getRPCConnection();
-    await rpc.connect();
-    await rpc.waitSynchronized(30);
-    const info = await rpc.getAccountInformation();
-    const v = verifyBrokerAccountInfo(info as any, { login: parsed.login, server: entity.server });
-    const now = new Date().toISOString();
-    const saved = (await this.loadSavedStatus?.(parsed.userId).catch(() => null)) ?? 'ACTIVE';
-    this.registerClient({
-      userId: parsed.userId,
-      accountId: entity.id,
-      login: parsed.login,
-      server: entity.server,
-      status: saved,
-      account: entity,
-      rpcConnection: rpc,
-      balance: v.balance,
-      equity: v.equity,
-      freeMargin: v.freeMargin,
-      currency: v.currency,
-      leverage: v.leverage,
-      lastSync: now,
-      isSimulated: false,
-      accountHolderName: v.accountHolderName,
-      brokerName: v.brokerName,
-      isBrokerVerified: true,
-      tradeAllowed: v.tradeAllowed,
-      investorMode: v.investorMode,
-      accountType: v.accountType,
-      verificationTimestamp: now,
-    });
-    const rec = this.clientPool.get(parsed.userId);
-    if (rec) this.onClientVerified?.(rec);
-    console.log(`♻️ [MT5_CONNECTION_MANAGER] Restored client #${parsed.login} (${saved}).`);
-    return true;
+  // ---------- terminals that are not yet (or no longer) a live connection ----------
+
+  /** Where unfinished connections are remembered. Call before initialize(); until then they live in memory only. */
+  public setConnectionStore(store: ConnectionStore): void {
+    this.connectionStore = store;
   }
 
-  /** Re-attaches client accounts that already exist in MetaApi (after a server restart). */
-  public async rehydrateClients(): Promise<void> {
+  public getSupervisor(): TerminalSupervisor | null {
+    return this.supervisor;
+  }
+
+  /** Users whose connection from the browser is running right now (the supervisor leaves them alone). */
+  public isConnecting(userId: string): boolean {
+    return this.connecting.has(userId);
+  }
+
+  private buildSupervisor(): TerminalSupervisor {
+    return new TerminalSupervisor({
+      gateway: metaApiGateway(this.api as any),
+      store: this.connectionStore,
+      limits: { minEquity: readLimit(process.env.MIN_CONNECT_EQUITY, DEFAULT_MIN_CONNECT_EQUITY) },
+      isActive: (uid) => {
+        const rec = this.clientPool.get(uid);
+        return Boolean(rec && rec.isBrokerVerified && !rec.isSimulated);
+      },
+      isConnecting: (uid) => this.connecting.has(uid),
+      wasVerified: async (uid, accountId) => (this.wasVerified ? this.wasVerified(uid, accountId) : 'unknown'),
+      hasBillingHistory: async (uid) => (this.hasBillingHistory ? this.hasBillingHistory(uid) : false),
+      onVerified: (c) => this.adoptVerifiedClient(c),
+      activeLinks: () => {
+        const seen = new Set<string>();
+        const out: Array<{ userId: string; accountId: string; login: string; connectionState?: string }> = [];
+        for (const rec of this.clientPool.values()) {
+          if (seen.has(rec.accountId) || !rec.isBrokerVerified || rec.isSimulated) continue;
+          seen.add(rec.accountId);
+          out.push({ userId: rec.userId, accountId: rec.accountId, login: rec.login, connectionState: rec.connectionState });
+        }
+        return out;
+      },
+      maxParallel: readLimit(process.env.SUPERVISOR_MAX_PARALLEL, 4) || 4,
+      log: (level, msg) => {
+        const line = `[TERMINAL_SUPERVISOR] ${msg}`;
+        if (level === 'error') console.error('❌', line);
+        else if (level === 'warn') console.warn('⚠️', line);
+        else console.log('🛰️', line);
+      },
+    });
+  }
+
+  /**
+   * Starts the supervisor: reads the saved records, adopts any client terminal that exists in MetaApi but
+   * is not being looked after (this is how clients are brought back after a restart), and keeps going.
+   */
+  private async startSupervisor(): Promise<void> {
     if (!this.api || this.isSimulatedMode) return;
     try {
-      const all = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
-      for (const a of all) {
-        const parsed = parseClientAccountName(a.name);
-        if (!parsed || this.clientPool.has(parsed.userId)) continue;
-        try {
-          await this.restoreOne(a.id, parsed);
-        } catch (err: any) {
-          console.warn(`⚠️ [MT5_CONNECTION_MANAGER] Could not restore #${parsed.login}:`, err?.message);
-        }
-      }
+      const sup = this.buildSupervisor();
+      this.supervisor = sup;
+      const saved = await sup.load();
+      const found = await sup.discover();
+      console.log(`🛰️ [TERMINAL_SUPERVISOR] Started: ${saved} saved connection(s), ${found.adopted} terminal(s) found in MetaApi.`);
+      await sup.tick();
+      sup.start();
     } catch (err: any) {
-      console.warn('⚠️ [MT5_CONNECTION_MANAGER] Client restore skipped:', err?.message);
+      console.warn('⚠️ [TERMINAL_SUPERVISOR] Could not start:', err?.message || err);
     }
+  }
+
+  /** Re-attaches client accounts that already exist in MetaApi (after a server restart). Kept for callers; the supervisor does the work. */
+  public async rehydrateClients(): Promise<void> {
+    const sup = this.supervisor;
+    if (!sup) return;
+    await sup.discover();
+    await sup.tick();
   }
 
   /**
    * Called when a signed-in client opens the dashboard but is not in memory (for example the server
-   * restarted and the first restore failed). Looks for their account in MetaApi and restores it.
+   * restarted and the first restore has not finished). Looks for their terminal in MetaApi and lets the
+   * supervisor bring it back. The same rules apply as for any connection: nothing is put into service
+   * without the broker's own answer.
    */
   public async restoreClientForUser(userId: string): Promise<ClientConnectionRecord | undefined> {
     const existing = this.clientPool.get(userId);
     if (existing) return existing;
-    if (!this.api || this.isSimulatedMode) return undefined;
+    const sup = this.supervisor;
+    if (!sup || !this.api || this.isSimulatedMode) return undefined;
+    if (this.connecting.has(userId)) return undefined;
     const last = this.lastLazyRestore.get(userId) || 0;
     if (Date.now() - last < 30_000) return undefined;
     this.lastLazyRestore.set(userId, Date.now());
     try {
-      const all = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
-      for (const a of all) {
-        const parsed = parseClientAccountName(a.name);
-        if (parsed && parsed.userId === userId) {
-          if (await this.restoreOne(a.id, parsed)) return this.clientPool.get(userId);
-        }
-      }
+      if (!sup.isTracked(userId)) await sup.discover({ userId });
+      if (sup.isTracked(userId)) await sup.stepNow(userId, 20_000);
     } catch (err: any) {
       console.warn('⚠️ [MT5_CONNECTION_MANAGER] Lazy restore failed:', err?.message);
     }
-    return undefined;
+    return this.clientPool.get(userId);
   }
 
   private startHeartbeatMonitor(): void {

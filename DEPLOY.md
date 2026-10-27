@@ -26,6 +26,22 @@ Set these on Render next to `METAAPI_TOKEN`:
 - `MAX_ACCOUNTS_PER_USER` = accounts per client (default 1).
 Clients who disconnect are removed from MetaApi, which stops their charge. Admins can see usage at `/api/trade/capacity`.
 
+## How client terminals are looked after (terminal supervisor)
+Connecting a client's MT5 account no longer depends on the browser staying open. As soon as a client's terminal exists in
+MetaApi the server remembers it (Firestore `client_connections/{userId}`, no passwords) and a background supervisor moves it forward:
+- starts a terminal that MetaApi left undeployed, and restarts one that stays "deployed but disconnected" (what pressing Redeploy in MetaApi does);
+- reads the account from the broker when the terminal connects, applies the usual rules and puts the client into service;
+- if a brand-new terminal never connects within 15 minutes it is removed and the client is told kindly (and can simply press Connect again);
+- a client who was verified before (or has billing history) is never given up on or cleaned up automatically: their terminal is restarted patiently, and no minimum-equity check is repeated;
+- after every deploy or restart, unfinished connections and existing client terminals are picked up again by themselves;
+- a connected client whose link stays down for a while gets their terminal restarted gently.
+
+The client sees a calm "your terminal is connecting" notice on the dashboard instead of an error, and it turns into the normal connected view by itself.
+Admin console -> **Client Terminals** lists every client terminal as MetaApi sees it (state, broker link, restarts, time left) with Restart / Remove buttons
+and "Clean up leftovers" (the master is never listed; clients in service cannot be removed there; a terminal of a client verified before needs a second confirmation).
+**Connection Log** shows how long each connecting step took, so a slow broker or region is easy to spot.
+Optional settings are in `.env.example` (`CONNECT_MAX_PARALLEL`, `SUPERVISOR_MAX_PARALLEL`, the three `CONNECT_*_WAIT_SECONDS`).
+
 ## Payments wallet
 Add `VITE_TREASURY_ADDRESS` = your real TRON (TRC20) USDT address in Render's environment variables, then redeploy.
 Until it is set, the site shows "Payment address not set yet" and refuses payments, so nobody can send money to a wrong address.

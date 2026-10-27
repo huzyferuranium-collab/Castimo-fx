@@ -17,15 +17,23 @@ import { requireUser, requireAdmin, getAuthUser, isAdminUser } from './firebaseA
 import { hasAcceptedTermsServer } from './termsCheck';
 import { recordEvent } from './referralService';
 import { BrokerVerificationError, validateSubmittedCredentials, normalizeBrokerServer } from './brokerVerification';
-import { ConnectJobs } from './clientBridge';
+import { ConnectJobs, pendingFor } from './clientBridge';
 import { BillingService, BillingError, billingConfig, billingEnabled } from './billing';
 
 export const tradeRouter = Router();
 
 const connectionManager = Mt5ConnectionManager.getInstance();
 const replicationEngine = ReplicationEngine.getInstance();
-/** One background connection per user, polled by the browser (see clientBridge.ts). */
-export const connectJobs = new ConnectJobs<ReturnType<typeof toPublicClient>>();
+/**
+ * One background connection per user, polled by the browser (see clientBridge.ts). If the overall time limit
+ * is reached while the user's terminal exists, the terminal supervisor carries on and the job says so.
+ */
+export const connectJobs = new ConnectJobs<ReturnType<typeof toPublicClient>>({
+  canContinueInBackground: (uid) => connectionManager.continueInBackground(uid),
+});
+
+// A new connection is announced once, and only because it really happened (from the browser or in the background).
+connectionManager.onNewConnection = (uid) => void recordEvent('ACCOUNT_CONNECTED', uid, `connected-${uid}`);
 
 /** Only fields that are safe to show. Never expose connection objects or credentials. */
 function toPublicClient(c: any) {
@@ -257,8 +265,6 @@ tradeRouter.post('/provision-client', requireUser, async (req: Request, res: Res
           },
           report
         );
-        // Only the first successful connection is announced, and only because it really happened.
-        void recordEvent('ACCOUNT_CONNECTED', user.uid, `connected-${user.uid}`);
         return toPublicClient(clientRecord);
       }
     );
@@ -288,7 +294,14 @@ tradeRouter.post('/provision-client', requireUser, async (req: Request, res: Res
  */
 tradeRouter.get('/connect-status', requireUser, (req: Request, res: Response) => {
   const user = getAuthUser(req);
-  return res.status(200).json({ success: true, job: connectJobs.get(user.uid) });
+  const live = connectionManager.getClientConnection(user.uid);
+  return res.status(200).json({
+    success: true,
+    job: connectJobs.get(user.uid),
+    // The terminal the supervisor is still looking after for this client (null when there is none).
+    pending: pendingFor(connectionManager.getSupervisor()?.view(user.uid), connectJobs.get(user.uid)),
+    connected: Boolean(live && live.isBrokerVerified && !live.isSimulated),
+  });
 });
 
 /**
@@ -296,7 +309,58 @@ tradeRouter.get('/connect-status', requireUser, (req: Request, res: Response) =>
  * The most recent failed connection attempts with the technical reason (passwords are scrubbed).
  */
 tradeRouter.get('/admin/connect-failures', requireAdmin, (_req: Request, res: Response) => {
-  return res.status(200).json({ success: true, failures: connectJobs.recentFailures() });
+  return res.status(200).json({ success: true, failures: connectJobs.recentFailures(), successes: connectJobs.recentSuccesses() });
+});
+
+/**
+ * Client terminals as MetaApi sees them, and what the supervisor is doing about each one (administrators only).
+ * The master account is never listed and can never be touched from here.
+ */
+tradeRouter.get('/admin/terminals', requireAdmin, async (_req: Request, res: Response) => {
+  const sup = connectionManager.getSupervisor();
+  if (!sup) return res.status(503).json({ success: false, error: 'The terminal supervisor is not running (MetaApi is not connected).' });
+  try {
+    const rows = await sup.inventory();
+    return res.status(200).json({ success: true, terminals: rows, supervisor: sup.stats, ...(await connectionManager.getCapacity().catch(() => ({}))) });
+  } catch (e: any) {
+    console.error('❌ [API /admin/terminals]', e?.message || e);
+    return res.status(502).json({ success: false, error: 'Could not read the terminals from MetaApi.' });
+  }
+});
+
+tradeRouter.post('/admin/terminals/redeploy', requireAdmin, async (req: Request, res: Response) => {
+  const sup = connectionManager.getSupervisor();
+  if (!sup) return res.status(503).json({ success: false, error: 'The terminal supervisor is not running.' });
+  try {
+    const r = await sup.redeployTerminal(String(req.body?.accountId ?? ''));
+    return res.status(r.ok ? 200 : r.reason === 'NOT_FOUND' ? 404 : 400).json({ success: r.ok, reason: r.reason });
+  } catch (e: any) {
+    console.error('❌ [API /admin/terminals/redeploy]', e?.message || e);
+    return res.status(502).json({ success: false, error: 'MetaApi did not accept the restart.' });
+  }
+});
+
+tradeRouter.post('/admin/terminals/remove', requireAdmin, async (req: Request, res: Response) => {
+  const sup = connectionManager.getSupervisor();
+  if (!sup) return res.status(503).json({ success: false, error: 'The terminal supervisor is not running.' });
+  try {
+    const r = await sup.removeTerminal(String(req.body?.accountId ?? ''), { force: req.body?.force === true });
+    return res.status(r.ok ? 200 : r.reason === 'NOT_FOUND' ? 404 : 409).json({ success: r.ok, reason: r.reason });
+  } catch (e: any) {
+    console.error('❌ [API /admin/terminals/remove]', e?.message || e);
+    return res.status(502).json({ success: false, error: 'MetaApi did not remove the terminal.' });
+  }
+});
+
+tradeRouter.post('/admin/terminals/cleanup', requireAdmin, async (_req: Request, res: Response) => {
+  const sup = connectionManager.getSupervisor();
+  if (!sup) return res.status(503).json({ success: false, error: 'The terminal supervisor is not running.' });
+  try {
+    return res.status(200).json({ success: true, ...(await sup.cleanupStale()) });
+  } catch (e: any) {
+    console.error('❌ [API /admin/terminals/cleanup]', e?.message || e);
+    return res.status(502).json({ success: false, error: 'Could not clean up the terminals.' });
+  }
 });
 
 /**
@@ -487,7 +551,10 @@ tradeRouter.get('/my-account', requireUser, async (req: Request, res: Response) 
   const user = getAuthUser(req);
   const c = connectionManager.getClientConnection(user.uid) ?? (await connectionManager.restoreClientForUser(user.uid));
   if (!c || !c.isBrokerVerified || c.isSimulated) {
-    return res.status(200).json({ success: true, connected: false, client: null });
+    // Not in service yet: if a terminal is still connecting (or could not), say so, so the dashboard can show it.
+    return res
+      .status(200)
+      .json({ success: true, connected: false, client: null, pending: pendingFor(connectionManager.getSupervisor()?.view(user.uid), connectJobs.get(user.uid)) });
   }
   return res.status(200).json({ success: true, connected: true, client: toPublicClient(c) });
 });

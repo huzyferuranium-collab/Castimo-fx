@@ -1,5 +1,6 @@
 import { AdminWithdrawalsPanel } from '../admin/AdminWithdrawalsPanel';
 import { AdminConnectLogPanel } from '../admin/AdminConnectLogPanel';
+import { AdminTerminalsPanel } from '../admin/AdminTerminalsPanel';
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { tradingEngine, CASTIMO_TREASURY_ADDRESS } from '../../services/tradingEngine';
@@ -163,6 +164,11 @@ export const AdminDashboard: React.FC = () => {
           id: 'withdrawals',
           label: 'Referral Withdrawals',
           icon: Wallet,
+        },
+        {
+          id: 'terminals',
+          label: 'Client Terminals',
+          icon: Layers,
         },
         {
           id: 'connectlog',
@@ -763,6 +769,12 @@ export const AdminDashboard: React.FC = () => {
         {/* ========================================================
             TAB 4: 24H WATCHER & RISK GOVERNANCE
             ======================================================== */}
+        {activeTab === 'terminals' && (
+          <div className="space-y-4 animate-in fade-in duration-150">
+            <AdminTerminalsPanel />
+          </div>
+        )}
+
         {activeTab === 'connectlog' && (
           <div className="space-y-4 animate-in fade-in duration-150">
             <AdminConnectLogPanel />
