@@ -20,6 +20,7 @@ import { LedgerAuditModal } from '../ledger/LedgerAuditModal';
 import { SidebarNav, NavGroup } from '../common/SidebarNav';
 
 import { RobotConsole } from './RobotConsole';
+import { AuthModal } from '../auth/AuthModal';
 import { ServicePlanPage } from './ServicePlanPage';
 import { getPlanView, PlanView } from '../../services/servicePlanApi';
 
@@ -91,6 +92,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [showEmailVerifyModal, setShowEmailVerifyModal] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
@@ -121,6 +123,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   useEffect(refreshPlan, [userProfile?.uid]);
   const planChosen = planView === undefined || planView === null || !planView.available || planView.model !== null;
   const openConnect = () => {
+    // Email confirmation is asked for here, at the moment it is needed, and never blocks anything else.
+    if (!isEmailVerified && !isAdmin) {
+      setShowEmailVerifyModal(true);
+      return;
+    }
     if (!planChosen) {
       setActiveSection('plan');
       return;
@@ -960,6 +967,25 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 </div>
               </div>
 
+              {/* Email status. Confirming it is only required before connecting an MT5 account. */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">Email</h4>
+                  <p className="text-xs text-slate-500">
+                    {userProfile?.email} · {isEmailVerified ? 'confirmed' : 'not confirmed yet (needed before you connect an account)'}
+                  </p>
+                </div>
+                {!isEmailVerified && (
+                  <button
+                    type="button"
+                    onClick={() => setShowEmailVerifyModal(true)}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs cursor-pointer shrink-0"
+                  >
+                    Confirm email
+                  </button>
+                )}
+              </div>
+
               {/* Linked MT5 Terminal Custody Details */}
               <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
@@ -1018,6 +1044,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
           </div>
         )}
       </div>
+
+      <AuthModal
+        isOpen={showEmailVerifyModal}
+        onClose={() => setShowEmailVerifyModal(false)}
+        defaultTab="verify"
+        prefillEmail={userProfile?.email}
+      />
 
       <TermsModal
         isOpen={termsAccepted === false}

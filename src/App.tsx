@@ -1,5 +1,4 @@
 import { captureReferralFromUrl } from './services/referralApi';
-import { VerifyEmailGate } from './components/auth/VerifyEmailGate';
 import React, { useState } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { ThemeToggle, ThemeSegmentedControl } from './components/common/ThemeToggle';
@@ -47,7 +46,7 @@ const TickerBar: React.FC = () => {
 type ActivePortalTab = 'client' | 'referrals' | 'admin';
 
 const MainContent: React.FC = () => {
-  const { userProfile, loading, switchRole, isEmailVerified } = useAuth();
+  const { userProfile, loading, switchRole } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActivePortalTab>('client');
 
@@ -248,8 +247,6 @@ const MainContent: React.FC = () => {
             {/* Platform Knowledge Base / FAQ Section */}
             <FAQSection onSelectTab={handleSelectTab} />
           </div>
-        ) : !isAdmin && !isEmailVerified ? (
-          <VerifyEmailGate />
         ) : activeTab === 'admin' && isAdmin ? (
           <AdminDashboard />
         ) : activeTab === 'referrals' ? (
