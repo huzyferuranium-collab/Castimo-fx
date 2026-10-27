@@ -321,6 +321,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (!current) return false;
     try {
       await current.reload();
+      // A fresh sign-in token carries the new "verified" flag, which the server checks.
+      await current.getIdToken(true);
       setUser(auth.currentUser);
       setVerifyTick((n) => n + 1);
     } catch {

@@ -1,4 +1,5 @@
 import { captureReferralFromUrl } from './services/referralApi';
+import { VerifyEmailGate } from './components/auth/VerifyEmailGate';
 import React, { useState } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { ThemeToggle, ThemeSegmentedControl } from './components/common/ThemeToggle';
@@ -46,7 +47,7 @@ const TickerBar: React.FC = () => {
 type ActivePortalTab = 'client' | 'referrals' | 'admin';
 
 const MainContent: React.FC = () => {
-  const { userProfile, loading, switchRole } = useAuth();
+  const { userProfile, loading, switchRole, isEmailVerified } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActivePortalTab>('client');
 
@@ -179,16 +180,16 @@ const MainContent: React.FC = () => {
             <div className="text-center max-w-3xl mx-auto space-y-4">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium">
                 <Shield className="w-3.5 h-3.5" />
-                <span>Pure 50% Profit Share Model • 3-Phase Referral Program</span>
+                <span>Monthly Plan or 50% Profit Share • 3-Level Referral Program</span>
               </div>
               <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight">
                 Institutional MT5 Copying with{' '}
                 <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
-                  50% Profit Share & 3-Tier Commissions
+                  Your Choice of Plan & 3-Level Commissions
                 </span>
               </h2>
               <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto leading-relaxed">
-                Zero upfront subscription fees or packages. We get paid strictly 50% profit share after your connected MT5 makes profits. Refer other traders and earn across three phases: 5% Phase 1, 3% Phase 2, and 2% Phase 3 from their 24h profit settlements.
+                Choose a flat $100 monthly plan, or pay nothing upfront and share 50% of new profit instead. Refer other traders and earn 5%, 3% and 2% across three levels of what they pay us.
               </p>
 
               {/* Public Client CTAs: NO PUBLIC ADMIN ACCESS */}
@@ -217,9 +218,9 @@ const MainContent: React.FC = () => {
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                   <TrendingUp className="w-5 h-5" />
                 </div>
-                <h3 className="font-bold text-base text-white">Pure 50% Profit Share</h3>
+                <h3 className="font-bold text-base text-white">Two Ways to Pay</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  No packages or monthly subscriptions. We earn strictly when your MT5 wins. 50% profit share is settled on net new gains within a 24-hour window.
+                  Pick a flat $100 monthly plan, or the 50% Profit Share where we earn only when your account makes new profit. You can see both side by side after you sign up.
                 </p>
               </div>
 
@@ -227,9 +228,9 @@ const MainContent: React.FC = () => {
                 <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
                   <Share2 className="w-5 h-5" />
                 </div>
-                <h3 className="font-bold text-base text-white">3-Phase Referral Program</h3>
+                <h3 className="font-bold text-base text-white">3-Level Referral Program</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  Earn recurring USDT from the 24-hour settlements of your network: 5% Phase 1 (Direct), 3% Phase 2 (Secondary), and 2% Phase 3 (Tertiary).
+                  Earn USDT from what your network actually pays: 5% on level 1 (direct), 3% on level 2 and 2% on level 3.
                 </p>
               </div>
 
@@ -237,9 +238,9 @@ const MainContent: React.FC = () => {
                 <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
                   <Shield className="w-5 h-5" />
                 </div>
-                <h3 className="font-bold text-base text-white">Autonomous 24h Watcher</h3>
+                <h3 className="font-bold text-base text-white">Automatic Billing Checks</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  The automated watcher reads profits in real time and monitors a 24-hour settlement window. Terminals that fail to remit the 50% share within 24 hours are automatically disconnected.
+                  The server checks billing automatically. Copying pauses when a subscription has ended or a profit-share invoice is overdue, and resumes once you have paid.
                 </p>
               </div>
             </div>
@@ -247,6 +248,8 @@ const MainContent: React.FC = () => {
             {/* Platform Knowledge Base / FAQ Section */}
             <FAQSection onSelectTab={handleSelectTab} />
           </div>
+        ) : !isAdmin && !isEmailVerified ? (
+          <VerifyEmailGate />
         ) : activeTab === 'admin' && isAdmin ? (
           <AdminDashboard />
         ) : activeTab === 'referrals' ? (
@@ -262,12 +265,12 @@ const MainContent: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="font-bold text-slate-400">CASTIMOFx TRADING PLATFORM</span>
             <span>•</span>
-            <span>50% Profit Share Institutional Copier & 3-Phase Referral Network</span>
+            <span>MT5 Trade Copier & 3-Level Referral Network</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
             <span className="text-[11px] text-slate-600 hidden md:inline">
-              Direct Broker Custody • Autonomous 24h Watcher • TRC20 USDT Remittance
+              Direct Broker Custody • Automatic Billing Checks • TRC20 USDT Payments
             </span>
             <ThemeSegmentedControl />
           </div>

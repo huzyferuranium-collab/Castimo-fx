@@ -219,6 +219,15 @@ tradeRouter.post('/provision-client', requireUser, async (req: Request, res: Res
       });
     }
 
+    // The email address must be confirmed first (administrators are exempt).
+    if (!user.emailVerified && !(await isAdminUser(user))) {
+      return res.status(403).json({
+        success: false,
+        code: 'EMAIL_NOT_VERIFIED',
+        error: 'Please confirm your email address before connecting an account.',
+      });
+    }
+
     await BillingService.getInstance().assertMayConnect(user.uid);
 
     const clientRecord = await connectionManager.provisionClientTerminal({

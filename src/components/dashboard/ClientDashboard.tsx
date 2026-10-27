@@ -18,7 +18,6 @@ import { Mt5DisconnectModal } from '../mt5/Mt5DisconnectModal';
 import { SettlementHistoryModal } from '../settlements/SettlementHistoryModal';
 import { LedgerAuditModal } from '../ledger/LedgerAuditModal';
 import { SidebarNav, NavGroup } from '../common/SidebarNav';
-import { AuthModal } from '../auth/AuthModal';
 
 import { RobotConsole } from './RobotConsole';
 import { ServicePlanPage } from './ServicePlanPage';
@@ -95,7 +94,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
-  const [showEmailVerifyModal, setShowEmailVerifyModal] = useState(false);
   const [countdownText, setCountdownText] = useState<string>('');
 
   // Client Equity Calibration State
@@ -429,33 +427,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             />
           </div>
         </div>
-
-        {/* Email Verification Alert Banner */}
-        {!isEmailVerified && userProfile && (
-          <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md animate-in fade-in">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
-                <Mail className="w-4 h-4" />
-              </div>
-              <div>
-                <h4 className="font-bold text-xs text-amber-300">
-                  Email Verification Required
-                </h4>
-                <p className="text-[11px] text-amber-200/80 mt-0.5">
-                  Confirm your email ({userProfile.email}) with a 6-digit verification code to ensure trade audit delivery.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowEmailVerifyModal(true)}
-              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 font-bold text-xs text-slate-950 transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
-            >
-              <Send className="w-3.5 h-3.5" />
-              <span>Verify Email Now</span>
-            </button>
-          </div>
-        )}
 
         {/* Critical Watcher Alert Banners */}
         {isBlockedUnpaid && isConnected && (
@@ -1088,13 +1059,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         onClose={() => setShowLedgerModal(false)}
         ledger={tradingEngine.getLedger()}
         auditLogs={tradingEngine.getAuditLogs()}
-      />
-
-      <AuthModal
-        isOpen={showEmailVerifyModal}
-        onClose={() => setShowEmailVerifyModal(false)}
-        defaultTab="verify"
-        prefillEmail={userProfile?.email}
       />
 
     </div>

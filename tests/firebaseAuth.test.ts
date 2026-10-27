@@ -71,3 +71,9 @@ test('role parsing: only an exact "admin" string counts', () => {
   assert.equal(parseRoleFromFirestoreDoc(null), 'client');
   assert.equal(parseRoleFromFirestoreDoc({ fields: { role: { booleanValue: true } } }), 'client');
 });
+
+test('the email-verified flag is passed through only when the token says true', () => {
+  assert.equal(run(makeToken({ email_verified: true })).emailVerified, true);
+  assert.equal(run(makeToken({ email_verified: false })).emailVerified, false);
+  assert.equal(run(makeToken({})).emailVerified, false);
+});
