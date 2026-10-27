@@ -1,3 +1,4 @@
+import { AdminWithdrawalsPanel } from '../admin/AdminWithdrawalsPanel';
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { tradingEngine, CASTIMO_TREASURY_ADDRESS } from '../../services/tradingEngine';
@@ -156,6 +157,11 @@ export const AdminDashboard: React.FC = () => {
           icon: Wallet,
           badge: pendingInvoicesCount > 0 ? `${pendingInvoicesCount} Due` : 'Settled',
           badgeVariant: pendingInvoicesCount > 0 ? 'warning' : 'success',
+        },
+        {
+          id: 'withdrawals',
+          label: 'Referral Withdrawals',
+          icon: Wallet,
         },
         {
           id: 'governance',
@@ -751,6 +757,12 @@ export const AdminDashboard: React.FC = () => {
         {/* ========================================================
             TAB 4: 24H WATCHER & RISK GOVERNANCE
             ======================================================== */}
+        {activeTab === 'withdrawals' && (
+          <div className="space-y-4 animate-in fade-in duration-150">
+            <AdminWithdrawalsPanel />
+          </div>
+        )}
+
         {activeTab === 'governance' && (
           <div className="space-y-4 animate-in fade-in duration-150">
             {/* Autonomous 24h Watcher Daemon Card */}

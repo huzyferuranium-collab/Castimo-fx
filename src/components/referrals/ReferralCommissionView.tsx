@@ -1,466 +1,218 @@
-import React, { useState, useEffect } from 'react';
-import { tradingEngine } from '../../services/tradingEngine';
-import { ReferralStats, ReferralPhase } from '../../types';
-import {
-  Share2,
-  Copy,
-  CheckCircle2,
-  Users,
-  Award,
-  Wallet,
-  ArrowRight,
-  TrendingUp,
-  Clock,
-  Sparkles,
-  Zap,
-  ShieldCheck,
-  ChevronRight,
-  ExternalLink,
-} from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Check, Copy, Share2, Wallet } from 'lucide-react';
+import { ReferralSummary, getReferralSummary, requestWithdrawal } from '../../services/referralApi';
+
+const STATUS_STYLE: Record<string, string> = {
+  pending: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+  processing: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
+  completed: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  rejected: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+  failed: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+};
+
+const fmt = (iso: string) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+const gmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' GMT';
 
 export const ReferralCommissionView: React.FC = () => {
-  const [stats, setStats] = useState<ReferralStats>(tradingEngine.getReferralStats());
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
-  const [claimAddress, setClaimAddress] = useState('');
-  const [claimAmount, setClaimAmount] = useState('');
-  const [isClaiming, setIsClaiming] = useState(false);
-  const [claimSuccess, setClaimSuccess] = useState<string | null>(null);
-  const [claimError, setClaimError] = useState<string | null>(null);
-  const [simMessage, setSimMessage] = useState<string | null>(null);
+  const [s, setS] = useState<ReferralSummary | null | undefined>(undefined);
+  const [tab, setTab] = useState<'overview' | 'withdraw'>('overview');
+  const [copied, setCopied] = useState('');
+  const [amount, setAmount] = useState('');
+  const [wallet, setWallet] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
 
-  useEffect(() => {
-    const unsub = tradingEngine.subscribe(() => {
-      setStats({ ...tradingEngine.getReferralStats() });
-    });
-    return () => unsub();
+  const load = useCallback(async () => {
+    const r = await getReferralSummary();
+    setS(r.ok ? r.data! : null);
   }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(stats.referralLink);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
+  const copy = (what: string, text: string) => {
+    try {
+      navigator.clipboard?.writeText(text);
+      setCopied(what);
+      setTimeout(() => setCopied(''), 1800);
+    } catch {
+      // ignore
+    }
   };
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(stats.referralCode);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
-  };
+  if (s === undefined) return <p className="text-xs text-slate-500">Loading…</p>;
+  if (s === null) return <p className="text-xs text-slate-500">Referral details could not be loaded right now. Please sign in and try again.</p>;
 
-  const handleClaimPayout = async (e: React.FormEvent) => {
+  // Preview only. The server works out the real fee when you confirm.
+  const n = Number(amount);
+  const valid = Number.isFinite(n) && n >= s.rules.minUsdt && n <= s.availableUsdt;
+  const fee = valid ? Math.round(n * s.rules.feePct) / 100 : 0;
+  const net = valid ? Math.round((n - fee) * 100) / 100 : 0;
+  const open = s.withdrawals.find((w) => w.status === 'pending' || w.status === 'processing');
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setClaimError(null);
-    setClaimSuccess(null);
-
-    const amount = parseFloat(claimAmount);
-    if (isNaN(amount) || amount <= 0) {
-      setClaimError('Enter a valid payout amount.');
-      return;
-    }
-
-    if (amount > stats.availableBalanceUsdt) {
-      setClaimError(`Amount exceeds available balance ($${stats.availableBalanceUsdt.toFixed(2)} USDT).`);
-      return;
-    }
-
-    if (!claimAddress.trim() || claimAddress.trim().length < 15) {
-      setClaimError('Enter a valid TRC20 USDT payout address.');
-      return;
-    }
-
-    setIsClaiming(true);
-    const result = await tradingEngine.claimReferralCommission(amount, claimAddress.trim());
-    setIsClaiming(false);
-
-    if (result.success) {
-      setClaimSuccess(
-        `Successfully dispatched $${amount.toFixed(2)} USDT to ${claimAddress.slice(0, 10)}... (TX: ${result.txHash?.slice(0, 14)}...)`
-      );
-      setClaimAmount('');
-      setTimeout(() => setClaimSuccess(null), 5000);
-    } else {
-      setClaimError(result.error || 'Failed to dispatch payout.');
-    }
+    setBusy(true);
+    setNote(null);
+    const r = await requestWithdrawal(n, wallet.trim());
+    setBusy(false);
+    if (r.ok) {
+      setNote({ ok: true, text: 'Withdrawal requested. You can follow its status below.' });
+      setAmount('');
+      load();
+    } else setNote({ ok: false, text: r.error || 'Could not submit the request.' });
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-200">
-      {/* Referral Header Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-emerald-900/40 via-slate-900 to-slate-900 border border-emerald-800/50 shadow-xl flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-              Multi-Tier Partner Network
-            </span>
-            <span className="text-xs text-slate-400">3-Phase Profit Share Commission</span>
-          </div>
-          <h2 className="text-2xl font-black text-white mt-1">Referral Commission Hub</h2>
-          <p className="text-xs text-slate-400 mt-0.5 max-w-2xl leading-relaxed">
-            Earn continuous recurring commissions paid directly from the 24-hour profit settlements of traders you introduce across 3 distinct phases.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="bg-slate-950/80 px-4 py-2.5 rounded-xl border border-slate-800 text-right">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Available Commission</span>
-            <span className="text-xl font-black font-mono text-emerald-400">
-              ${stats.availableBalanceUsdt.toFixed(2)} <span className="text-xs text-slate-400">USDT</span>
-            </span>
-          </div>
-        </div>
+    <div className="max-w-3xl mx-auto space-y-5 pb-12">
+      <div className="flex gap-2">
+        {(['overview', 'withdraw'] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer ${tab === t ? 'bg-emerald-500 text-slate-950' : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'}`}
+          >
+            {t === 'overview' ? 'Referrals' : 'Withdraw'}
+          </button>
+        ))}
       </div>
 
-      {simMessage && (
-        <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{simMessage}</span>
+      {tab === 'overview' && (
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white">
+              <Share2 className="w-4 h-4 text-emerald-500" /> Your referral link
+            </div>
+            <div className="flex gap-2">
+              <div className="flex-1 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-950 text-xs font-mono break-all select-all text-slate-800 dark:text-emerald-300">{s.link}</div>
+              <button type="button" onClick={() => copy('link', s.link)} className="px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 cursor-pointer">
+                {copied === 'link' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} {copied === 'link' ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              You earn {s.ratesPct[0]}% / {s.ratesPct[1]}% / {s.ratesPct[2]}% of what people you invited (levels 1, 2 and 3) actually pay us. Nothing is earned until they pay.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              ['Level 1', s.counts.level1],
+              ['Level 2', s.counts.level2],
+              ['Level 3', s.counts.level3],
+            ].map(([label, count]) => (
+              <div key={String(label)} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 text-center">
+                <div className="text-2xl font-black text-slate-900 dark:text-white">{count}</div>
+                <div className="text-[11px] text-slate-500">{label} sign-ups</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              ['Earned', s.earnedUsdt],
+              ['Held / paid out', s.heldUsdt],
+              ['Available', s.availableUsdt],
+            ].map(([label, v]) => (
+              <div key={String(label)} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+                <div className="text-[11px] text-slate-500">{label}</div>
+                <div className="text-lg font-black text-slate-900 dark:text-white">${Number(v).toFixed(2)}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Recent commissions</h4>
+            {s.recentCommissions.length === 0 ? (
+              <p className="text-xs text-slate-500">No commissions yet. They appear here after someone you invited pays.</p>
+            ) : (
+              <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+                {s.recentCommissions.map((c) => (
+                  <li key={c.id} className="py-2 flex items-center justify-between text-xs">
+                    <span className="text-slate-600 dark:text-slate-300">Level {c.level} · {c.ratePct}%</span>
+                    <span className="text-slate-500">{fmt(c.createdAt)}</span>
+                    <span className="font-bold text-emerald-500">+${Number(c.amountUsdt).toFixed(2)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Referral Link & Code Box */}
-      <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Share2 className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-sm font-bold text-white">Your Personal Referral Link & Invitation Code</h3>
-          </div>
-          <span className="text-xs text-slate-400">Earn 5% • 3% • 2% on 24h settlements</span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="md:col-span-2 flex flex-col sm:flex-row items-center gap-2 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-            <div className="text-xs font-mono text-emerald-300 px-2 break-all select-all flex-1 font-semibold">
-              {stats.referralLink}
+      {tab === 'withdraw' && (
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white">
+              <Wallet className="w-4 h-4 text-amber-500" /> Withdraw referral earnings
             </div>
-            <button
-              onClick={handleCopyLink}
-              className="w-full sm:w-auto px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
-            >
-              {copiedLink ? <CheckCircle2 className="w-4 h-4 text-slate-950" /> : <Copy className="w-4 h-4" />}
-              <span>{copiedLink ? 'Link Copied!' : 'Copy Link'}</span>
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-            <div>
-              <span className="text-[10px] text-slate-500 block uppercase font-bold">Referral Code</span>
-              <span className="text-xs font-mono font-bold text-white">{stats.referralCode}</span>
-            </div>
-            <button
-              onClick={handleCopyCode}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition flex items-center gap-1 cursor-pointer"
-            >
-              {copiedCode ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedCode ? 'Copied' : 'Copy'}</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 3 Phases Tier Breakdown Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Phase 1 Card */}
-        <div className="p-5 rounded-2xl bg-slate-900 border border-emerald-500/30 shadow-lg relative overflow-hidden flex flex-col justify-between">
-          <div className="absolute top-0 right-0 px-3 py-1 bg-emerald-500 text-slate-950 text-[10px] font-black rounded-bl-xl uppercase tracking-wider">
-            Phase 1 • 5%
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold">
-                1
-              </div>
-              <div>
-                <h4 className="font-bold text-sm text-white">Main Direct Referrer</h4>
-                <p className="text-[11px] text-slate-400">Direct clients using your link</p>
-              </div>
-            </div>
-
-            <div className="mt-4 p-3 rounded-xl bg-slate-950 border border-slate-800/80 space-y-1">
-              <div className="text-xs text-slate-400 flex justify-between">
-                <span>Commission Rate:</span>
-                <span className="font-mono font-bold text-emerald-400 text-sm">5% of Profit Share</span>
-              </div>
-              <div className="text-xs text-slate-400 flex justify-between">
-                <span>Active Referrals:</span>
-                <span className="font-mono font-bold text-white">{stats.phase1Count} Traders</span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">
-              When your direct referral settles their 24h profit (e.g. $1,000 profit = $500 share), <strong>you earn $25.00 USDT (5%)</strong> instantly.
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              Available: <strong>${s.availableUsdt.toFixed(2)}</strong>. Minimum request: ${s.rules.minUsdt}. A {s.rules.feePct}% processing fee is taken from the amount you request.
             </p>
-          </div>
-
-        </div>
-
-        {/* Phase 2 Card */}
-        <div className="p-5 rounded-2xl bg-slate-900 border border-blue-500/30 shadow-lg relative overflow-hidden flex flex-col justify-between">
-          <div className="absolute top-0 right-0 px-3 py-1 bg-blue-500 text-slate-950 text-[10px] font-black rounded-bl-xl uppercase tracking-wider">
-            Phase 2 • 3%
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold">
-                2
-              </div>
-              <div>
-                <h4 className="font-bold text-sm text-white">Secondary Referrer</h4>
-                <p className="text-[11px] text-slate-400">Referred by your direct clients</p>
-              </div>
+            <div className="text-[11px] text-slate-500 space-y-1">
+              <p>Requests made before <strong>{gmt(s.schedule.nextCutoff)}</strong> are in this week's round and are processed within {s.rules.processingHours} hours after it (by {gmt(s.schedule.nextExpectedBy)}). Later requests go into the next week's round.</p>
+              <p>All deadlines use GMT. Your local time is 3 hours ahead of GMT in Uganda.</p>
             </div>
 
-            <div className="mt-4 p-3 rounded-xl bg-slate-950 border border-slate-800/80 space-y-1">
-              <div className="text-xs text-slate-400 flex justify-between">
-                <span>Commission Rate:</span>
-                <span className="font-mono font-bold text-blue-400 text-sm">3% of Profit Share</span>
-              </div>
-              <div className="text-xs text-slate-400 flex justify-between">
-                <span>Active Referrals:</span>
-                <span className="font-mono font-bold text-white">{stats.phase2Count} Traders</span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">
-              When traders invited by your Phase 1 network settle profit (e.g. $1,000 profit = $500 share), <strong>you earn $15.00 USDT (3%)</strong>.
-            </p>
-          </div>
-
-        </div>
-
-        {/* Phase 3 Card */}
-        <div className="p-5 rounded-2xl bg-slate-900 border border-purple-500/30 shadow-lg relative overflow-hidden flex flex-col justify-between">
-          <div className="absolute top-0 right-0 px-3 py-1 bg-purple-500 text-slate-950 text-[10px] font-black rounded-bl-xl uppercase tracking-wider">
-            Phase 3 • 2%
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 font-bold">
-                3
-              </div>
-              <div>
-                <h4 className="font-bold text-sm text-white">Tertiary Referrer</h4>
-                <p className="text-[11px] text-slate-400">Referred by your secondary network</p>
-              </div>
-            </div>
-
-            <div className="mt-4 p-3 rounded-xl bg-slate-950 border border-slate-800/80 space-y-1">
-              <div className="text-xs text-slate-400 flex justify-between">
-                <span>Commission Rate:</span>
-                <span className="font-mono font-bold text-purple-400 text-sm">2% of Profit Share</span>
-              </div>
-              <div className="text-xs text-slate-400 flex justify-between">
-                <span>Active Referrals:</span>
-                <span className="font-mono font-bold text-white">{stats.phase3Count} Traders</span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-slate-400 mt-3 leading-relaxed">
-              When traders invited by your Phase 2 network settle profit (e.g. $1,000 profit = $500 share), <strong>you earn $10.00 USDT (2%)</strong>.
-            </p>
-          </div>
-
-        </div>
-      </div>
-
-      {/* Payout Claim & Referral Balance Drawer */}
-      <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Wallet className="w-4 h-4 text-emerald-400" />
-              <span>Claim Referral Commission Payout (TRC20 USDT)</span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Withdraw accrued multi-phase referral earnings directly to your personal TRON wallet.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-4 text-xs font-mono">
-            <div>
-              <span className="text-slate-500 block text-[10px]">Total Lifetime Earned:</span>
-              <span className="font-bold text-white">${stats.totalEarnedUsdt.toFixed(2)} USDT</span>
-            </div>
-            <div>
-              <span className="text-slate-500 block text-[10px]">Available To Claim:</span>
-              <span className="font-bold text-emerald-400">${stats.availableBalanceUsdt.toFixed(2)} USDT</span>
-            </div>
-          </div>
-        </div>
-
-        {claimSuccess && (
-          <div className="p-3 text-xs rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 flex items-center gap-2 animate-in fade-in">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{claimSuccess}</span>
-          </div>
-        )}
-
-        {claimError && (
-          <div className="p-3 text-xs rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-center gap-2 animate-in fade-in">
-            <span className="font-bold">Error:</span>
-            <span>{claimError}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleClaimPayout} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Payout Amount (USDT)
-            </label>
-            <div className="relative">
-              <input
-                type="number"
-                step="0.01"
-                min="1"
-                max={stats.availableBalanceUsdt}
-                value={claimAmount}
-                onChange={(e) => setClaimAmount(e.target.value)}
-                placeholder={`Max: ${stats.availableBalanceUsdt.toFixed(2)}`}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500"
-              />
-              <button
-                type="button"
-                onClick={() => setClaimAmount(stats.availableBalanceUsdt.toString())}
-                className="absolute right-2 top-1.5 text-[10px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 px-1.5 py-0.5 rounded cursor-pointer"
-              >
-                MAX
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-1">
-              Destination TRC20 Wallet Address
-            </label>
-            <input
-              type="text"
-              value={claimAddress}
-              onChange={(e) => setClaimAddress(e.target.value)}
-              placeholder="e.g. TXg8A2k9YvLmNpQrStUvWxYz..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500"
-            />
-          </div>
-
-          <div className="flex items-end">
-            <button
-              type="submit"
-              disabled={isClaiming || stats.availableBalanceUsdt <= 0}
-              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 font-bold text-xs text-slate-950 shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              <Wallet className="w-4 h-4" />
-              <span>{isClaiming ? 'Processing Payout...' : 'Claim Commission Payout'}</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Network of Referred Clients Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <Users className="w-4 h-4 text-emerald-400" />
-            <span>Referred MT5 Clients Across 3 Phases</span>
-          </h3>
-          <span className="text-xs text-slate-400">Total Referrals: {stats.referrals.length}</span>
-        </div>
-
-        <div className="border border-slate-800 rounded-xl overflow-hidden">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-950 border-b border-slate-800 text-[10px] uppercase font-semibold text-slate-400">
-              <tr>
-                <th className="py-2.5 px-3">Client Name</th>
-                <th className="py-2.5 px-3">MT5 Account #</th>
-                <th className="py-2.5 px-3">Referral Phase</th>
-                <th className="py-2.5 px-3">Introduced By</th>
-                <th className="py-2.5 px-3">Total Settled Profit</th>
-                <th className="py-2.5 px-3 text-right">Commission Credited</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60 font-mono">
-              {stats.referrals.map((r) => (
-                <tr key={r.id} className="hover:bg-slate-800/30 transition">
-                  <td className="py-3 px-3 font-bold text-white font-sans">{r.name}</td>
-                  <td className="py-3 px-3 text-slate-300 font-mono">#{r.accountNumber}</td>
-                  <td className="py-3 px-3">
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        r.phase === 1
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                          : r.phase === 2
-                          ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
-                          : 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                      }`}
-                    >
-                      Phase {r.phase} ({r.phase === 1 ? '5%' : r.phase === 2 ? '3%' : '2%'})
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-slate-400 font-sans">{r.referrerName}</td>
-                  <td className="py-3 px-3 text-emerald-400 font-bold">
-                    +${r.totalSettledProfit.toFixed(2)}
-                  </td>
-                  <td className="py-3 px-3 text-right font-bold text-white">
-                    ${r.totalCommissionPaid.toFixed(2)} USDT
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Commission Settlement History */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-        <h3 className="text-sm font-bold text-white flex items-center gap-2">
-          <Clock className="w-4 h-4 text-amber-400" />
-          <span>Real-Time Commission Credit Ledger</span>
-        </h3>
-
-        <div className="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800/70 bg-slate-950/40">
-          {stats.history.length === 0 ? (
-            <div className="p-6 text-center text-xs text-slate-500">
-              No referral commissions credited yet.
-            </div>
-          ) : (
-            stats.history.map((ev) => (
-              <div key={ev.id} className="p-3.5 hover:bg-slate-800/30 transition flex flex-wrap items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${
-                      ev.phase === 1
-                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                        : ev.phase === 2
-                        ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
-                        : 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
-                    }`}
-                  >
-                    P{ev.phase}
+            {open ? (
+              <p className="text-xs text-amber-500">You have a withdrawal in progress. You can request another one when it is finished.</p>
+            ) : (
+              <form onSubmit={submit} className="space-y-3">
+                <input
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  inputMode="decimal"
+                  placeholder={`Amount in USD (min ${s.rules.minUsdt})`}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+                />
+                <input
+                  value={wallet}
+                  onChange={(e) => setWallet(e.target.value)}
+                  placeholder="Your TRON (TRC20) USDT wallet address"
+                  className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+                />
+                {valid && (
+                  <div className="rounded-xl bg-slate-100 dark:bg-slate-950 p-3 text-xs space-y-1 font-mono">
+                    <div className="flex justify-between"><span>Requested</span><span>${n.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-amber-500"><span>Processing fee ({s.rules.feePct}%)</span><span>-${fee.toFixed(2)}</span></div>
+                    <div className="flex justify-between font-bold text-emerald-500"><span>You receive</span><span>${net.toFixed(2)}</span></div>
                   </div>
-                  <div>
-                    <div className="font-semibold text-white">
-                      {ev.fromClientName} (#{ev.fromAccountNumber})
+                )}
+                <button
+                  type="submit"
+                  disabled={busy || !valid || wallet.trim().length < 20}
+                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs cursor-pointer"
+                >
+                  {busy ? 'Submitting…' : 'Confirm withdrawal'}
+                </button>
+              </form>
+            )}
+            {note && <div className={`p-3 rounded-xl text-xs border ${note.ok ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' : 'bg-rose-500/10 border-rose-500/30 text-rose-500'}`}>{note.text}</div>}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+            <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Your withdrawals</h4>
+            {s.withdrawals.length === 0 ? (
+              <p className="text-xs text-slate-500">No withdrawals yet.</p>
+            ) : (
+              <ul className="space-y-3">
+                {s.withdrawals.map((w) => (
+                  <li key={w.id} className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 text-xs space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 dark:text-white">${w.gross.toFixed(2)} → ${w.net.toFixed(2)} (fee ${w.fee.toFixed(2)})</span>
+                      <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase ${STATUS_STYLE[w.status]}`}>{w.status}</span>
                     </div>
-                    <div className="text-[11px] text-slate-400">
-                      Settled Profit: ${ev.settledProfit.toFixed(2)} • 50% Profit Share: ${ev.profitShareAmount.toFixed(2)} USDT
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-right font-mono">
-                  <div className="text-emerald-400 font-bold text-sm">
-                    +${ev.commissionEarnedUsdt.toFixed(2)} USDT
-                  </div>
-                  <div className="text-[10px] text-slate-500">
-                    Phase {ev.phase} ({ev.phasePct}%) • {new Date(ev.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
+                    <div className="text-slate-500">Requested {fmt(w.requestedAt)} · round closes {gmt(w.cycleCutoff)}</div>
+                    {w.status === 'pending' || w.status === 'processing' ? <div className="text-slate-500">Expected by {gmt(w.expectedBy)}</div> : null}
+                    {w.reason && <div className="text-rose-500">Reason: {w.reason}</div>}
+                    {w.txHash && <div className="font-mono text-emerald-500 break-all">TXID {w.txHash}</div>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

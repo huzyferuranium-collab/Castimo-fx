@@ -27,12 +27,6 @@ service cloud.firestore {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow write: if false;
     }
-    match /withdrawals/{id} {
-      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid
-                    && request.resource.data.status == 'pending';
-      allow update, delete: if isAdmin();
-    }
     // Broker accounts are verified by the server against the broker. A client must never be
     // able to write (and so forge) one of these records, so only admins can change them.
     match /mt5_accounts/{id} {
@@ -59,6 +53,19 @@ service cloud.firestore {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow write: if false;
     }
+    // Referral and withdrawal records are written only by the server. A user can read their own.
+    match /referral_commissions/{id} {
+      allow read: if isSignedIn() && (resource.data.beneficiaryUid == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+    match /referral_withdrawals/{id} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+    match /referrals/{id} { allow read, write: if false; }
+    match /referral_codes/{id} { allow read, write: if false; }
+    match /referral_code_owners/{id} { allow read, write: if false; }
+    match /platform_events/{id} { allow read, write: if false; }
     match /used_tx_hashes/{id} {
       allow read, write: if false;
     }

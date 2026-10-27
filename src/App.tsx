@@ -1,3 +1,4 @@
+import { captureReferralFromUrl } from './services/referralApi';
 import React, { useState } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { ThemeToggle, ThemeSegmentedControl } from './components/common/ThemeToggle';
@@ -18,6 +19,8 @@ import {
   Lock,
   Download,
 } from 'lucide-react';
+
+captureReferralFromUrl();
 
 const TickerBar: React.FC = () => {
   return (

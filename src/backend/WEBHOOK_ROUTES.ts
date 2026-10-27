@@ -15,6 +15,7 @@ import { Mt5ConnectionManager } from './MT5_CONNECTION_MANAGER';
 import { ReplicationEngine } from './REPLICATION_ENGINE';
 import { requireUser, requireAdmin, getAuthUser, isAdminUser } from './firebaseAuth';
 import { hasAcceptedTermsServer } from './termsCheck';
+import { recordEvent } from './referralService';
 import { BrokerVerificationError } from './brokerVerification';
 import { BillingService, BillingError, billingConfig, billingEnabled } from './billing';
 
@@ -192,7 +193,7 @@ tradeRouter.post('/toggle-mirror', requireUser, async (req: Request, res: Respon
     });
   } catch (error: any) {
     if (error instanceof BillingError) {
-      return res.status(error.status).json({ success: false, code: 'INVOICE_OVERDUE', error: error.message });
+      return res.status(error.status).json({ success: false, code: error.status === 403 ? 'PLAN_REQUIRED' : 'INVOICE_OVERDUE', error: error.message });
     }
     console.error('❌ [API /api/trade/toggle-mirror] Error:', error?.message || error);
     return res.status(500).json({ success: false, error: 'Failed to toggle mirror state' });
@@ -227,6 +228,9 @@ tradeRouter.post('/provision-client', requireUser, async (req: Request, res: Res
       server: String(server ?? ''),
       platform: platform === 'mt4' ? 'mt4' : 'mt5',
     });
+
+    // Only the first successful connection is announced, and only because it really happened.
+    void recordEvent('ACCOUNT_CONNECTED', user.uid, `connected-${user.uid}`);
 
     return res.status(201).json({
       success: true,

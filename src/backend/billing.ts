@@ -24,6 +24,7 @@ import {
   sumAccountFlows,
 } from './profitShare';
 import { readLimit } from './brokerVerification';
+import { accrueCommissions, recordEvent } from './referralService';
 import {
   DEFAULT_SUBSCRIPTION_PERIOD_DAYS,
   DEFAULT_SUBSCRIPTION_PRICE_USDT,
@@ -283,6 +284,7 @@ export class BillingService {
 
     const plan: PlanRecord = { userId, model, selectedAt: new Date().toISOString() };
     await setDoc('service_plans', userId, plan as any);
+    if (model === 'profit_share') await recordEvent('PROFIT_SHARE_SELECTED', userId, `ps-${userId}-${plan.selectedAt}`);
     if (model === 'subscription') {
       // Leaving profit share: close the ledger so profit made on a subscription is never billed later.
       const ledger = (await getDoc('client_ledgers', userId)) as unknown as ClientLedger | null;
@@ -342,8 +344,19 @@ export class BillingService {
       periodEnd: period.end,
       at: new Date(now).toISOString(),
     });
+    await this.creditReferrers(userId, check.amountUsdt ?? cfg.subscriptionPriceUsdt, 'subscription', `sub-${txHash}`);
+    await recordEvent('SUBSCRIBED', userId, `sub-${txHash}`);
     await this.applyBlocking(userId);
     return updated;
+  }
+
+  /** Referral credits never block or undo a payment that was really received; a failure is logged and retried by the next identical call. */
+  private async creditReferrers(userId: string, paidUsdt: number, type: 'profit_invoice' | 'subscription', sourceId: string): Promise<void> {
+    try {
+      await accrueCommissions(userId, paidUsdt, type, sourceId);
+    } catch (e: any) {
+      console.warn(`⚠️ [REFERRALS] Could not credit commissions for ${sourceId}:`, e?.message);
+    }
   }
 
   /** Stops renewal. There are no automatic charges, so the plan simply ends on its date. */
@@ -443,6 +456,7 @@ export class BillingService {
 
     const paid: Invoice = { ...invoice, status: 'paid', paidAt: new Date().toISOString(), txHash };
     await setDoc('profit_invoices', invoice.id, paid as any);
+    await this.creditReferrers(userId, invoice.amountDueUsdt, 'profit_invoice', invoice.id);
     await this.applyBlocking(userId);
     return paid;
   }
@@ -460,6 +474,7 @@ export class BillingService {
       confirmedBy: `${adminUid}${note ? `: ${String(note).slice(0, 200)}` : ''}`,
     };
     await setDoc('profit_invoices', invoice.id, paid as any);
+    await this.creditReferrers(invoice.userId, invoice.amountDueUsdt, 'profit_invoice', invoice.id);
     await this.applyBlocking(invoice.userId);
     return paid;
   }

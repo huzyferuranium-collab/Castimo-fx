@@ -12,6 +12,7 @@ import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firest
 import { auth, db, testFirestoreConnection } from '../config/firebase';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 import { UserProfile, UserRole } from '../types';
+import { attachPendingReferral } from '../services/referralApi';
 
 interface AuthContextType {
   isAdmin: boolean;
@@ -102,6 +103,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.log('🔔 [Firebase Auth] onAuthStateChanged fired. CurrentUser:', currentUser ? currentUser.uid : 'null');
       if (currentUser) {
         setUser(currentUser);
+        // If this visitor arrived through a referral link, tell the server (it decides whether it counts).
+        void attachPendingReferral();
         try {
           const userDocRef = doc(db, 'users', currentUser.uid);
           const docSnap = await getDoc(userDocRef);
