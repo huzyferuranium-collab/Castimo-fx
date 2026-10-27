@@ -13,7 +13,7 @@
 import { Router, Request, Response } from 'express';
 import { Mt5ConnectionManager } from './MT5_CONNECTION_MANAGER';
 import { ReplicationEngine } from './REPLICATION_ENGINE';
-import { requireUser, requireAdmin, getAuthUser, isAdminUser } from './firebaseAuth';
+import { requireUser, requireAdmin, getAuthUser, isAdminUser, hasVerifiedWhatsAppServer } from './firebaseAuth';
 import { hasAcceptedTermsServer } from './termsCheck';
 import { BrokerVerificationError } from './brokerVerification';
 import { BillingService, BillingError, billingConfig, billingEnabled } from './billing';
@@ -216,6 +216,26 @@ tradeRouter.post('/provision-client', requireUser, async (req: Request, res: Res
         code: 'TERMS_NOT_ACCEPTED',
         error: 'Please read and accept the Terms and Risk Warning before connecting an account.',
       });
+    }
+
+    const isAdmin = await isAdminUser(user);
+    if (!isAdmin) {
+      if (!user.emailVerified) {
+        return res.status(403).json({
+          success: false,
+          code: 'EMAIL_VERIFICATION_REQUIRED',
+          error: 'Email verification required. Please verify your email address before connecting your MT5 trading account.',
+        });
+      }
+
+      const isWhatsAppVerified = await hasVerifiedWhatsAppServer(user);
+      if (!isWhatsAppVerified) {
+        return res.status(403).json({
+          success: false,
+          code: 'WHATSAPP_VERIFICATION_REQUIRED',
+          error: 'WhatsApp code verification required. Please verify your WhatsApp number before connecting your MT5 trading account.',
+        });
+      }
     }
 
     await BillingService.getInstance().assertNotOverdue(user.uid);

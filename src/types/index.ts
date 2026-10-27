@@ -8,6 +8,9 @@ export interface UserProfile {
   createdAt: string;
   photoURL?: string;
   emailVerified?: boolean;
+  whatsappNumber?: string;
+  whatsappVerified?: boolean;
+  phone?: string;
   nationalId?: string;
   nationalIdVerified?: boolean;
 }

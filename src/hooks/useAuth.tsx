@@ -36,6 +36,7 @@ interface AuthContextType {
   refreshEmailVerified: () => Promise<boolean>;
   isNationalIdDuplicate: (id: string, uid?: string) => boolean;
   updateNationalId: (id: string) => Promise<{ success: boolean; error?: string }>;
+  updateWhatsAppNumber: (phone: string, verified: boolean) => Promise<{ success: boolean; error?: string }>;
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
@@ -43,7 +44,7 @@ interface AuthContextType {
   lastErrorCode: string | null;
   diagnosticAdvice: string | null;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
-  signUpWithEmail: (email: string, pass: string, name: string, role?: UserRole) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string, name: string, role?: UserRole, whatsappNumber?: string, whatsappVerified?: boolean) => Promise<void>;
   signOutUser: () => Promise<void>;
   switchRole: (role: UserRole) => Promise<void>;
   clearError: () => void;
@@ -133,6 +134,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               role: data.role === 'admin' ? 'admin' : 'client',
               createdAt: data.createdAt || new Date().toISOString(),
               photoURL: currentUser.photoURL || undefined,
+              whatsappNumber: data.whatsappNumber || data.phone || undefined,
+              whatsappVerified: !!data.whatsappVerified,
+              phone: data.phone || data.whatsappNumber || undefined,
               nationalId: data.nationalId || undefined,
               nationalIdVerified: !!data.nationalId,
             });
@@ -145,6 +149,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               role: 'client',
               createdAt: new Date().toISOString(),
               photoURL: currentUser.photoURL || undefined,
+              whatsappVerified: false,
             };
             await setDoc(userDocRef, {
               ...newProfile,
@@ -219,7 +224,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     email: string,
     pass: string,
     displayName: string,
-    role: UserRole = 'client'
+    role: UserRole = 'client',
+    whatsappNumber?: string,
+    whatsappVerified: boolean = false
   ) => {
     setError(null);
     setLastErrorCode(null);
@@ -230,6 +237,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     console.log('Email:', email);
     console.log('DisplayName:', displayName);
     console.log('Role:', role);
+    console.log('WhatsApp Number:', whatsappNumber);
     console.log('Timestamp:', new Date().toISOString());
 
     try {
@@ -250,6 +258,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         displayName: displayName || 'Trader',
         role: 'client',
         createdAt: new Date().toISOString(),
+        whatsappNumber: whatsappNumber || undefined,
+        whatsappVerified: !!whatsappVerified,
+        phone: whatsappNumber || undefined,
       };
 
       try {
@@ -374,6 +385,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const updateWhatsAppNumber = async (phone: string, verified: boolean) => {
+    const current = auth.currentUser;
+    if (!current || !isRealUser) return { success: false, error: 'Please sign in with a real account first.' };
+    try {
+      await updateDoc(doc(db, 'users', current.uid), {
+        whatsappNumber: phone,
+        phone,
+        whatsappVerified: verified,
+        updatedAt: new Date().toISOString(),
+      });
+      setUserProfile((p) => (p ? { ...p, whatsappNumber: phone, phone, whatsappVerified: verified } : p));
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Could not update WhatsApp number.' };
+    }
+  };
+
   const isAdmin = !!userProfile && userProfile.role === 'admin' && isRealUser;
   const isClient = !!userProfile && !isAdmin;
 
@@ -404,6 +432,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         refreshEmailVerified,
         isNationalIdDuplicate,
         updateNationalId,
+        updateWhatsAppNumber,
       }}
     >
       {children}

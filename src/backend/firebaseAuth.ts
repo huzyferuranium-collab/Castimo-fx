@@ -21,6 +21,7 @@ export class AuthError extends Error {
 export interface AuthUser {
   uid: string;
   email?: string;
+  emailVerified?: boolean;
   idToken: string;
 }
 
@@ -43,7 +44,7 @@ function parseJson(buf: Buffer): any {
 export function verifyFirebaseIdToken(
   token: string,
   opts: { projectId: string; keys: Record<string, KeyObject>; nowSec?: number }
-): { uid: string; email?: string } {
+): { uid: string; email?: string; emailVerified?: boolean } {
   const parts = typeof token === 'string' ? token.split('.') : [];
   if (parts.length !== 3) throw new AuthError('Malformed sign-in token.');
   const [h, p, s] = parts;
@@ -66,7 +67,11 @@ export function verifyFirebaseIdToken(
   if (typeof payload.sub !== 'string' || payload.sub.length === 0 || payload.sub.length > 128) {
     throw new AuthError('Token has no user.');
   }
-  return { uid: payload.sub, email: typeof payload.email === 'string' ? payload.email : undefined };
+  return {
+    uid: payload.sub,
+    email: typeof payload.email === 'string' ? payload.email : undefined,
+    emailVerified: !!payload.email_verified,
+  };
 }
 
 /** Reads the role field from a Firestore REST document. Anything unexpected is "client". */
@@ -156,6 +161,21 @@ export async function isAdminUser(user: AuthUser): Promise<boolean> {
   const role = res.ok ? parseRoleFromFirestoreDoc(await res.json()) : 'client';
   roleCache.set(user.uid, { role, expiresAt: Date.now() + 60_000 });
   return role === 'admin';
+}
+
+/**
+ * Reads whether the user's WhatsApp number is verified in Firestore.
+ */
+export async function hasVerifiedWhatsAppServer(user: AuthUser): Promise<boolean> {
+  const { projectId, databaseId } = loadFirebaseSettings();
+  const url =
+    `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}` +
+    `/databases/${encodeURIComponent(databaseId)}/documents/users/${encodeURIComponent(user.uid)}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${user.idToken}` } });
+  if (!res.ok) return false;
+  const doc = await res.json();
+  const verified = doc?.fields?.whatsappVerified?.booleanValue ?? false;
+  return !!verified;
 }
 
 // ---------- Express middleware ----------
