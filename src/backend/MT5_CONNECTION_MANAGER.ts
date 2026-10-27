@@ -547,7 +547,9 @@ export class Mt5ConnectionManager {
     params: ProvisionClientParams,
     onStage?: (stage: Stage) => void
   ): Promise<ClientConnectionRecord> {
-    const { userId, magic, platform = 'mt5', region = 'london', reliability = 'high' } = params;
+    const { userId, magic, platform = 'mt5', reliability = 'high' } = params;
+    // MetaApi region for client terminals (new-york, london or singapore); pick the one nearest your brokers.
+    const region = params.region || process.env.METAAPI_CLIENT_REGION || 'london';
     if (!userId) throw new BrokerVerificationError('BAD_INPUT', 'You must be signed in to connect an account.');
 
     // FAIL CLOSED: without a live MetaApi connection we cannot ask the broker, so we accept nothing.

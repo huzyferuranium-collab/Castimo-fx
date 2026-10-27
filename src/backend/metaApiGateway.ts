@@ -32,7 +32,14 @@ function wrapAccount(entity: any): AccountHandle {
     server: entity.server,
     // MetaApi's own wait returns at once when the account is already deployed.
     waitDeployed: async (seconds: number) => {
-      if (entity.state !== 'DEPLOYED') await entity.waitDeployed(seconds, 1000);
+      if (entity.state === 'DEPLOYED') return;
+      // A terminal MetaApi left undeployed (or never deployed) must be started, or the wait never ends.
+      if (entity.state === 'UNDEPLOYED' || entity.state === 'DRAFT') await entity.deploy();
+      await entity.waitDeployed(seconds, 1000);
+    },
+    snapshot: async () => {
+      await entity.reload();
+      return { state: entity.state, connectionStatus: entity.connectionStatus };
     },
     rpc: () => wrapRpc(entity.getRPCConnection()),
     raw: entity,

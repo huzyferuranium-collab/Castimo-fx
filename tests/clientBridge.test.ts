@@ -28,6 +28,7 @@ type Behaviour = {
   infoHangs?: boolean;
   listError?: any;
   loginOnAccount?: string;
+  infoFailsFirst?: number; // the broker is not ready for the first N direct asks
 };
 
 const GOOD_INFO = {
@@ -41,6 +42,7 @@ function makeFake(b: Behaviour = {}) {
   const accounts = [...(b.existing || [])];
   const never = () => new Promise<never>(() => {});
   let createN = 0;
+  let infoAsks = 0;
 
   const gateway: BrokerGateway = {
     async listAccounts() {
@@ -73,6 +75,9 @@ function makeFake(b: Behaviour = {}) {
           if (b.deployHangs) return never();
           if (b.deployError) throw b.deployError;
         },
+        async snapshot() {
+          return { state: 'DEPLOYED', connectionStatus: 'DISCONNECTED' };
+        },
         rpc: () => ({
           async connect() {
             if (b.connectError) throw b.connectError;
@@ -82,6 +87,7 @@ function makeFake(b: Behaviour = {}) {
           },
           async getAccountInformation() {
             if (b.infoHangs) return never();
+            if (b.infoFailsFirst && infoAsks++ < b.infoFailsFirst) throw new Error('Terminal is not connected to broker yet');
             return b.info === undefined ? GOOD_INFO : b.info;
           },
           raw: { rpc: true },
@@ -98,7 +104,7 @@ function makeFake(b: Behaviour = {}) {
   return { gateway, calls, accounts };
 }
 
-const fast = { listSeconds: 0.2, createSeconds: 0.05, deploySeconds: 0.05, connectSeconds: 0.05, syncSeconds: 0.05, infoSeconds: 0.05 };
+const fast = { listSeconds: 0.2, createSeconds: 0.05, deploySeconds: 0.05, connectSeconds: 0.05, syncSeconds: 0.05, infoSeconds: 0.05, probeEveryMs: 5 };
 
 function deps(fake: ReturnType<typeof makeFake>, over: Partial<BridgeDeps> = {}): BridgeDeps & { logs: string[] } {
   const logs: string[] = [];
@@ -220,11 +226,39 @@ test('a slow sync and a slow account read are reported by stage', async () => {
   assert.equal(e.ref, 'TIMEOUT_VERIFYING');
 });
 
+test('the connection does not wait for a lagging sync signal: it finishes as soon as the broker answers', async () => {
+  const d = deps(makeFake({ syncHangs: true }), { timeouts: { ...fast, syncSeconds: 2, infoSeconds: 1 } });
+  const t0 = Date.now();
+  const r = await connectClient(d, input);
+  assert.ok(Date.now() - t0 < 500, `took ${Date.now() - t0}ms`);
+  assert.equal(r.verified.equity, 520);
+});
+
+test('a broker that is not ready yet is asked again until it answers', async () => {
+  const d = deps(makeFake({ syncHangs: true, infoFailsFirst: 3 }), { timeouts: { ...fast, syncSeconds: 1, infoSeconds: 0.5 } });
+  const r = await connectClient(d, input);
+  assert.equal(r.verified.equity, 520);
+});
+
+test('when a terminal is slow, the admin gets MetaApi\'s own status in the log, the client does not', async () => {
+  const d = deps(makeFake({ syncHangs: true, infoHangs: true }));
+  const e = await failure(connectClient(d, input));
+  assert.match(e.detail!, /state=DEPLOYED/);
+  assert.match(e.detail!, /connection=DISCONNECTED/);
+  assert.doesNotMatch(e.message, /DISCONNECTED/);
+  assert.ok(d.logs.some((l) => /DISCONNECTED/.test(l)));
+
+  const jobs = new ConnectJobs();
+  jobs.start('u9', { login: '1', server: 's' }, async () => { throw e; });
+  await tick();
+  assert.match(jobs.recentFailures()[0].raw, /connection=DISCONNECTED/);
+});
+
 test('if the sync signal lags but the broker answers directly, the connection still succeeds', async () => {
   const d = deps(makeFake({ syncHangs: true }));
   const r = await connectClient(d, input);
   assert.equal(r.verified.equity, 520);
-  assert.ok(d.logs.some((l) => /Sync signal timed out/.test(l)));
+  assert.ok(d.logs.some((l) => /Broker answered directly/.test(l)));
 });
 
 test('the SDK\'s own TimeoutError is treated as slow too', async () => {
@@ -497,6 +531,10 @@ test('the MetaApi adapter forwards calls and exposes the underlying objects', as
   const entity = (state: string) => ({
     id: 'a1', name: 'CastimoFX Client u #1', login: '1', server: 'S', state,
     waited: 0,
+    connectionStatus: 'DISCONNECTED',
+    deployed: 0,
+    async deploy() { (this as any).deployed++; },
+    async reload() {},
     async waitDeployed(sec: number, ms: number) { (this as any).waited = [sec, ms]; },
     getRPCConnection() { return { connect: async () => {}, waitSynchronized: async () => {}, getAccountInformation: async () => GOOD_INFO }; },
     async remove() { removed.push('a1'); },
@@ -519,9 +557,12 @@ test('the MetaApi adapter forwards calls and exposes the underlying objects', as
   const h1 = await gw.getAccount('a1');
   await h1.waitDeployed(90);
   assert.deepEqual((e1 as any).waited, [90, 1000]);
+  assert.equal((e1 as any).deployed, 1, 'an undeployed terminal is started before waiting');
+  assert.deepEqual(await h1.snapshot!(), { state: 'UNDEPLOYED', connectionStatus: 'DISCONNECTED' });
   const h2 = await gw.getAccount('dep');
   await h2.waitDeployed(90);
   assert.equal((e2 as any).waited, 0, 'an already deployed terminal is not waited on');
+  assert.equal((e2 as any).deployed, 0);
   assert.equal(h1.raw, e1);
   assert.ok(h1.rpc().raw);
   assert.equal((await h1.rpc().getAccountInformation()).broker, 'Exness Technologies Ltd');

@@ -28,6 +28,8 @@ export class BrokerVerificationError extends Error {
   ref?: string;
   /** The connect step that was running when it failed. */
   stage?: string;
+  /** Technical detail for the administrator only (never shown to clients). */
+  detail?: string;
   constructor(code: BrokerErrorCode, message: string) {
     super(message);
     this.name = 'BrokerVerificationError';

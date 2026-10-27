@@ -53,6 +53,8 @@ export interface AccountHandle {
   server: string;
   waitDeployed(seconds: number): Promise<void>;
   rpc(): RpcHandle;
+  /** MetaApi's own view of the terminal right now (for the admin log when something is slow). */
+  snapshot?(): Promise<{ state?: string; connectionStatus?: string }>;
   raw?: unknown;
 }
 
@@ -125,6 +127,8 @@ export interface BridgeTimeouts {
   connectSeconds: number;
   syncSeconds: number;
   infoSeconds: number;
+  /** While syncing, how often to ask the broker for the account directly. */
+  probeEveryMs: number;
 }
 
 export const DEFAULT_TIMEOUTS: BridgeTimeouts = {
@@ -134,6 +138,7 @@ export const DEFAULT_TIMEOUTS: BridgeTimeouts = {
   connectSeconds: 60,
   syncSeconds: 120,
   infoSeconds: 30,
+  probeEveryMs: 3000,
 };
 
 export interface BridgeLimits {
@@ -257,6 +262,63 @@ const rejectsForGood = new Set<BrokerErrorCode | string>([
 ]);
 
 /**
+ * Waits until the broker is reachable. Two things run side by side and the first to succeed wins:
+ *  - MetaApi's "synchronized" signal (which can lag), and
+ *  - asking the broker for the account directly every few seconds.
+ * Returns the account information if the direct ask answered first, or undefined if the sync signal did.
+ */
+async function waitForBroker(
+  rpc: RpcHandle,
+  t: BridgeTimeouts,
+  log: BridgeDeps['log'],
+  login: string
+): Promise<BrokerAccountInfo | undefined> {
+  const deadline = Date.now() + t.syncSeconds * 1000;
+  let stopped = false;
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  const probe = (async (): Promise<BrokerAccountInfo> => {
+    let last: unknown;
+    while (!stopped) {
+      const left = (deadline - Date.now()) / 1000;
+      if (left <= 0) break;
+      try {
+        return await withTimeout(rpc.getAccountInformation(), Math.min(t.infoSeconds, left), 'syncing');
+      } catch (e) {
+        last = e;
+        await sleep(t.probeEveryMs);
+      }
+    }
+    throw last ?? new StageTimeoutError('syncing');
+  })();
+  const signal = withTimeout(rpc.waitSynchronized(t.syncSeconds), t.syncSeconds, 'syncing');
+
+  return await new Promise<BrokerAccountInfo | undefined>((resolve, reject) => {
+    let pending = 2;
+    const errors: unknown[] = [];
+    const lose = (e: unknown) => {
+      errors.push(e);
+      if (--pending > 0) return;
+      stopped = true;
+      const timeout = errors.find((x) => x instanceof StageTimeoutError || String((x as any)?.name) === 'TimeoutError');
+      reject(timeout ?? errors[0]);
+    };
+    probe.then(
+      (info) => {
+        stopped = true;
+        log?.('info', `Broker answered directly for #${login}.`);
+        resolve(info);
+      },
+      lose
+    );
+    signal.then(() => {
+      stopped = true;
+      resolve(undefined);
+    }, lose);
+  });
+}
+
+/**
  * Runs the whole connect pipeline for one user. Throws a BrokerVerificationError on any failure.
  * `onStage` is called whenever the pipeline moves to a new step.
  */
@@ -282,6 +344,7 @@ export async function connectClient(
   };
 
   let createdId: string | undefined;
+  let handle: AccountHandle | undefined;
   try {
     go('checking');
 
@@ -378,6 +441,7 @@ export async function connectClient(
     }
 
     const account = await withTimeout(deps.gateway.getAccount(accountId), t.listSeconds, 'creating');
+    handle = account;
     if (!sameLogin(account.login, login) || !sameServer(account.server)) {
       throw new BrokerVerificationError('LOGIN_MISMATCH', 'The broker account does not match the details you entered.');
     }
@@ -386,24 +450,11 @@ export async function connectClient(
     go('deploying');
     await withTimeout(account.waitDeployed(t.deploySeconds), t.deploySeconds, 'deploying');
 
-    // --- sync ---
+    // --- sync: finish as soon as EITHER the sync signal arrives OR the broker answers directly ---
     go('syncing');
     const rpc = account.rpc();
     await withTimeout(rpc.connect(), t.connectSeconds, 'syncing');
-    let info: BrokerAccountInfo | undefined;
-    try {
-      await withTimeout(rpc.waitSynchronized(t.syncSeconds), t.syncSeconds, 'syncing');
-    } catch (e) {
-      // The "synchronized" signal can lag even when the broker already answers. Ask the broker directly
-      // before giving up; if it answers, the account is genuinely reachable and we carry on.
-      if (!(e instanceof StageTimeoutError) && String((e as any)?.name || '') !== 'TimeoutError') throw e;
-      log?.('warn', `Sync signal timed out for #${login}; asking the broker for the account directly.`);
-      try {
-        info = await withTimeout(rpc.getAccountInformation(), t.infoSeconds, 'syncing');
-      } catch {
-        throw e;
-      }
-    }
+    let info = await waitForBroker(rpc, t, log, login);
 
     // --- verify ---
     go('verifying');
@@ -416,6 +467,17 @@ export async function connectClient(
   } catch (error: any) {
     const safe = toClientError(error, { login, server }, stage, log);
     log?.('warn', `Connect failed for #${login} at '${stage}' (${safe.code}); raw: ${String(error?.message || error).slice(0, 300)}`);
+
+    // For the admin log: what MetaApi itself says about the terminal (e.g. DEPLOYED but DISCONNECTED).
+    if (handle?.snapshot && !rejectsForGood.has(safe.code)) {
+      try {
+        const snap = await withTimeout(handle.snapshot(), 5, 'checking');
+        safe.detail = `terminal state=${snap.state ?? '?'}, broker connection=${snap.connectionStatus ?? '?'}`;
+        log?.('warn', `Terminal for #${login}: ${safe.detail}`);
+      } catch {
+        // best effort only
+      }
+    }
 
     // Remove an account we just created only when the broker rejected it for good.
     // A slow terminal is kept, so the next attempt resumes it (one account per user is enforced).
@@ -587,6 +649,7 @@ export class ConnectJobs<R = unknown> {
         job.updatedAt = this.now();
 
         let raw = String(err?.message || err || '').slice(0, 300);
+        if ((err as any)?.detail) raw = `${(err as any).detail} | ${raw}`;
         for (const s of meta.secrets || []) if (s && s.length >= 3) raw = raw.split(s).join('***');
         this.failures.unshift({
           at: new Date(this.now()).toISOString(),
