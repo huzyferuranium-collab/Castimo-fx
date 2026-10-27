@@ -191,6 +191,29 @@ export class ReplicationEngine {
   }
 
   /**
+   * The master's real open positions as last reported by the broker terminal.
+   * Prices and sizes only; nothing is estimated.
+   */
+  public getMasterTradeSnapshot(): Array<{ id: string; symbol: string; side: 'BUY' | 'SELL'; volume: number; openPrice: number; openedAt: string | null }> {
+    const out: Array<{ id: string; symbol: string; side: 'BUY' | 'SELL'; volume: number; openPrice: number; openedAt: string | null }> = [];
+    for (const [id, p] of this.masterPositions) {
+      const t = String((p as any).type || '').toUpperCase();
+      const side = t.includes('SELL') ? 'SELL' : t.includes('BUY') ? 'BUY' : null;
+      if (!side) continue;
+      const opened = (p as any).time ? new Date((p as any).time) : null;
+      out.push({
+        id,
+        symbol: String(p.symbol || ''),
+        side,
+        volume: Number((p as any).volume) || 0,
+        openPrice: Number((p as any).openPrice) || 0,
+        openedAt: opened && !isNaN(opened.getTime()) ? opened.toISOString() : null,
+      });
+    }
+    return out;
+  }
+
+  /**
    * =========================================================================
    * LOT SCALING MATH (Strict Institutional Balance Ratio Calculation)
    * 

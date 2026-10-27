@@ -394,6 +394,27 @@ tradeRouter.get('/my-account', requireUser, async (req: Request, res: Response) 
 });
 
 /**
+ * GET /api/trade/robot-state
+ * What the master terminal is actually doing right now.
+ *  - UNAVAILABLE: the master feed is down or not live, so nothing can be said about trades.
+ *  - NO_TRADE: the feed is live and the master has no open position.
+ *  - TRADE: the feed is live and the master has at least one open position.
+ */
+tradeRouter.get('/robot-state', requireUser, (_req: Request, res: Response) => {
+  const live = connectionManager.isConnected() && !connectionManager.isSimulated();
+  if (!live) {
+    return res.status(200).json({ success: true, state: 'UNAVAILABLE', trades: [], updatedAt: new Date().toISOString() });
+  }
+  const trades = replicationEngine.getMasterTradeSnapshot();
+  return res.status(200).json({
+    success: true,
+    state: trades.length > 0 ? 'TRADE' : 'NO_TRADE',
+    trades,
+    updatedAt: new Date().toISOString(),
+  });
+});
+
+/**
  * GET /api/trade/clients  (administrators only)
  * Every broker-verified client in the replication pipeline.
  */

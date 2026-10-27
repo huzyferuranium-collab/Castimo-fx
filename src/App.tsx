@@ -28,13 +28,9 @@ const TickerBar: React.FC = () => {
           <span className="text-slate-800 dark:text-slate-300 font-bold">TRON NETWORK:</span>
           <span className="text-emerald-600 dark:text-emerald-400 font-semibold">TRC20 USDT ACTIVE</span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-slate-600 dark:text-slate-500 font-medium">XAUUSD:</span>
-          <span className="text-emerald-600 dark:text-emerald-400 font-bold">2,651.80 +0.35%</span>
-        </div>
       </div>
       <div className="hidden lg:flex items-center gap-3 shrink-0 text-[10px] text-slate-500 dark:text-slate-500">
-        <span>MODEL: 50% PROFIT SHARE</span>
+        <span>$100/MONTH OR 50% PROFIT SHARE</span>
         <span>•</span>
         <span>REFERRALS: 5% / 3% / 2%</span>
         <span>•</span>

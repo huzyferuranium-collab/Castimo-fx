@@ -20,8 +20,7 @@ import { LedgerAuditModal } from '../ledger/LedgerAuditModal';
 import { SidebarNav, NavGroup } from '../common/SidebarNav';
 import { AuthModal } from '../auth/AuthModal';
 
-// Sleek, lightweight, non-intrusive AI Trading Assistant widget
-import { AITradingAssistant } from './AITradingAssistant';
+import { RobotConsole } from './RobotConsole';
 
 import {
   Wallet,
@@ -134,13 +133,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     topUpNotice?: { required: boolean; message: string; topUpUrl: string };
     mode?: string;
   }>({
-    connected: true,
-    status: 'CONNECTED',
-    latencyMs: 12,
-    masterBalance: 100000.0,
-    masterEquity: 100000.0,
+    connected: false,
+    status: 'UNKNOWN',
+    latencyMs: 0,
+    masterBalance: 0,
+    masterEquity: 0,
     openPositionsCount: 0,
-    activeClientsCount: 1,
+    activeClientsCount: 0,
     mirrorActive: true,
     loading: false,
   });
@@ -155,13 +154,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         const data = await res.json();
         setMetaApiStatus((prev) => ({
           ...prev,
-          connected: data.connected ?? true,
-          status: data.isSimulated ? 'SIMULATED BRIDGE' : (data.status || 'CONNECTED'),
-          latencyMs: data.latencyMs || 8,
+          connected: data.connected === true,
+          status: data.status || 'UNKNOWN',
+          latencyMs: Number(data.latencyMs) || 0,
           masterBalance: data.master?.balance != null ? Number(data.master.balance) : prev.masterBalance,
           masterEquity: data.master?.equity != null ? Number(data.master.equity) : prev.masterEquity,
           openPositionsCount: data.master?.openPositionsCount ?? 0,
-          activeClientsCount: data.activeClientsCount ?? 1,
+          activeClientsCount: Number(data.activeClientsCount) || 0,
           topUpNotice: data.topUpNotice,
           mode: data.mode,
         }));
@@ -379,19 +378,14 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const openTradesCount = openTrades.length;
   const floatingPnl = openTrades.reduce((acc, trade) => acc + (trade.pnl || 0), 0);
 
-  const handleExecuteAiSignal = (symbol: string, direction: 'BUY' | 'SELL') => {
-    const cleanSym = (symbol.replace('/', '').includes('XAU') ? 'XAUUSD' : 'XAUUSD') as 'XAUUSD';
-    tradingEngine.executeMasterTrade(cleanSym, direction, 0.20);
-  };
-
   // Streamlined collapsible sidebar navigation: clean, responsive, with Profile & 50% Share
   const navGroups: NavGroup[] = [
     {
-      groupTitle: 'Trading Engine',
+      groupTitle: 'Trading',
       items: [
         {
           id: 'overview',
-          label: 'AI Dashboard',
+          label: 'Dashboard',
           icon: Cpu,
         },
         {
@@ -409,7 +403,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
       ],
     },
     {
-      groupTitle: 'Settlement & Profile',
+      groupTitle: 'More',
       items: [
         {
           id: 'settlement_due',
@@ -420,7 +414,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         },
         {
           id: 'profile',
-          label: 'My Profile & KYC',
+          label: 'Profile & Verification',
           icon: ShieldCheck,
           badge: userProfile?.nationalId ? 'ID Verified' : 'Action Needed',
           badgeVariant: userProfile?.nationalId ? 'success' : 'warning',
@@ -460,16 +454,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 {isConnected ? `#${account.accountNumber}` : 'NOT CONNECTED'}
               </span>
             </div>
-            {/* The "AI Dashboard" status area ("Continuous Market Scanning • Awaiting MT5 Bridge") is ONLY shown to admin */}
-            {isUserAdmin ? (
+            {isConnected && (
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 truncate">
-                Continuous Market Scanning • {isConnected ? `Master MT5 #${account.copiedFromMasterAccount || '1099284'}` : account.brokerServer || 'Awaiting MT5 Bridge'} • 50% Profit Share Model
+                MT5 trade mirroring active
               </p>
-            ) : isConnected ? (
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 truncate">
-                MT5 Trade Mirroring Active • Direct Broker Custody
-              </p>
-            ) : null}
+            )}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -518,7 +507,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                   Trade Copying Suspended: 50% Profit Share Unpaid (&gt;24h)
                 </h4>
                 <p className="text-xs text-rose-200/90 mt-0.5">
-                  Remit your 50% profit share (${(account.unpaidProfitShareUsdt || 150).toFixed(2)} USDT) to immediately resume automated trade replication.
+                  Remit your 50% profit share (${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT) to immediately resume automated trade replication.
                 </p>
               </div>
             </div>
@@ -528,23 +517,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
               className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 font-bold text-xs text-slate-950 shadow-md transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
             >
               <Wallet className="w-4 h-4" />
-              <span>Pay ${(account.unpaidProfitShareUsdt || 150).toFixed(2)} USDT</span>
+              <span>Pay ${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT</span>
             </button>
-          </div>
-        )}
-
-        {isRiskBlocked && !isBlockedUnpaid && isConnected && (
-          <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-200 flex items-start gap-3 shadow-lg animate-in fade-in">
-            <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h4 className="font-bold text-sm text-rose-300">
-                Trade Copying Paused: Capital Below $200.00 Floor
-              </h4>
-              <p className="text-xs text-rose-200/90 mt-0.5">
-                {account.blockedReason ||
-                  'Account equity is below the mandatory $200.00 safety threshold. New trade signals are suspended to prevent account blowout.'}
-              </p>
-            </div>
           </div>
         )}
 
@@ -553,122 +527,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             ======================================================== */}
         {activeSection === 'overview' && (
           <div className="space-y-4 animate-in fade-in duration-150">
-            {/* MetaApi MT5 WebSocket Synchronization & Mirror Control Banner - Admin Only */}
-            {isUserAdmin && (
-              <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/40 border border-emerald-500/30 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-start sm:items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">
-                    <Radio className="w-4 h-4 animate-pulse" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-extrabold text-xs sm:text-sm text-emerald-300 tracking-tight flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                        MetaApi MT5 Synchronizer: {metaApiStatus.status}
-                      </span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-bold">
-                        {metaApiStatus.latencyMs}ms WebSocket
-                      </span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-300">
-                        Master Terminal: ${metaApiStatus.masterBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-300 mt-1 flex items-center gap-1 flex-wrap">
-                      <span>Balance-Ratio Lot Scaling:</span>
-                      <span className="font-mono text-emerald-400 font-bold">
-                        {(Math.max(0.01, (account.balance / Math.max(metaApiStatus.masterBalance, 10)))).toFixed(4)}x
-                      </span>
-                      <span className="text-slate-400">
-                        (Master 1.00 lot &rarr; You {(Math.max(0.01, (account.balance / Math.max(metaApiStatus.masterBalance, 10)) * 1.0)).toFixed(2)} lots)
-                      </span>
-                      <span className="text-slate-500">•</span>
-                      <span className="text-slate-400">$200.00 Floor Guard Active</span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Right Side: Toggle Mirror Button */}
-                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                  <button
-                    type="button"
-                    onClick={handleToggleMirror}
-                    disabled={metaApiStatus.loading}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-md cursor-pointer ${
-                      metaApiStatus.mirrorActive
-                        ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20'
-                        : 'bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40'
-                    }`}
-                    title="Toggle active trade replication relationship with master terminal"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${metaApiStatus.loading ? 'animate-spin' : ''}`} />
-                    <span>
-                      {metaApiStatus.loading
-                        ? 'Syncing...'
-                        : metaApiStatus.mirrorActive
-                        ? 'Mirror: ACTIVE'
-                        : 'Mirror: IDLE (Paused)'}
-                    </span>
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        metaApiStatus.mirrorActive ? 'bg-slate-950 animate-pulse' : 'bg-amber-400'
-                      }`}
-                    />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* MetaApi Cloud Notice Banner when top-up is needed - Admin Only */}
-            {isUserAdmin && metaApiStatus.topUpNotice?.required && (
-              <div className="p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
-                <div className="flex items-start gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
-                    <AlertTriangle className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="font-bold text-amber-300 text-xs sm:text-sm flex items-center gap-2">
-                      <span>MetaApi Cloud Notice: Account Top-up Required</span>
-                    </div>
-                    <p className="text-[11px] text-amber-200/80 mt-0.5">
-                      {metaApiStatus.topUpNotice.message}
-                    </p>
-                    {retryMessage && (
-                      <p className="text-[10px] text-emerald-400 mt-1 font-mono font-semibold">
-                        ℹ️ {retryMessage}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                  <button
-                    type="button"
-                    onClick={handleRetryMasterTerminal}
-                    disabled={isRetryingMaster}
-                    className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${isRetryingMaster ? 'animate-spin' : ''}`} />
-                    <span>{isRetryingMaster ? 'Checking...' : 'Re-check Connection'}</span>
-                  </button>
-                  <a
-                    href="https://app.metaapi.cloud"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 transition shadow-sm"
-                  >
-                    Top Up MetaApi &rarr;
-                  </a>
-                </div>
-              </div>
-            )}
-
-            {/* Error notice if mirror failed safety check - Admin Only */}
-            {isUserAdmin && metaApiStatus.error && (
-              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-200 text-xs flex items-center gap-2 animate-in fade-in">
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-                <span className="font-semibold">{metaApiStatus.error}</span>
-              </div>
-            )}
-
             {/* 1. HIGH-PRECISION EQUITY & ACCOUNT SUMMARY BAR */}
             <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono select-none">
               {/* Left: MT5 Connection Badge & Quick Control (Keep green Connect MT5 button visible to clients) */}
@@ -818,33 +676,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
               )}
             </div>
 
-            {/* Prompt for clients when MT5 is not yet connected */}
-            {!isConnected && (
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/30 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md animate-in fade-in">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">
-                    <Server className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-white">Link Your MT5 Terminal to Start Copying</h4>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Connect using your MT5 Login & Broker Server to automatically mirror institutional signals with balance-scaled lots.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowConnectModal(true)}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer shrink-0"
-                >
-                  <Server className="w-4 h-4" />
-                  <span>Connect MT5</span>
-                </button>
-              </div>
-            )}
-
             {/* 2. COMPACT AI TRADING ASSISTANT (ESSENTIAL CENTERPIECE OF AI DASHBOARD) */}
-            <AITradingAssistant onMirrorSignal={handleExecuteAiSignal} />
+            <RobotConsole />
           </div>
         )}
 
@@ -1179,7 +1012,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
 
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-500 font-mono">
-                    Member since {userProfile?.createdAt ? new Date(userProfile.createdAt).toLocaleDateString([], { month: 'short', year: 'numeric' }) : '2026'}
+                    Member since {userProfile?.createdAt ? new Date(userProfile.createdAt).toLocaleDateString([], { month: 'short', year: 'numeric' }) : ''}
                   </span>
                 </div>
               </div>
@@ -1226,7 +1059,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                         <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                       </div>
                       <p className="text-[11px] text-slate-400">
-                        Cryptographically locked to terminal #{account.accountNumber || '1099284'}. Anti-duplicate protection active.
+                        Cryptographically locked to terminal #{account.accountNumber}. Anti-duplicate protection active.
                       </p>
                     </div>
 
@@ -1379,22 +1212,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                     </span>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] text-slate-500 uppercase block font-sans">Capital Risk Floor</span>
-                    <span className="text-sm font-bold text-red-500 dark:text-red-400 mt-0.5 block">
-                      $200.00 Floor
-                    </span>
-                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => setShowConnectModal(true)}
-                    className="px-3.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-medium transition cursor-pointer"
-                  >
-                    Change MT5 Terminal Connection
-                  </button>
                   {isConnected && (
                     <button
                       type="button"
@@ -1424,19 +1244,19 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
       <ProfitSharePaymentModal
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
-        userId={userProfile?.uid || 'verified-client-castimo-001'}
+        userId={userProfile?.uid || ''}
       />
 
       <Mt5ConnectionModal
         isOpen={showConnectModal}
         onClose={() => setShowConnectModal(false)}
-        userId={userProfile?.uid || 'verified-client-castimo-001'}
+        userId={userProfile?.uid || ''}
       />
 
       <Mt5DisconnectModal
         isOpen={showDisconnectModal}
         onClose={() => setShowDisconnectModal(false)}
-        userId={userProfile?.uid || 'verified-client-castimo-001'}
+        userId={userProfile?.uid || ''}
       />
 
       <SettlementHistoryModal
