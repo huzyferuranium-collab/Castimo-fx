@@ -214,10 +214,17 @@ test('a slow deploy keeps the terminal, and the next attempt resumes and succeed
 });
 
 test('a slow sync and a slow account read are reported by stage', async () => {
-  let e = await failure(connectClient(deps(makeFake({ syncHangs: true })), input));
+  let e = await failure(connectClient(deps(makeFake({ syncHangs: true, infoHangs: true })), input));
   assert.equal(e.ref, 'TIMEOUT_SYNCING');
   e = await failure(connectClient(deps(makeFake({ infoHangs: true })), input));
   assert.equal(e.ref, 'TIMEOUT_VERIFYING');
+});
+
+test('if the sync signal lags but the broker answers directly, the connection still succeeds', async () => {
+  const d = deps(makeFake({ syncHangs: true }));
+  const r = await connectClient(d, input);
+  assert.equal(r.verified.equity, 520);
+  assert.ok(d.logs.some((l) => /Sync signal timed out/.test(l)));
 });
 
 test('the SDK\'s own TimeoutError is treated as slow too', async () => {

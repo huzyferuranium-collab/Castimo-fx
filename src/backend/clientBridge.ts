@@ -390,11 +390,24 @@ export async function connectClient(
     go('syncing');
     const rpc = account.rpc();
     await withTimeout(rpc.connect(), t.connectSeconds, 'syncing');
-    await withTimeout(rpc.waitSynchronized(t.syncSeconds), t.syncSeconds, 'syncing');
+    let info: BrokerAccountInfo | undefined;
+    try {
+      await withTimeout(rpc.waitSynchronized(t.syncSeconds), t.syncSeconds, 'syncing');
+    } catch (e) {
+      // The "synchronized" signal can lag even when the broker already answers. Ask the broker directly
+      // before giving up; if it answers, the account is genuinely reachable and we carry on.
+      if (!(e instanceof StageTimeoutError) && String((e as any)?.name || '') !== 'TimeoutError') throw e;
+      log?.('warn', `Sync signal timed out for #${login}; asking the broker for the account directly.`);
+      try {
+        info = await withTimeout(rpc.getAccountInformation(), t.infoSeconds, 'syncing');
+      } catch {
+        throw e;
+      }
+    }
 
     // --- verify ---
     go('verifying');
-    const info = await withTimeout(rpc.getAccountInformation(), t.infoSeconds, 'verifying');
+    if (!info) info = await withTimeout(rpc.getAccountInformation(), t.infoSeconds, 'verifying');
     const verified = verifyBrokerAccountInfo(info, { login, server });
     // Minimum equity applies to NEW connections only; it is never used to disconnect anyone later.
     checkConnectEligibility(verified, deps.limits.minEquity);
