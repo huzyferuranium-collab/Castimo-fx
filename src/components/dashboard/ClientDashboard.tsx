@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { getPhoneStatus, PhoneStatus } from '../../services/phoneApi';
 import { tradingEngine, CASTIMO_TREASURY_ADDRESS } from '../../services/tradingEngine';
 import { authHeaders } from '../../services/apiAuth';
 import {
@@ -112,19 +111,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     error?: string;
   } | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<boolean>(false);
-
-  // WhatsApp verification (decided by the server, never by the browser)
-  const [phoneStatus, setPhoneStatus] = useState<PhoneStatus | null>(null);
-  const [showPhoneModal, setShowPhoneModal] = useState(false);
-  useEffect(() => {
-    if (!userProfile?.uid || userProfile.role === 'admin') return;
-    let cancelled = false;
-    getPhoneStatus().then((st) => !cancelled && setPhoneStatus(st));
-    return () => {
-      cancelled = true;
-    };
-  }, [userProfile?.uid, showPhoneModal]);
-  const phoneVerified = phoneStatus?.verified === true;
 
   // Real-time MetaApi WebSocket Synchronizer & Mirror State
   const [metaApiStatus, setMetaApiStatus] = useState<{
@@ -365,10 +351,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         },
         {
           id: 'profile',
-          label: 'Profile & WhatsApp',
+          label: 'Profile',
           icon: ShieldCheck,
-          badge: phoneStatus ? (phoneVerified ? 'Verified' : phoneStatus.available ? 'Action Needed' : undefined) : undefined,
-          badgeVariant: phoneVerified ? 'success' : 'warning',
         },
       ],
     },
@@ -444,22 +428,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             >
               <Send className="w-3.5 h-3.5" />
               <span>Verify Email Now</span>
-            </button>
-          </div>
-        )}
-
-        {phoneStatus?.available && !phoneVerified && userProfile && userProfile.role !== 'admin' && (
-          <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h4 className="font-bold text-xs text-amber-300">Verify your WhatsApp number</h4>
-              <p className="text-[11px] text-amber-200/80 mt-0.5">Required before you can connect an MT5 account.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowPhoneModal(true)}
-              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 font-bold text-xs text-slate-950 transition shrink-0 cursor-pointer"
-            >
-              Verify now
             </button>
           </div>
         )}
@@ -978,43 +946,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 </div>
               </div>
 
-              {/* WhatsApp verification */}
-              <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                      <ShieldCheck className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-white">WhatsApp Verification</h4>
-                      <p className="text-xs text-slate-400">One verified WhatsApp number per account</p>
-                    </div>
-                  </div>
-                  <span
-                    className={`text-[10px] font-mono font-bold px-2.5 py-1 rounded-full border ${
-                      phoneVerified
-                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                        : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-                    }`}
-                  >
-                    {phoneStatus === null ? 'CHECKING' : phoneVerified ? 'VERIFIED' : phoneStatus.available ? 'ACTION REQUIRED' : 'UNAVAILABLE'}
-                  </span>
-                </div>
-                {phoneVerified ? (
-                  <p className="text-xs text-slate-300">Verified number ending in {phoneStatus?.phoneLast4}.</p>
-                ) : phoneStatus?.available ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowPhoneModal(true)}
-                    className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition cursor-pointer"
-                  >
-                    Verify WhatsApp number
-                  </button>
-                ) : (
-                  <p className="text-xs text-slate-400">WhatsApp verification is not available yet.</p>
-                )}
-              </div>
-
               {/* Linked MT5 Terminal Custody Details */}
               <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
@@ -1114,13 +1045,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         onClose={() => setShowLedgerModal(false)}
         ledger={tradingEngine.getLedger()}
         auditLogs={tradingEngine.getAuditLogs()}
-      />
-
-      <AuthModal
-        isOpen={showPhoneModal}
-        onClose={() => setShowPhoneModal(false)}
-        defaultTab="phone"
-        prefillPhone={userProfile?.phone}
       />
 
       <AuthModal

@@ -8,7 +8,6 @@ export interface UserProfile {
   createdAt: string;
   photoURL?: string;
   emailVerified?: boolean;
-  phone?: string;
 }
 
 export interface EmailVerificationRecord {

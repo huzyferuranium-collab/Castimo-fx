@@ -10,14 +10,12 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { UserRole } from '../../types';
-import { getPhoneStatus, sendPhoneCode, verifyPhoneCode } from '../../services/phoneApi';
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultTab?: 'signin' | 'signup' | 'verify' | 'phone';
+  defaultTab?: 'signin' | 'signup' | 'verify';
   prefillEmail?: string;
-  prefillPhone?: string;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -25,7 +23,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   defaultTab = 'signin',
   prefillEmail,
-  prefillPhone,
 }) => {
   const {
     signInWithEmail,
@@ -40,61 +37,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     refreshEmailVerified,
   } = useAuth();
 
-  const [tab, setTab] = useState<'signin' | 'signup' | 'verify' | 'phone'>(defaultTab);
+  const [tab, setTab] = useState<'signin' | 'signup' | 'verify'>(defaultTab);
   const [email, setEmail] = useState(prefillEmail || '');
   const [verifyNote, setVerifyNote] = useState<string | null>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
   const [password, setPassword] = useState('');
-  const [phone, setPhone] = useState(prefillPhone || '');
-  const [waCode, setWaCode] = useState('');
-  const [waSent, setWaSent] = useState(false);
-  const [waBusy, setWaBusy] = useState(false);
-  const [waNote, setWaNote] = useState<string | null>(null);
-  const [waDone, setWaDone] = useState(false);
-  const [waUnavailable, setWaUnavailable] = useState(false);
   const [displayName, setDisplayName] = useState('');
   // New accounts are always clients. Admin rights can only be granted in Firebase.
   const role: UserRole = 'client';
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
 
-  React.useEffect(() => {
-    if (!isOpen || tab !== 'phone' || !user) return;
-    getPhoneStatus().then((st) => {
-      if (!st) return;
-      setWaUnavailable(!st.available);
-      setWaDone(st.verified);
-    });
-  }, [isOpen, tab, user]);
-
   if (!isOpen) return null;
-
-  const handleSendWa = async () => {
-    setWaBusy(true);
-    setWaNote(null);
-    const r = await sendPhoneCode(phone);
-    setWaBusy(false);
-    if (r.ok) {
-      setWaSent(true);
-      setWaNote('Code sent. Open WhatsApp and enter the code below.');
-    } else {
-      setWaNote(r.error || 'Could not send the code.');
-    }
-  };
-
-  const handleVerifyWa = async () => {
-    setWaBusy(true);
-    setWaNote(null);
-    const r = await verifyPhoneCode(phone, waCode);
-    setWaBusy(false);
-    if (r.ok) {
-      setWaDone(true);
-      setWaNote('WhatsApp number verified.');
-      setTimeout(() => onClose(), 1000);
-    } else {
-      setWaNote(r.error || 'Could not verify the code.');
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,9 +61,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         await signInWithEmail(email, password);
         onClose();
       } else {
-        await signUpWithEmail(email, password, displayName, role, phone.replace(/[\s\-().]/g, ''));
-        setLocalMessage('Account created. Now verify your WhatsApp number.');
-        setTab('phone');
+        await signUpWithEmail(email, password, displayName, role);
+        setLocalMessage('Authenticated successfully.');
+        setTimeout(() => onClose(), 800);
       }
     } catch (err: any) {
       // If error occurred and wasn't handled, fallback option is rendered
@@ -162,7 +116,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         </div>
 
         {/* Tab Toggle */}
-        {tab !== 'verify' && tab !== 'phone' && (
+        {tab !== 'verify' && (
         <div className="flex border-b border-slate-800 bg-slate-900/50 p-1 shrink-0">
           <button
             onClick={() => {
@@ -256,38 +210,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          {tab === 'phone' && (
-            <div className="space-y-3 text-xs">
-              {waDone ? (
-                <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>Your WhatsApp number is verified.</span>
-                </div>
-              ) : waUnavailable ? (
-                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200">WhatsApp verification is not available yet. Please try again later.</div>
-              ) : (
-                <>
-                  <p className="text-slate-300 leading-relaxed">We will send a code to your WhatsApp. Enter the number with the country code.</p>
-                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+256700123456" disabled={waSent} className="w-full px-3 py-2 text-xs bg-slate-950/60 border border-slate-700/60 rounded-xl text-white placeholder-slate-500" />
-                  {waSent && (
-                    <input type="text" inputMode="numeric" value={waCode} onChange={(e) => setWaCode(e.target.value.replace(/\D/g, ''))} maxLength={10} placeholder="Code from WhatsApp" className="w-full px-3 py-2 text-xs bg-slate-950/60 border border-slate-700/60 rounded-xl text-white placeholder-slate-500 font-mono tracking-widest" />
-                  )}
-                  {waNote && <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-700/60 text-slate-200">{waNote}</div>}
-                  {!waSent ? (
-                    <button type="button" disabled={waBusy || !user} onClick={handleSendWa} className="w-full py-2.5 px-4 font-semibold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 disabled:opacity-50 cursor-pointer">{waBusy ? 'Sending...' : 'Send code on WhatsApp'}</button>
-                  ) : (
-                    <>
-                      <button type="button" disabled={waBusy || waCode.length < 4} onClick={handleVerifyWa} className="w-full py-2.5 px-4 font-semibold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 disabled:opacity-50 cursor-pointer">{waBusy ? 'Checking...' : 'Verify code'}</button>
-                      <button type="button" disabled={waBusy} onClick={() => { setWaSent(false); setWaCode(''); setWaNote(null); }} className="w-full py-2 px-3 font-medium rounded-xl border border-slate-700 bg-slate-950 text-slate-200 disabled:opacity-50 cursor-pointer">Change number or resend</button>
-                    </>
-                  )}
-                  {!user && <p className="text-[11px] text-amber-300">Sign in first.</p>}
-                </>
-              )}
-            </div>
-          )}
-
-          {tab !== 'verify' && tab !== 'phone' && (
+          {tab !== 'verify' && (
           <form onSubmit={handleSubmit} className="space-y-3">
             {tab === 'signup' && (
               <>
@@ -323,21 +246,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 />
               </div>
             </div>
-
-            {tab === 'signup' && (
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">WhatsApp Number</label>
-                <input
-                  type="tel"
-                  required
-                  placeholder="+256700123456"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-slate-950/60 border border-slate-700/60 rounded-xl focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white placeholder-slate-500"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">Include the country code. We will send a verification code on WhatsApp.</p>
-              </div>
-            )}
 
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">Password</label>

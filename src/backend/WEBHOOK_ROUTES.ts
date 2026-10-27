@@ -15,7 +15,6 @@ import { Mt5ConnectionManager } from './MT5_CONNECTION_MANAGER';
 import { ReplicationEngine } from './REPLICATION_ENGINE';
 import { requireUser, requireAdmin, getAuthUser, isAdminUser } from './firebaseAuth';
 import { hasAcceptedTermsServer } from './termsCheck';
-import { isPhoneVerified, phoneVerificationConfigured } from './phoneVerification';
 import { BrokerVerificationError } from './brokerVerification';
 import { BillingService, BillingError, billingConfig, billingEnabled } from './billing';
 
@@ -216,15 +215,6 @@ tradeRouter.post('/provision-client', requireUser, async (req: Request, res: Res
         success: false,
         code: 'TERMS_NOT_ACCEPTED',
         error: 'Please read and accept the Terms and Risk Warning before connecting an account.',
-      });
-    }
-
-    // A verified WhatsApp number is required once verification is set up on the server.
-    if (phoneVerificationConfigured() && !(await isPhoneVerified(user.uid))) {
-      return res.status(403).json({
-        success: false,
-        code: 'PHONE_NOT_VERIFIED',
-        error: 'Please verify your WhatsApp number before connecting an account.',
       });
     }
 

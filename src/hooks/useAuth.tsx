@@ -26,7 +26,7 @@ interface AuthContextType {
   lastErrorCode: string | null;
   diagnosticAdvice: string | null;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
-  signUpWithEmail: (email: string, pass: string, name: string, role?: UserRole, phone?: string) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string, name: string, role?: UserRole) => Promise<void>;
   signOutUser: () => Promise<void>;
   switchRole: (role: UserRole) => Promise<void>;
   clearError: () => void;
@@ -116,7 +116,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               role: data.role === 'admin' ? 'admin' : 'client',
               createdAt: data.createdAt || new Date().toISOString(),
               photoURL: currentUser.photoURL || undefined,
-              phone: data.phone || undefined,
             });
           } else {
             console.log('📄 [Firestore] User profile document does not exist yet. Creating default doc...');
@@ -201,8 +200,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     email: string,
     pass: string,
     displayName: string,
-    role: UserRole = 'client',
-    phone?: string
+    role: UserRole = 'client'
   ) => {
     setError(null);
     setLastErrorCode(null);
@@ -232,8 +230,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         email: createdUser.email || email,
         displayName: displayName || 'Trader',
         role: 'client',
-        // Saved for display only. Whether it is verified is decided by the server.
-        ...(phone ? { phone } : {}),
         createdAt: new Date().toISOString(),
       };
 

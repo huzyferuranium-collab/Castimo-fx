@@ -50,17 +50,6 @@ service cloud.firestore {
       allow read: if isSignedIn() && (id == request.auth.uid || isAdmin());
       allow write: if false;
     }
-    // WhatsApp verification results are written only by the server. A user can read their own.
-    match /phone_verifications/{id} {
-      allow read: if isSignedIn() && (id == request.auth.uid || isAdmin());
-      allow write: if false;
-    }
-    match /phone_otps/{id} {
-      allow read, write: if false;
-    }
-    match /verified_phones/{id} {
-      allow read, write: if false;
-    }
     match /used_tx_hashes/{id} {
       allow read, write: if false;
     }
