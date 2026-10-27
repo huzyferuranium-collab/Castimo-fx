@@ -50,6 +50,10 @@ function toPublicClient(c: any) {
     verificationTimestamp: c.verificationTimestamp,
     lastSync: c.lastSync,
     billingBlocked: Boolean(c.billingBlocked),
+    connectionState: c.connectionState,
+    connectionStatus: c.connectionStatus,
+    latencyMs: c.latencyMs,
+    lastHeartbeat: c.lastHeartbeat,
   };
 }
 

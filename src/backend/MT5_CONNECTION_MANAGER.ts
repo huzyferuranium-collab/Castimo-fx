@@ -18,6 +18,7 @@ import MetaApi, {
 } from './metaapiClient';
 import { connectClient, type BridgeDeps, type Stage } from './clientBridge';
 import { metaApiGateway } from './metaApiGateway';
+import { checkClientHealth, newHealthState, type HealthState } from './clientHealth';
 import {
   BrokerVerificationError,
   clientAccountName,
@@ -82,6 +83,13 @@ export interface ClientConnectionRecord {
   verificationTimestamp: string;
   /** True while the client has an overdue profit-share invoice: copying is paused. */
   billingBlocked?: boolean;
+  /** Link health, reported the same way as the master's: state, MetaApi's own status, latency, last heartbeat. */
+  connectionState?: ConnectionState;
+  connectionStatus?: string;
+  latencyMs?: number;
+  lastHeartbeat?: string;
+  /** Internal bookkeeping for the health checker; never sent to the browser. */
+  health?: HealthState;
 }
 
 export type ConnectionState = 'DISCONNECTED' | 'CONNECTING' | 'CONNECTED' | 'RECONNECTING' | 'ERROR';
@@ -624,6 +632,9 @@ export class Mt5ConnectionManager {
       investorMode: r.verified.investorMode,
       accountType: r.verified.accountType,
       verificationTimestamp: now,
+      connectionState: 'CONNECTED',
+      connectionStatus: (r.account.raw as any)?.connectionStatus,
+      lastHeartbeat: now,
     };
     this.registerClient(record);
     this.onClientVerified?.(record);
@@ -730,6 +741,9 @@ export class Mt5ConnectionManager {
     if (!record.isBrokerVerified || record.isSimulated) {
       throw new BrokerVerificationError('BAD_BROKER_RESPONSE', 'Refusing to register an account the broker has not verified.');
     }
+    if (!record.health) record.health = newHealthState(Date.now());
+    if (!record.connectionState) record.connectionState = 'CONNECTED';
+    if (!record.lastHeartbeat) record.lastHeartbeat = new Date().toISOString();
     this.clientPool.set(record.userId, record);
     this.clientPool.set(record.accountId, record);
     try {
@@ -792,26 +806,83 @@ export class Mt5ConnectionManager {
       }
     }
     if (!client) return null;
+    const rec = client;
 
-    if (client.rpcConnection) {
-      try {
-        const accInfo = await client.rpcConnection.getAccountInformation();
-        if (accInfo.balance != null) client.balance = Number(accInfo.balance);
-        if (accInfo.equity != null) client.equity = Number(accInfo.equity);
-        if (accInfo.freeMargin != null) client.freeMargin = Number(accInfo.freeMargin);
-        if (accInfo.leverage != null) client.leverage = Number(accInfo.leverage);
-        if (accInfo.broker) client.brokerName = accInfo.broker;
-        if (accInfo.name) client.accountHolderName = accInfo.name;
-        client.isBrokerVerified = true;
-        client.lastSync = new Date().toISOString();
-        this.clientPool.set(client.userId, client);
-        this.clientPool.set(client.accountId, client);
-        console.log(`🔄 [MT5_CONNECTION_MANAGER] Re-queried broker for #${client.login}: Equity $${client.equity.toFixed(2)}, Balance $${client.balance.toFixed(2)}`);
-      } catch (err: any) {
-        console.warn(`⚠️ [MT5_CONNECTION_MANAGER] Could not refresh RPC info for #${client.login}:`, err?.message);
-      }
+    const region = process.env.METAAPI_CLIENT_REGION || 'london';
+    const result = await checkClientHealth(
+      {
+        // 1. RPC, like the master
+        rpcInfo: () =>
+          withTimeout(rec.rpcConnection ? rec.rpcConnection.getAccountInformation() : Promise.reject(new Error('no RPC link')), 8000, 'RPC refresh timed out') as Promise<any>,
+        // 2. REST fallback, the same safety net the master uses
+        restInfo: this.apiToken
+          ? async () => {
+              const res = await fetch(
+                `https://mt-client-api-v1.${region}.agiliumtrade.ai/users/current/accounts/${rec.accountId}/account-information`,
+                { headers: { 'auth-token': this.apiToken }, signal: AbortSignal.timeout(6000) }
+              );
+              return res.ok ? ((await res.json()) as any) : null;
+            }
+          : undefined,
+        // 3. Rebuild the RPC link, the master's recovery steps
+        reconnect: () => this.rebuildClientLink(rec),
+        log: (level, msg) => (level === 'warn' ? console.warn : console.log)(`[CLIENT_LINK #${rec.login}] ${msg}`),
+      },
+      rec.health ?? newHealthState(Date.now())
+    );
+
+    rec.health = result.state;
+    rec.connectionState = result.state.connectionState;
+    rec.latencyMs = result.state.latencyMs;
+    try {
+      rec.connectionStatus = (rec.account as any)?.connectionStatus || rec.connectionStatus;
+    } catch {
+      // status is informational only
     }
-    return client;
+    if (result.info) {
+      rec.balance = result.info.balance;
+      rec.equity = result.info.equity;
+      if (result.info.freeMargin != null) rec.freeMargin = result.info.freeMargin;
+      if (result.info.leverage != null) rec.leverage = result.info.leverage;
+      if (result.info.broker) rec.brokerName = result.info.broker;
+      if (result.info.name) rec.accountHolderName = result.info.name;
+      rec.isBrokerVerified = true;
+      rec.lastSync = new Date().toISOString();
+      rec.lastHeartbeat = rec.lastSync;
+    }
+    this.clientPool.set(rec.userId, rec);
+    this.clientPool.set(rec.accountId, rec);
+    return rec;
+  }
+
+  /**
+   * Rebuilds a client's RPC link the way the master's is rebuilt: start the terminal if MetaApi left it
+   * undeployed, reconnect, and wait for sync only as a best effort.
+   */
+  private async rebuildClientLink(rec: ClientConnectionRecord): Promise<void> {
+    if (!this.api || this.isSimulatedMode) throw new Error('MetaApi is not available');
+    const entity = await this.api.metatraderAccountApi.getAccount(rec.accountId);
+    if (entity.state !== 'DEPLOYED') {
+      if (entity.state === 'UNDEPLOYED' || entity.state === 'DRAFT') await entity.deploy();
+      await entity.waitDeployed(60, 1000);
+    }
+    try {
+      await rec.rpcConnection?.close();
+    } catch {
+      // stale socket
+    }
+    const rpc = entity.getRPCConnection();
+    await withTimeout(rpc.connect(), 20000, 'RPC connect timed out after 20s');
+    try {
+      await withTimeout(rpc.waitSynchronized(15), 18000, 'RPC sync timed out');
+    } catch (syncErr: any) {
+      console.warn(`ℹ️ [CLIENT_LINK #${rec.login}] RPC synchronization note:`, syncErr?.message || syncErr);
+    }
+    rec.account = entity;
+    rec.rpcConnection = rpc;
+    rec.connectionStatus = entity.connectionStatus;
+    this.clientPool.set(rec.userId, rec);
+    this.clientPool.set(rec.accountId, rec);
   }
 
   /**
@@ -861,14 +932,20 @@ export class Mt5ConnectionManager {
     this.refreshingClients = true;
     try {
       const seen = new Set<string>();
+      const batch: ClientConnectionRecord[] = [];
       for (const rec of Array.from(this.clientPool.values())) {
         if (seen.has(rec.accountId) || !rec.isBrokerVerified || rec.isSimulated) continue;
         seen.add(rec.accountId);
-        try {
-          await withTimeout<unknown>(this.refreshClientFromBroker(rec.accountId), 8000, 'refresh timed out');
-        } catch {
-          // keep the last known values; the next round tries again
-        }
+        batch.push(rec);
+      }
+      // Check several clients at once so one slow broker never delays the rest.
+      const CONCURRENCY = 5;
+      for (let i = 0; i < batch.length; i += CONCURRENCY) {
+        await Promise.allSettled(
+          batch.slice(i, i + CONCURRENCY).map((rec) =>
+            withTimeout<unknown>(this.refreshClientFromBroker(rec.accountId), 40000, 'refresh timed out')
+          )
+        );
       }
     } finally {
       this.refreshingClients = false;

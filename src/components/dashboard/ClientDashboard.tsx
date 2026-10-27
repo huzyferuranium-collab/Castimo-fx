@@ -494,6 +494,16 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                           ✓ Real Broker Verified
                         </span>
                       )}
+                      {account.connectionState === 'RECONNECTING' && (
+                        <span className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[9px] font-bold">
+                          Reconnecting…
+                        </span>
+                      )}
+                      {account.connectionState === 'ERROR' && (
+                        <span className="px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-[9px] font-bold">
+                          Link problem
+                        </span>
+                      )}
                       <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 text-[9px] font-mono hidden md:inline">
                         1:{account.leverage || 500}
                       </span>

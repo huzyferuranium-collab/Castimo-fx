@@ -1381,6 +1381,8 @@ class TradingEngine {
           tradeAllowed: c.tradeAllowed,
           investorMode: c.investorMode,
           verificationTimestamp: c.verificationTimestamp,
+          connectionState: c.connectionState,
+          linkLatencyMs: c.latencyMs,
           copiedFromMasterAccount: this.masterAccount.accountNumber,
           masterAccountName: this.masterAccount.accountName,
         };
@@ -1410,6 +1412,8 @@ class TradingEngine {
             tradeAllowed: mappedAcc.tradeAllowed,
             investorMode: mappedAcc.investorMode,
             verificationTimestamp: mappedAcc.verificationTimestamp,
+            connectionState: mappedAcc.connectionState,
+            linkLatencyMs: mappedAcc.linkLatencyMs,
           };
         }
       }

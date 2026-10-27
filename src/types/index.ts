@@ -106,6 +106,9 @@ export interface Mt5Account {
   accountHolderName?: string;
   brokerName?: string;
   isBrokerVerified?: boolean;
+  /** Link health reported by the server, like the master's: CONNECTED, RECONNECTING or ERROR. */
+  connectionState?: 'CONNECTED' | 'RECONNECTING' | 'ERROR';
+  linkLatencyMs?: number;
   tradeAllowed?: boolean;
   investorMode?: boolean;
   verificationTimestamp?: string;
