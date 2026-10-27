@@ -106,6 +106,7 @@ export class BillingService {
       console.warn('⚠️ [BILLING] Billing is OFF: set FIREBASE_SERVICE_ACCOUNT and TREASURY_ADDRESS to turn it on.');
       return;
     }
+    this.manager.hasBillingHistory = async (userId) => Boolean(await getDoc('client_ledgers', userId));
     this.manager.onClientVerified = (rec) =>
       void (async () => {
         const plan = await this.getPlan(rec.userId);

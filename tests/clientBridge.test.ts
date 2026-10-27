@@ -323,11 +323,68 @@ test('an account that exists in MetaApi for someone else is refused and never to
   assert.equal(f.calls.remove.length, 0);
 });
 
-test('one account per user: a second, different account is refused', async () => {
-  const f = makeFake({ existing: [{ id: 'acc-a', name: 'CastimoFX Client user-AAA111 #11111111', login: '11111111', server: 'Exness-MT5Real9' }] });
+const OLD = { id: 'acc-a', name: 'CastimoFX Client user-AAA111 #11111111', login: '11111111', server: 'Exness-MT5Real9' };
+
+test('an unfinished terminal from an earlier try is cleared automatically, so the client is never stuck', async () => {
+  const f = makeFake({ existing: [OLD] });
+  const r = await connectClient(deps(f), input);
+  assert.deepEqual(f.calls.remove, ['acc-a']);
+  assert.equal(r.account.id, 'acc-new');
+  assert.equal(f.calls.create.length, 1);
+});
+
+test('a truly connected client is protected: a different account gets a kind explanation, nothing is touched', async () => {
+  const f = makeFake({ existing: [OLD] });
+  const e = await failure(connectClient(deps(f, { activeAccountOf: () => ({ login: '11111111', server: 'Exness-MT5Real9' }) }), input));
+  assert.equal(e.code, 'ALREADY_CONNECTED');
+  assert.match(e.message, /#11111111/);
+  assert.match(e.message, /keeps copying/);
+  assert.match(friendlyHint(e.code), /Profile/);
+  assert.equal(f.calls.remove.length, 0);
+  assert.equal(f.calls.create.length, 0);
+  assert.equal(f.calls.list, 0, 'refused before the broker or MetaApi is contacted');
+});
+
+test('a client with billing history is protected even if their link is not loaded yet', async () => {
+  const f = makeFake({ existing: [OLD] });
+  const e = await failure(connectClient(deps(f, { hasBillingHistory: async () => true }), input));
+  assert.equal(e.code, 'ALREADY_CONNECTED');
+  assert.equal(f.calls.remove.length, 0, 'their terminal must never be cleaned up');
+});
+
+test('if the billing check itself fails, the terminal is kept (safe side)', async () => {
+  const f = makeFake({ existing: [OLD] });
+  const e = await failure(connectClient(deps(f, { hasBillingHistory: async () => { throw new Error('db down'); } }), input));
+  assert.equal(e.code, 'ALREADY_CONNECTED');
+  assert.equal(f.calls.remove.length, 0);
+});
+
+test('the same account while already connected is not refused: it resumes', async () => {
+  const mine = { id: 'acc-me', name: 'CastimoFX Client user-AAA111 #81986889', login: '81986889', server: 'Exness-MT5Real9' };
+  const f = makeFake({ existing: [mine] });
+  const r = await connectClient(deps(f, { activeAccountOf: () => ({ login: '81986889', server: 'Exness-MT5Real9' }) }), input);
+  assert.equal(r.resumed, true);
+});
+
+test('if an unfinished terminal cannot be cleared, the client is told kindly to retry', async () => {
+  const f = makeFake({ existing: [OLD] });
+  f.gateway.removeAccount = async () => { throw new Error('MetaApi busy'); };
   const e = await failure(connectClient(deps(f), input));
   assert.equal(e.code, 'CAPACITY');
-  assert.match(e.message, /Disconnect/);
+  assert.match(e.message, /try again in a minute/i);
+});
+
+test('messages stay calm and helpful: no shouting, no blame', async () => {
+  const msgs: string[] = [];
+  for (const bad of [{ ...input, login: 'abc' }, { ...input, password: '' }, { ...input, server: 'x' }]) {
+    msgs.push((await failure(connectClient(deps(makeFake()), bad))).message);
+  }
+  msgs.push((await failure(connectClient(deps(makeFake({ info: { ...GOOD_INFO, equity: 150, balance: 150 } })), input))).message);
+  msgs.push((await failure(connectClient(deps(makeFake({ createError: Object.assign(new Error('Authentication failed'), { details: { code: 'E_AUTH' } }) })), input))).message);
+  for (const m of msgs) {
+    assert.match(m, /please/i, m);
+    assert.doesNotMatch(m, /[A-Z]{6,}|!{2,}|\binvalid\b|\bwrong\b|\bforbidden\b|\bdenied\b/, m);
+  }
 });
 
 test('the platform-wide account limit stops new accounts but not resuming', async () => {

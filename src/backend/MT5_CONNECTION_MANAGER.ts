@@ -158,6 +158,8 @@ export class Mt5ConnectionManager {
   public onClientSaved: ((record: ClientConnectionRecord) => void) | null = null;
   /** Looks up the pause/resume choice the client last made. */
   public loadSavedStatus: ((userId: string) => Promise<'ACTIVE' | 'IDLE' | null>) | null = null;
+  /** True if the user has billing history; their terminals are then never cleaned up automatically. */
+  public hasBillingHistory: ((userId: string) => Promise<boolean>) | null = null;
   private lastLazyRestore = new Map<string, number>();
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
@@ -569,6 +571,24 @@ export class Mt5ConnectionManager {
     }
 
     const eq = (a?: string, b?: string) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+
+    // Make sure the live pool reflects reality (for example after a restart) before judging "already connected".
+    await this.restoreClientForUser(userId).catch(() => undefined);
+
+    // Already connected with this very account: pass straight through, nothing to redo.
+    const current = this.clientPool.get(userId);
+    if (
+      current &&
+      current.isBrokerVerified &&
+      !current.isSimulated &&
+      sameLogin(current.login, params.login) &&
+      eq(current.server, normalizeBrokerServer(params.server))
+    ) {
+      onStage?.('verifying');
+      void this.refreshClientFromBroker(userId).catch(() => undefined);
+      console.log(`✅ [CLIENT_BRIDGE] #${current.login} is already connected for user ${userId}; passing straight through.`);
+      return current;
+    }
     const secs = (name: string, fallback: number) => readLimit(process.env[name], fallback) || fallback;
 
     const deps: BridgeDeps = {
@@ -577,6 +597,11 @@ export class Mt5ConnectionManager {
       isMaster: (login, server) =>
         Boolean(this.masterAccount && sameLogin(this.masterAccount.login, login) && eq(this.masterAccount.server, server)) ||
         (sameLogin(this.masterMetrics.login, login) && eq(this.masterMetrics.server, server)),
+      activeAccountOf: (uid) => {
+        const rec = this.clientPool.get(uid);
+        return rec && rec.isBrokerVerified && !rec.isSimulated ? { login: rec.login, server: rec.server } : null;
+      },
+      hasBillingHistory: async (uid) => (this.hasBillingHistory ? this.hasBillingHistory(uid) : false),
       // An account that another user already linked cannot be linked again.
       linkedToOtherUser: (login, server, uid) => {
         for (const rec of this.clientPool.values()) {

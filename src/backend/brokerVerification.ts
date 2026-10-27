@@ -17,6 +17,7 @@ export type BrokerErrorCode =
   | 'LOGIN_MISMATCH'
   | 'TRADING_NOT_ALLOWED'
   | 'ALREADY_LINKED'
+  | 'ALREADY_CONNECTED'
   | 'IS_MASTER_ACCOUNT'
   | 'MIN_EQUITY'
   | 'UNSUPPORTED_CURRENCY'
@@ -89,13 +90,13 @@ export function validateSubmittedCredentials(input: {
   const password = typeof input.password === 'string' ? input.password : '';
 
   if (!/^\d{4,12}$/.test(login)) {
-    throw new BrokerVerificationError('BAD_INPUT', 'MT5 account number must be 4 to 12 digits.');
+    throw new BrokerVerificationError('BAD_INPUT', 'Please check your MT5 account number. It should be 4 to 12 digits.');
   }
   if (server.length < 3 || server.length > 100) {
-    throw new BrokerVerificationError('BAD_INPUT', 'Please choose your broker server.');
+    throw new BrokerVerificationError('BAD_INPUT', 'Please type or choose your broker server, exactly as shown on your MT5 login screen.');
   }
   if (password.length < 1 || password.length > 200) {
-    throw new BrokerVerificationError('BAD_INPUT', 'Please enter your MT5 password.');
+    throw new BrokerVerificationError('BAD_INPUT', 'Please enter your MT5 trading password.');
   }
   return { login, password, server };
 }
@@ -116,13 +117,13 @@ export function checkConnectEligibility(
   if (String(v.currency).toUpperCase() !== 'USD') {
     throw new BrokerVerificationError(
       'UNSUPPORTED_CURRENCY',
-      `Only USD accounts can be connected right now. Your account is in ${v.currency}.`
+      `Right now we can only connect accounts held in US dollars (USD), and this one is in ${v.currency}.`
     );
   }
   if (!Number.isFinite(v.equity) || v.equity < minEquity) {
     throw new BrokerVerificationError(
       'MIN_EQUITY',
-      `Your account equity is $${Math.max(0, Number.isFinite(v.equity) ? v.equity : 0).toFixed(2)}. You need at least $${minEquity.toFixed(2)} to connect.`
+      `Your account equity is $${Math.max(0, Number.isFinite(v.equity) ? v.equity : 0).toFixed(2)}. A minimum of $${minEquity.toFixed(2)} is needed to connect, so please add funds and try again.`
     );
   }
 }
@@ -150,14 +151,14 @@ export function verifyBrokerAccountInfo(
 
   // If the broker reports a login, it must be the one that was submitted.
   if (info.login !== undefined && info.login !== null && !sameLogin(info.login, submitted.login)) {
-    throw new BrokerVerificationError('LOGIN_MISMATCH', 'The broker account does not match the login you entered.');
+    throw new BrokerVerificationError('LOGIN_MISMATCH', 'The broker reported a different account number from the one you entered. Please check it and try again.');
   }
 
   // Copying needs permission to place orders. A read-only (investor) login cannot be copied onto.
   if (info.tradeAllowed === false || info.investorMode === true) {
     throw new BrokerVerificationError(
       'TRADING_NOT_ALLOWED',
-      'This login is read-only (investor password) or has trading disabled. Use the trading password so trades can be copied.'
+      'This login can only view the account (investor password) or has trading switched off. Please use your trading password so trades can be copied.'
     );
   }
 
@@ -243,19 +244,19 @@ export function translateBrokerError(
   ) {
     return new BrokerVerificationError(
       'BROKER_AUTH_FAILED',
-      `The broker rejected MT5 account #${creds.login} on '${creds.server}'. Check the account number, password and server.`
+      `Your broker did not accept the login for account #${creds.login} on '${creds.server}'. Please double-check the account number, trading password and server, then try again.`
     );
   }
   if (/top[- ]?up|not enough funds|insufficient|quota|limit/i.test(msg) || code === 'E_QUOTA_EXCEEDED') {
     return new BrokerVerificationError(
       'CAPACITY',
-      'We cannot add new accounts right now. Please try again later or contact support.'
+      'We cannot add new accounts at this moment. Please try again a little later, or contact support and we will help.'
     );
   }
   // Anything else: keep the wording calm and attach a short reference that matches the server log.
   const e = new BrokerVerificationError(
     'BROKER_UNREACHABLE',
-    'Could not reach your broker to verify this account. Please try again in a minute.'
+    'We could not reach your broker just yet. Please try again in a minute.'
   );
   e.ref = (code || String(err?.name || '') || 'UNKNOWN').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
   return e;

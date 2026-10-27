@@ -37,10 +37,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     isEmailVerified,
     sendVerificationEmail,
     refreshEmailVerified,
+    resetPassword,
   } = useAuth();
 
   const [tab, setTab] = useState<'signin' | 'signup' | 'verify'>(defaultTab);
   const [showPassword, setShowPassword] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetNote, setResetNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const resetting = showReset && tab === 'signin';
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (resetBusy) return;
+    setResetBusy(true);
+    setResetNote(null);
+    const r = await resetPassword(email);
+    setResetBusy(false);
+    setResetNote(
+      r.success
+        ? { ok: true, text: 'If that email has an account, a reset link is on its way. Please check your inbox and spam folder.' }
+        : { ok: false, text: r.error || 'Could not send the link.' }
+    );
+  };
   const [email, setEmail] = useState(prefillEmail || '');
   const [verifyNote, setVerifyNote] = useState<string | null>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
@@ -213,7 +232,54 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           )}
 
-          {tab !== 'verify' && (
+          {resetting && (
+            <form onSubmit={handleReset} className="space-y-3">
+              <p className="text-xs text-slate-300 leading-relaxed">
+                Forgot your password? No problem. Enter your email and we will send you a link to choose a new one.
+              </p>
+              <div className="relative">
+                <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                <input
+                  type="email"
+                  required
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-xs bg-slate-950/60 border border-slate-700/60 rounded-xl focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white placeholder-slate-500"
+                />
+              </div>
+              {resetNote && (
+                <div
+                  className={`p-3 text-xs rounded-xl border ${
+                    resetNote.ok
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      : 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                  }`}
+                >
+                  {resetNote.text}
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={resetBusy}
+                className="w-full py-2.5 px-4 font-semibold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 disabled:opacity-50 cursor-pointer"
+              >
+                {resetBusy ? 'Sending…' : 'Send reset link'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReset(false);
+                  setResetNote(null);
+                }}
+                className="w-full text-center text-xs text-slate-400 hover:text-emerald-400 cursor-pointer"
+              >
+                Back to sign in
+              </button>
+            </form>
+          )}
+
+          {tab !== 'verify' && !resetting && (
           <form onSubmit={handleSubmit} className="space-y-3">
             {tab === 'signup' && (
               <>
@@ -272,7 +338,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <p className="text-[10px] text-slate-500 mt-1">Minimum 6 characters. Passwords are never logged.</p>
+              <div className="flex items-center justify-between mt-1">
+                <p className="text-[10px] text-slate-500">Minimum 6 characters. Passwords are never logged.</p>
+                {tab === 'signin' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowReset(true);
+                      setResetNote(null);
+                      clearError();
+                    }}
+                    className="text-[11px] font-medium text-emerald-400 hover:text-emerald-300 cursor-pointer shrink-0 ml-2"
+                  >
+                    Forgot password?
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2 pt-1">

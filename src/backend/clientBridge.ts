@@ -153,6 +153,10 @@ export interface BridgeDeps {
   isMaster: (login: string, server: string) => boolean;
   /** True if another user already has this login connected in memory. */
   linkedToOtherUser: (login: string, server: string, userId: string) => boolean;
+  /** The account this user already has connected and verified (in the live pool), if any. */
+  activeAccountOf?: (userId: string) => { login: string; server: string } | null;
+  /** True if the user has billing history, so any terminal they own must be kept, never cleaned up. */
+  hasBillingHistory?: (userId: string) => Promise<boolean>;
   limits: BridgeLimits;
   timeouts?: Partial<BridgeTimeouts>;
   /** Server-side diagnostics only; never shown to clients. */
@@ -183,32 +187,34 @@ export interface ConnectResult {
 export function friendlyHint(code: BrokerErrorCode | string): string {
   switch (code) {
     case 'BROKER_AUTH_FAILED':
-      return 'Check the account number and use your trading (master) password, not the investor password. The server must match your MT5 login screen.';
+      return 'Please check the account number and use your trading password (not the investor password). The server should match your MT5 login screen exactly.';
     case 'BROKER_SERVER_NOT_FOUND':
-      return 'Copy the server name exactly as it appears on your MT5 login screen.';
+      return 'Please copy the server name exactly as it appears on your MT5 login screen.';
     case 'BROKER_SLOW':
     case 'BROKER_UNREACHABLE':
-      return 'Your broker is slow to answer right now. Nothing is lost: wait a minute, then press Connect again and it will carry on.';
+      return 'Your broker is a little slow right now. Nothing is lost: wait a minute, then press Connect again and it will carry on from where it stopped.';
     case 'VERIFICATION_UNAVAILABLE':
-      return 'We could not reach our verification service. Please try again in a few minutes.';
+      return 'We could not reach our verification service just now. Please try again in a few minutes.';
     case 'MIN_EQUITY':
-      return 'Add funds to your trading account, then connect again.';
+      return 'Once your account has the minimum, press Connect again. We will be glad to have you.';
     case 'UNSUPPORTED_CURRENCY':
-      return 'Open or use an account in US dollars (USD) to connect.';
+      return 'You can connect any account held in US dollars (USD).';
     case 'TRADING_NOT_ALLOWED':
-      return 'Use the trading password. The investor password is read-only and cannot copy trades.';
+      return 'Please use your trading password. The investor password can only view the account, so it cannot copy trades.';
     case 'ALREADY_LINKED':
-      return 'Each broker account can be linked to one CASTIMOFx user only.';
+      return 'Each broker account can be linked to one CASTIMOFx user. If this is your own account, please contact support and we will sort it out.';
     case 'IS_MASTER_ACCOUNT':
-      return 'Please enter your own broker account.';
+      return 'Please enter your own broker account details.';
     case 'CAPACITY':
-      return 'Please try again later or contact support.';
+      return 'Please try again a little later, or contact support and we will help.';
+    case 'ALREADY_CONNECTED':
+      return 'Open Profile, choose Disconnect MT5, then connect the new account. Your current account is not affected until you do.';
     case 'LOGIN_MISMATCH':
-      return 'Check the account number you entered.';
+      return 'Please check the account number you entered.';
     case 'BAD_INPUT':
-      return 'Please correct the highlighted details and try again.';
+      return 'Please check the details above and try again.';
     default:
-      return 'Please try again. If it keeps happening, contact support with the reference code.';
+      return 'Please try again. If it keeps happening, contact support and quote the reference code, and we will look into it.';
   }
 }
 
@@ -355,6 +361,16 @@ export async function connectClient(
       throw new BrokerVerificationError('ALREADY_LINKED', 'This broker account is already linked to another user.');
     }
 
+    // One connected account per client keeps profit-share records exact, so a different account
+    // can only be connected after the current one is disconnected. Said kindly, and with the way out.
+    const active = deps.activeAccountOf?.(userId) ?? null;
+    const alreadyConnected = (n: string) =>
+      new BrokerVerificationError(
+        'ALREADY_CONNECTED',
+        `You are already connected with account #${n}, and it keeps copying trades. To use a different account, disconnect this one from your Profile first. That keeps your records accurate.`
+      );
+    if (active && !(sameLogin(active.login, login) && sameServer(active.server))) throw alreadyConnected(active.login);
+
     const all = await withTimeout(deps.gateway.listAccounts(), t.listSeconds, 'checking');
     const existing = all.find((a) => sameLogin(a.login, login) && sameServer(a.server));
 
@@ -367,11 +383,30 @@ export async function connectClient(
       }
     } else {
       // Cost guard: MetaApi charges per account.
-      const mine = all.filter((a) => isOwnedBy(a.name, userId));
+      let mine = all.filter((a) => isOwnedBy(a.name, userId));
+      if (mine.length) {
+        // Terminals from an earlier attempt that never finished connecting are cleared automatically, so a
+        // client is never stuck behind an account they cannot even see. A terminal that belongs to a
+        // truly connected client (or one with billing history) is never touched.
+        if (active || (await deps.hasBillingHistory?.(userId).catch(() => true))) {
+          throw alreadyConnected(String(mine[0].login));
+        }
+        const left: AccountSummary[] = [];
+        for (const a of mine) {
+          try {
+            await deps.gateway.removeAccount(a.id);
+            log?.('info', `Cleared an unfinished terminal #${a.login} for user ${userId} to make room.`);
+          } catch (cleanupErr: any) {
+            log?.('warn', `Could not clear unfinished terminal ${a.id}: ${cleanupErr?.message}`);
+            left.push(a);
+          }
+        }
+        mine = left;
+      }
       if (deps.limits.maxPerUser > 0 && mine.length >= deps.limits.maxPerUser) {
         throw new BrokerVerificationError(
           'CAPACITY',
-          'You already have a connected account. Disconnect it first to connect a different one.'
+          'We could not free up your earlier connection attempt just now. Please try again in a minute.'
         );
       }
       if (deps.limits.maxTotal > 0 && countClientAccounts(all) >= deps.limits.maxTotal) {

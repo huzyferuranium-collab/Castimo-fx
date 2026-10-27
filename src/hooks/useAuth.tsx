@@ -7,6 +7,7 @@ import {
   onAuthStateChanged,
   updateProfile,
   sendEmailVerification,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, testFirestoreConnection } from '../config/firebase';
@@ -20,6 +21,8 @@ interface AuthContextType {
   isEmailVerified: boolean;
   sendVerificationEmail: () => Promise<{ success: boolean; error?: string }>;
   refreshEmailVerified: () => Promise<boolean>;
+  /** Sends a password-reset link. Says the same thing whether or not the address has an account. */
+  resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   user: User | null;
   userProfile: UserProfile | null;
   loading: boolean;
@@ -316,6 +319,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  const resetPassword = async (email: string) => {
+    const address = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+      return { success: false, error: 'Please enter the email address you registered with.' };
+    }
+    try {
+      await sendPasswordResetEmail(auth, address);
+      return { success: true };
+    } catch (err: any) {
+      // An unknown address is reported as success, so nobody can use this to find out who has an account.
+      if (err?.code === 'auth/user-not-found' || err?.code === 'auth/invalid-email') return { success: true };
+      if (err?.code === 'auth/too-many-requests') {
+        return { success: false, error: 'Too many requests. Please wait a few minutes and try again.' };
+      }
+      return { success: false, error: 'We could not send the link just now. Please try again in a moment.' };
+    }
+  };
+
   const refreshEmailVerified = async () => {
     const current = auth.currentUser;
     if (!current) return false;
@@ -359,6 +380,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isEmailVerified,
         sendVerificationEmail,
         refreshEmailVerified,
+        resetPassword,
       }}
     >
       {children}
