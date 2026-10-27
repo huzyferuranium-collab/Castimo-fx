@@ -42,6 +42,23 @@ and "Clean up leftovers" (the master is never listed; clients in service cannot 
 **Connection Log** shows how long each connecting step took, so a slow broker or region is easy to spot.
 Optional settings are in `.env.example` (`CONNECT_MAX_PARALLEL`, `SUPERVISOR_MAX_PARALLEL`, the three `CONNECT_*_WAIT_SECONDS`).
 
+## Copy trades and restarts (copy memory)
+Every trade copied to a client is labelled `CastimoCopy #<master trade id>` at the client's broker. The server used to keep
+"which client trade belongs to which master trade" only in memory, so a restart (every deploy) made it forget, and a copy opened before
+the restart was not closed when the master closed its trade. Now the link is rebuilt from the brokers themselves:
+- on start-up the master's already-open trades are remembered but **never copied again** (no double trades after a restart);
+- every 30 seconds, and right after a client is connected or restored, each client's open positions are compared with the master's: copies
+  are found again and follow the master trade (stop-loss/take-profit changes and the final close);
+- a copy whose master trade is gone, or a second copy of the same master trade, is closed, but only after it looked wrong on two checks
+  at least 20 seconds apart, and never while the master's trades cannot be read;
+- only positions labelled exactly `CastimoCopy #<digits>` are ever touched; a client's own trades are left alone;
+- if the master link is rebuilt, the live listener is attached to the new connection (it used to stay on the old one);
+- `/api/trade/metrics` (admins only) shows the real counts under `copyMemory`.
+
+Log lines to look for: `[COPY_MEMORY] Start-up look done`, `Found client … copy #… of master trade #…`, `Closing a leftover copy`.
+Two copies of the server run side by side for about two minutes during every Render deploy. If the master opens a trade in that window both can copy
+it; the double is closed within about a minute by the check above, but it is still best to deploy while the master has no new trade about to open.
+
 ## Payments wallet
 Add `VITE_TREASURY_ADDRESS` = your real TRON (TRC20) USDT address in Render's environment variables, then redeploy.
 Until it is set, the site shows "Payment address not set yet" and refuses payments, so nobody can send money to a wrong address.

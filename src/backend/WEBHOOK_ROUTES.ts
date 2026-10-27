@@ -594,10 +594,11 @@ tradeRouter.get('/clients', requireAdmin, (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/trade/metrics
- * Returns comprehensive performance and execution statistics
+ * GET /api/trade/metrics  (administrators only)
+ * Returns comprehensive performance and execution statistics. It lists recent copy results per client,
+ * so it is not for the public.
  */
-tradeRouter.get('/metrics', (req: Request, res: Response) => {
+tradeRouter.get('/metrics', requireAdmin, (req: Request, res: Response) => {
   try {
     const metrics = replicationEngine.getReplicationMetrics();
     return res.status(200).json({

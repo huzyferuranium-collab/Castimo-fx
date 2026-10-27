@@ -117,6 +117,10 @@ async function startServer() {
       try {
         console.log('🔌 [SERVER] Bootstrapping MT5 Connection Manager & Replication Engine in background...');
         const connectionManager = Mt5ConnectionManager.getInstance();
+        const replicationEngine = ReplicationEngine.getInstance();
+        // A client that has just come back (or just connected) is compared with the master straight away, so a copy
+        // opened before a restart follows its master trade again instead of being forgotten.
+        connectionManager.onClientVerified = () => replicationEngine.reconcileSoon();
         connectionManager.onClientSaved = (rec) => void saveClientRecord(rec).catch((e) => console.warn('[STORE] save failed:', e?.message));
         connectionManager.loadSavedStatus = loadSavedStatus;
         if (isFirestoreAdminConfigured()) {
@@ -128,7 +132,6 @@ async function startServer() {
         }
         await connectionManager.initialize();
 
-        const replicationEngine = ReplicationEngine.getInstance();
         replicationEngine.attachToMasterStream();
         BillingService.getInstance().start();
         console.log('✅ [SERVER] CastimoFX MT5 Replication Engine initialized and listening.');
