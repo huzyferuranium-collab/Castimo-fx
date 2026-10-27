@@ -8,6 +8,8 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { UserRole } from '../../types';
 
@@ -38,6 +40,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   } = useAuth();
 
   const [tab, setTab] = useState<'signin' | 'signup' | 'verify'>(defaultTab);
+  const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState(prefillEmail || '');
   const [verifyNote, setVerifyNote] = useState<string | null>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
@@ -252,13 +255,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   placeholder="••••••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs bg-slate-950/60 border border-slate-700/60 rounded-xl focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white placeholder-slate-500"
+                  className="w-full pl-9 pr-10 py-2 text-xs bg-slate-950/60 border border-slate-700/60 rounded-xl focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white placeholder-slate-500"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-emerald-400"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
               <p className="text-[10px] text-slate-500 mt-1">Minimum 6 characters. Passwords are never logged.</p>
             </div>
