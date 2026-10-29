@@ -200,6 +200,29 @@ export async function queryEquals(collection: string, field: string, value: stri
   return rows.filter((r) => r.document).map((r) => fromFsFields(r.document.fields || {}));
 }
 
+/** Like queryEquals, but each row also carries its document id as `_id` (never write these rows back as they are). */
+export async function queryEqualsWithIds(collection: string, field: string, value: string): Promise<Array<Record<string, unknown> & { _id: string }>> {
+  const sa = readServiceAccount();
+  if (!sa) throw new Error('FIREBASE_SERVICE_ACCOUNT is not set on the server.');
+  const { projectId, databaseId } = settings(sa);
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/${encodeURIComponent(databaseId)}/documents:runQuery`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${await accessToken(sa)}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: collection }],
+        where: { fieldFilter: { field: { fieldPath: field }, op: 'EQUAL', value: { stringValue: value } } },
+      },
+    }),
+  });
+  if (!res.ok) throw new Error(`Firestore query failed (${res.status}).`);
+  const rows: any[] = await res.json();
+  return rows
+    .filter((r) => r.document)
+    .map((r) => ({ ...fromFsFields(r.document.fields || {}), _id: String(r.document.name || '').split('/').pop() || '' }));
+}
+
 /** Every document in a collection (use only for small admin lists). */
 export async function listAll(collection: string): Promise<Record<string, unknown>[]> {
   const out: Record<string, unknown>[] = [];

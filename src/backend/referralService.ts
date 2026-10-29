@@ -5,7 +5,7 @@
  * One server instance is assumed: money changes for one user run one at a time (see `locked`).
  */
 import { randomInt } from 'node:crypto';
-import { DocExistsError, createDoc, getDoc, isFirestoreAdminConfigured, listAll, queryEquals, setDoc } from './firestoreAdmin';
+import { DocExistsError, createDoc, getDoc, isFirestoreAdminConfigured, listAll, queryEquals, queryEqualsWithIds, setDoc } from './firestoreAdmin';
 import { checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron';
 import {
   WITHDRAW_FEE_PCT,
@@ -155,9 +155,9 @@ export async function summary(uid: string) {
   for (let lv = 0; lv < 3 && frontier.length; lv++) {
     const next: string[] = [];
     for (const parent of frontier) {
-      const kids = (await queryEquals('referrals', 'referrerUid', parent)) as Doc[];
+      const kids = (await queryEqualsWithIds('referrals', 'referrerUid', parent)) as Doc[];
       for (const k of kids) {
-        const kid = String(k.uid ?? '');
+        const kid = String(k._id ?? ''); // the referral record is stored under the new member's own id
         levels[lv].push({ name: '', joinedAt: String(k.attachedAt ?? '') });
         if (kid) next.push(kid);
       }
