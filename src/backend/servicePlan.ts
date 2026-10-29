@@ -8,7 +8,10 @@
  * Stored per client in Firestore (`service_plans/{userId}`), written only by the server.
  */
 
-export type ServiceModel = 'subscription' | 'profit_share';
+import type { Invoice } from './profitShare.ts';
+import { isOverdue } from './profitShare.ts';
+
+export type ServiceModel ='subscription' | 'profit_share';
 
 export const DEFAULT_SUBSCRIPTION_PRICE_USDT = 100;
 export const DEFAULT_SUBSCRIPTION_PERIOD_DAYS = 30;
@@ -70,6 +73,27 @@ export function canSelectModel(
     return { ok: false, reason: 'Your monthly subscription is still running. You can change plan after it ends.' };
   }
   return { ok: true };
+}
+
+/**
+ * Whether copying must be paused for this client, by the terms of THEIR plan only:
+ *   - Monthly subscription: paused whenever the paid period is not running. Profit-share invoices play no part.
+ *   - 50% profit share (or no plan record): paused while a profit-share invoice is unpaid past its due time (24 hours).
+ */
+export function billingStanding(
+  plan: Pick<PlanRecord, 'model' | 'subscription'> | null | undefined,
+  invoices: Array<Pick<Invoice, 'status' | 'dueAt'>>,
+  nowMs: number
+): { blocked: boolean; reason?: string } {
+  if (plan?.model === 'subscription') {
+    return subscriptionActive(plan, nowMs)
+      ? { blocked: false }
+      : { blocked: true, reason: 'Your monthly subscription is not active. Please pay for the plan to resume copying.' };
+  }
+  if (invoices.some((i) => isOverdue(i, nowMs))) {
+    return { blocked: true, reason: 'You have an overdue profit-share invoice. Please pay it to resume copying.' };
+  }
+  return { blocked: false };
 }
 
 export function daysLeft(periodEndIso: string | undefined, nowMs: number): number {

@@ -45,3 +45,33 @@ test('daysLeft and model validation', () => {
   assert.equal(isServiceModel('subscription'), true);
   assert.equal(isServiceModel('free'), false);
 });
+
+import { billingStanding } from '../src/backend/servicePlan.ts';
+import { DEFAULT_INVOICE_DUE_HOURS } from '../src/backend/profitShare.ts';
+
+const overdueInv: any = { status: 'pending', dueAt: new Date(now - 1000).toISOString() };
+const freshInv: any = { status: 'pending', dueAt: new Date(now + 3600_000).toISOString() };
+const paidInv: any = { status: 'paid', dueAt: new Date(now - DAY).toISOString() };
+
+test('a paid-up subscriber owes no 50% and is never paused by invoices', () => {
+  assert.equal(billingStanding(sub(now + DAY), [], now).blocked, false);
+  // even a stray overdue invoice from before they switched does not pause a running subscription
+  assert.equal(billingStanding(sub(now + DAY), [overdueInv], now).blocked, false);
+});
+
+test('a subscriber is paused when the paid month is not running', () => {
+  assert.equal(billingStanding(sub(now - 1), [], now).blocked, true);
+  assert.equal(billingStanding({ model: 'subscription' } as any, [], now).blocked, true);
+});
+
+test('profit-share clients are paused only by an invoice unpaid past its due time', () => {
+  const ps: any = { userId: 'u', model: 'profit_share', selectedAt: 'x' };
+  assert.equal(billingStanding(ps, [], now).blocked, false);
+  assert.equal(billingStanding(ps, [freshInv], now).blocked, false);
+  assert.equal(billingStanding(ps, [paidInv], now).blocked, false);
+  assert.equal(billingStanding(ps, [freshInv, overdueInv], now).blocked, true);
+});
+
+test('invoices are due within 24 hours by default', () => {
+  assert.equal(DEFAULT_INVOICE_DUE_HOURS, 24);
+});

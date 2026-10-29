@@ -79,7 +79,7 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
 
         {isSub ? (
           <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 list-disc pl-4">
-            <li>One flat price. We take no share of your profit.</li>
+            <li>One flat price. Once you have paid, we take no share of your profit and there is no 50% invoice.</li>
             <li>Paid in USDT (TRC20). Copying starts only after the payment is verified on the network.</li>
             <li>No automatic charges. When the period ends, copying stops until you pay again.</li>
             <li>Paying early adds to the time you have left.</li>
@@ -89,7 +89,7 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
             <li>No upfront fee. We take {view.price.feePct}% of NEW profit only, measured on your broker equity.</li>
             <li>Deposits and withdrawals are never counted as profit. Losses are recovered before any new fee.</li>
             <li>At the end of each settlement period an invoice is created if there is new profit, payable in USDT (TRC20).</li>
-            <li>If an invoice stays unpaid past its due time, copying pauses until it is paid.</li>
+            <li>Each invoice is due within {view.price.dueHours ?? 24} hours. If it is still unpaid after that, copying is disconnected until you pay it.</li>
           </ul>
         )}
 
@@ -202,7 +202,7 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
               </div>
             </div>
           ) : (
-            <p className="text-xs text-slate-500">Payments are not open yet.</p>
+            <p className="text-xs text-slate-500">The payment address is not available yet. Please contact support.</p>
           )}
 
           {sub?.active && !sub.cancelAtPeriodEnd && (

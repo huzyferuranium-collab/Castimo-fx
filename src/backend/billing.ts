@@ -14,11 +14,11 @@ import { Mt5ConnectionManager, ClientConnectionRecord } from './MT5_CONNECTION_M
 import {
   ClientLedger,
   DEFAULT_FEE_PCT,
+  DEFAULT_INVOICE_DUE_HOURS,
   Invoice,
   MIN_INVOICE_USDT,
   computeSettlement,
   invoiceId,
-  isOverdue,
   isSettlementDue,
   round2,
   sumAccountFlows,
@@ -31,6 +31,7 @@ import {
   PlanRecord,
   ServiceModel,
   canSelectModel,
+  billingStanding,
   daysLeft,
   isServiceModel,
   nextPeriod,
@@ -64,7 +65,7 @@ export function billingConfig() {
   return {
     feePct: readLimit(process.env.FEE_PCT, DEFAULT_FEE_PCT),
     periodDays: Math.max(1, readLimit(process.env.SETTLEMENT_PERIOD_DAYS, 7)),
-    dueHours: Math.max(1, readLimit(process.env.INVOICE_DUE_HOURS, 72)),
+    dueHours: Math.max(1, readLimit(process.env.INVOICE_DUE_HOURS, DEFAULT_INVOICE_DUE_HOURS)),
     treasury: treasury(),
     subscriptionPriceUsdt: Math.max(1, readLimit(process.env.SUBSCRIPTION_PRICE_USDT, DEFAULT_SUBSCRIPTION_PRICE_USDT)),
     subscriptionDays: Math.max(1, readLimit(process.env.SUBSCRIPTION_PERIOD_DAYS, DEFAULT_SUBSCRIPTION_PERIOD_DAYS)),
@@ -221,25 +222,21 @@ export class BillingService {
     await setDoc('client_ledgers', rec.userId, { ...ledger, hwm, settledThrough: nowIso, lastInvoiceId } as any);
   }
 
-  /** Stops copying while any invoice is overdue; resumes when none are. */
+  /** Applies the client's own plan terms: pauses copying when they are not met, resumes when they are. */
   async applyBlocking(userId: string): Promise<void> {
     const plan = await this.getPlan(userId);
-    if (plan?.model === 'subscription') {
-      this.manager.setBillingBlocked(userId, !subscriptionActive(plan, Date.now()));
-      return;
-    }
-    const invoices = (await queryEquals('profit_invoices', 'userId', userId)) as unknown as Invoice[];
-    const overdue = invoices.some((i) => isOverdue(i, Date.now()));
-    this.manager.setBillingBlocked(userId, overdue);
+    // A subscriber is never judged by profit-share invoices, so they are not even read.
+    const invoices = plan?.model === 'subscription' ? [] : ((await queryEquals('profit_invoices', 'userId', userId)) as unknown as Invoice[]);
+    this.manager.setBillingBlocked(userId, billingStanding(plan, invoices, Date.now()).blocked);
   }
 
-  /** Throws if the user has an overdue invoice (used before connecting or resuming copying). */
+  /** Throws if copying may not be switched on for this client under their plan (used before connecting or resuming). */
   async assertNotOverdue(userId: string): Promise<void> {
     if (!billingEnabled()) return;
-    const invoices = (await queryEquals('profit_invoices', 'userId', userId)) as unknown as Invoice[];
-    if (invoices.some((i) => isOverdue(i, Date.now()))) {
-      throw new BillingError('You have an overdue profit-share invoice. Please pay it to resume copying.', 402);
-    }
+    const plan = await this.getPlan(userId);
+    const invoices = plan?.model === 'subscription' ? [] : ((await queryEquals('profit_invoices', 'userId', userId)) as unknown as Invoice[]);
+    const standing = billingStanding(plan, invoices, Date.now());
+    if (standing.blocked) throw new BillingError(standing.reason || 'Please bring your payment up to date to resume copying.', 402);
   }
 
   // ---------- Service plan (subscription or profit share) ----------
@@ -406,7 +403,7 @@ export class BillingService {
             cancelAtPeriodEnd: Boolean(plan.subscription.cancelAtPeriodEnd),
           }
         : null,
-      price: { subscriptionUsdt: cfg.subscriptionPriceUsdt, periodDays: cfg.subscriptionDays, feePct: cfg.feePct },
+      price: { subscriptionUsdt: cfg.subscriptionPriceUsdt, periodDays: cfg.subscriptionDays, feePct: cfg.feePct, dueHours: cfg.dueHours },
       treasuryAddress: billingEnabled() ? cfg.treasury : '',
       canSwitch,
       stats: { activeSubscribers, profitShareClients },

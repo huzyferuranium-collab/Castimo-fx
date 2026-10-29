@@ -63,6 +63,12 @@ it; the double is closed within about a minute by the check above, but it is sti
 Add `VITE_TREASURY_ADDRESS` = your real TRON (TRC20) USDT address in Render's environment variables, then redeploy.
 Until it is set, the site shows "Payment address not set yet" and refuses payments, so nobody can send money to a wrong address.
 
+## The two plans never mix
+- **Monthly ($100 / 30 days):** the client sends USDT (TRC20) to the treasury address and pastes the TXID on the Service Plan page. Once verified, copying runs for the month and
+  nothing is taken from their profit: no ledger, no invoices, no 50% screens. If the month ends unpaid, copying pauses until they pay again.
+- **50% profit share:** no upfront fee; invoices are created from real profit and are due within 24 hours. Unpaid after that, copying pauses until paid.
+The rule lives in `billingStanding()` (`src/backend/servicePlan.ts`, tested) and is used by the sweep, by switching copying on, and by connecting.
+
 ## Turning on real profit-share billing
 Billing creates invoices from each client's real broker profit and checks USDT payments on the TRON blockchain.
 It stays OFF until both of these are set on Render (Environment):
@@ -75,7 +81,7 @@ It stays OFF until both of these are set on Render (Environment):
 Optional settings (defaults in brackets):
 - `FEE_PCT` [50] share of new profit.
 - `SETTLEMENT_PERIOD_DAYS` [7] how often invoices are made.
-- `INVOICE_DUE_HOURS` [72] time to pay before copying pauses.
+- `INVOICE_DUE_HOURS` [24] time to pay an invoice before copying pauses (50% profit-share clients only).
 - `TRONGRID_API_KEY` free key from trongrid.io, recommended to avoid rate limits.
 
 How it works: the first time a client's broker account is verified, their equity becomes the starting

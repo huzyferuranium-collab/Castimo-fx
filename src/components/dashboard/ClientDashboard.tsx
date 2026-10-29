@@ -337,7 +337,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const isConnected = account.status === 'copying' || account.status === 'connected';
   const isBlockedUnpaid = account.status === 'blocked_unpaid';
   const isRiskBlocked = account.status === 'blocked' || account.riskStatus === 'blocked';
-  const hasPendingShare = (account.unpaidProfitShareUsdt || 0) > 0;
+  // The two plans never mix: a monthly subscriber has no 50% invoices and sees none of the 50% screens.
+  const isSubscriber = planView?.model === 'subscription';
+  const subscriptionRunning = Boolean(planView?.subscription?.active);
+  const hasPendingShare = !isSubscriber && (account.unpaidProfitShareUsdt || 0) > 0;
   const openTrades = trades.filter((t) => t.status === 'OPEN');
   const openTradesCount = openTrades.length;
   const floatingPnl = openTrades.reduce((acc, trade) => acc + (trade.pnl || 0), 0);
@@ -376,6 +379,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     {
       groupTitle: 'More',
       items: [
+        ...(isSubscriber ? [] : [
         {
           id: 'settlement_due',
           label: '50% Profit Share',
@@ -383,6 +387,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
           badge: hasPendingShare ? `$${(account.unpaidProfitShareUsdt || 0).toFixed(0)} Due` : 'Settled',
           badgeVariant: hasPendingShare ? 'warning' : 'success',
         },
+        ]),
         {
           id: 'profile',
           label: 'Profile',
@@ -439,8 +444,29 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
           </div>
         </div>
 
+        {/* Monthly subscribers: only their own plan's notice is ever shown */}
+        {isSubscriber && !subscriptionRunning && activeSection !== 'plan' && (
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h4 className="font-bold text-sm text-amber-600 dark:text-amber-300">
+                {planView?.subscription ? 'Your monthly subscription has ended' : 'Your monthly subscription is not paid yet'}
+              </h4>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                Pay ${planView?.price.subscriptionUsdt ?? 100} USDT (TRC20) to {planView?.subscription ? 'resume' : 'start'} copying. Once paid, you owe nothing on your profits.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveSection('plan')}
+              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 font-bold text-xs text-slate-950 shadow-md transition shrink-0 cursor-pointer"
+            >
+              Go to payment
+            </button>
+          </div>
+        )}
+
         {/* Critical Watcher Alert Banners */}
-        {isBlockedUnpaid && isConnected && (
+        {!isSubscriber && isBlockedUnpaid && isConnected && (
           <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl animate-in fade-in">
             <div className="flex items-start gap-3">
               <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
@@ -615,7 +641,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                   ) : (
                     <div className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-400 text-[10px] flex items-center gap-1 font-medium">
                       <Award className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
-                      <span>50% Model Settled</span>
+                      <span>{isSubscriber ? (subscriptionRunning ? `Monthly plan active (${planView?.subscription?.daysLeft ?? 0}d left)` : 'Monthly plan not active') : '50% Model Settled'}</span>
                     </div>
                   )}
 
@@ -772,7 +798,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         {/* ========================================================
             SUB-SECTION 4: 50% PROFIT SHARE & TRANSACTION HASH VERIFICATION
             ======================================================== */}
-        {activeSection === 'settlement_due' && (
+        {activeSection === 'settlement_due' && !isSubscriber && (
           <div className="space-y-4 animate-in fade-in duration-150">
             {/* Header Card */}
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">

@@ -11,6 +11,8 @@
  */
 
 export const DEFAULT_FEE_PCT = 50;
+/** A profit-share invoice must be paid within this many hours, or copying pauses until it is paid. */
+export const DEFAULT_INVOICE_DUE_HOURS = 24;
 
 export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;

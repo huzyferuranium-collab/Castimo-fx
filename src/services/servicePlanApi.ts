@@ -8,7 +8,7 @@ export interface PlanView {
   model: ServiceModel | null;
   selectedAt: string | null;
   subscription: { active: boolean; periodEnd: string; daysLeft: number; cancelAtPeriodEnd: boolean } | null;
-  price: { subscriptionUsdt: number; periodDays: number; feePct: number };
+  price: { subscriptionUsdt: number; periodDays: number; feePct: number; dueHours?: number };
   treasuryAddress: string;
   canSwitch: { ok: boolean; reason?: string };
   stats: { activeSubscribers: number; profitShareClients: number };
