@@ -51,7 +51,7 @@ export const ProfitSharePaymentModal: React.FC<ProfitSharePaymentModalProps> = (
     const updateTimer = () => {
       const diff = new Date(invoice.dueAt).getTime() - Date.now();
       if (diff <= 0) {
-        setTimeLeft('Expired (24h window elapsed)');
+        setTimeLeft('Overdue: pay now to resume copying');
       } else {
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -95,106 +95,87 @@ export const ProfitSharePaymentModal: React.FC<ProfitSharePaymentModalProps> = (
     }
   };
 
+  const money = (n: number | undefined, plus = false) =>
+    typeof n === 'number' && Number.isFinite(n) ? `${plus ? '+' : ''}$${n.toFixed(2)}` : '—';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden text-slate-100 max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="p-5 border-b border-slate-800 bg-gradient-to-r from-emerald-600/20 via-slate-900 to-slate-900 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-              <Wallet className="w-5 h-5" />
+      <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden text-slate-100 max-h-[90vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <Wallet className="w-4 h-4" />
             </div>
-            <div>
-              <h3 className="font-bold text-base text-white">50% Profit Share Settlement</h3>
-              <p className="text-xs text-slate-400">TRC20 USDT On-Chain Remittance</p>
+            <div className="min-w-0">
+              <h3 className="font-semibold text-sm text-white">Pay your profit share</h3>
+              <p className="text-[11px] text-slate-400">USDT on TRON (TRC20)</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-white p-1 rounded-lg transition"
-          >
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg transition cursor-pointer" aria-label="Close">
             ✕
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto space-y-5">
+        <div className="p-5 overflow-y-auto space-y-4">
           {success ? (
-            <div className="p-8 text-center space-y-3">
-              <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-8 h-8 animate-bounce" />
+            <div className="p-6 text-center space-y-2">
+              <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-7 h-7" />
               </div>
-              <h4 className="text-lg font-bold text-white">50% Profit Share Settled!</h4>
-              <p className="text-xs text-slate-300">
-                Payment verified on TRC20 network. Your MT5 trade copying status is fully active and protected from the 24-hour disconnect timeout.
-              </p>
+              <h4 className="text-base font-semibold text-white">Payment verified</h4>
+              <p className="text-xs text-slate-300">Thank you. Your copying continues.</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {/* Due Details Card */}
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+            <>
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">Realized Gross Profit:</span>
-                  <span className="font-mono font-bold text-emerald-400 text-sm">
-                    +${(invoice?.grossProfit || 300).toFixed(2)} USD
+                  <span className="text-slate-400">Profit this period</span>
+                  <span className="font-mono font-semibold text-emerald-400">{money(invoice?.grossProfit, true)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-800/80 pt-2.5">
+                  <span className="text-xs font-medium text-slate-300">Your 50% share</span>
+                  <span className="text-lg font-bold text-amber-400 font-mono">
+                    {invoice ? `${money(invoice.amountDueUsdt)} USDT` : '—'}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">Performance Share Rate:</span>
-                  <span className="font-mono font-bold text-white">50% Split</span>
-                </div>
-                <div className="flex items-center justify-between border-t border-slate-800/80 pt-2">
-                  <span className="text-xs font-semibold text-slate-300">Castimofx Share Due:</span>
-                  <span className="text-xl font-black text-amber-400 font-mono">
-                    ${(invoice?.amountDueUsdt || 150).toFixed(2)} USDT
-                  </span>
-                </div>
-
-                {/* 24h Countdown Banner */}
-                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
-                  <Clock className="w-4 h-4 shrink-0 text-amber-400" />
-                  <div className="flex-1">
-                    <span className="font-semibold">24-Hour Settlement Window: </span>
-                    <span className="font-mono font-bold text-white">{timeLeft || '24h window active'}</span>
+                {invoice && (
+                  <div className="flex items-center gap-2 text-[11px] text-amber-300">
+                    <Clock className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                    <span className="font-mono">{timeLeft || 'Due within 24 hours'}</span>
                   </div>
-                </div>
+                )}
               </div>
 
-              {/* TRC20 Wallet Address Copy Box (NO QR CODE) */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-300">
-                    Castimofx Treasury USDT Wallet (TRC20):
-                  </label>
-                  <span className="text-[10px] text-emerald-400 font-mono font-semibold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                    TRON Network Only
-                  </span>
+                  <label className="text-xs font-medium text-slate-300">Payment address</label>
+                  <span className="text-[10px] text-slate-400 font-mono">TRON only</span>
                 </div>
-
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2.5">
-                  <div className="p-3 bg-slate-900 rounded-lg border border-slate-800/80 text-center font-mono text-xs sm:text-sm text-emerald-300 break-all select-all font-bold">
-                    {CASTIMO_TREASURY_ADDRESS}
+                  <div className="p-2.5 bg-slate-900 rounded-lg border border-slate-800/80 text-center font-mono text-xs text-emerald-300 break-all select-all">
+                    {CASTIMO_TREASURY_ADDRESS || 'Payment address not set yet'}
                   </div>
-
                   <button
                     type="button"
+                    disabled={!CASTIMO_TREASURY_ADDRESS}
                     onClick={() => copyToClipboard(CASTIMO_TREASURY_ADDRESS)}
-                    className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-white font-semibold text-xs flex items-center justify-center gap-2 transition cursor-pointer border border-slate-700 shadow-sm"
+                    className="w-full py-2 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-medium text-xs flex items-center justify-center gap-2 transition cursor-pointer border border-slate-700 disabled:opacity-50"
                   >
                     {copied ? (
                       <>
                         <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        <span className="text-emerald-400">Address Copied to Clipboard!</span>
+                        <span className="text-emerald-400">Copied</span>
                       </>
                     ) : (
                       <>
                         <Copy className="w-4 h-4 text-slate-300" />
-                        <span>Copy TRC20 USDT Address</span>
+                        <span>Copy address</span>
                       </>
                     )}
                   </button>
                 </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  Send exactly ${(invoice?.amountDueUsdt || 150).toFixed(2)} USDT on the TRON (TRC20) network. Once paid, trade replication will remain uninterrupted.
+                <p className="text-[11px] text-slate-400">
+                  {invoice ? `Send exactly ${money(invoice.amountDueUsdt)} USDT, TRC20 only.` : 'Send TRC20 USDT only.'}
                 </p>
               </div>
 
@@ -205,40 +186,32 @@ export const ProfitSharePaymentModal: React.FC<ProfitSharePaymentModalProps> = (
                 </div>
               )}
 
-              {/* TXID Submission & Verification Form */}
-              <form onSubmit={handleVerify} className="space-y-3 pt-1">
+              <form onSubmit={handleVerify} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Transaction ID / TX Hash (Optional for Instant Verification):
-                  </label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">Transaction ID (TXID)</label>
                   <input
                     type="text"
                     value={txHash}
                     onChange={(e) => setTxHash(e.target.value)}
-                    placeholder="Enter 64-char transaction hash from your wallet..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 transition"
+                    placeholder="64-character ID from your wallet"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs font-mono text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500 transition"
                   />
                 </div>
-
-                <div className="pt-1">
-                  <button
-                    type="submit"
-                    disabled={isVerifying}
-                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 font-bold text-xs text-slate-950 shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>{isVerifying ? 'Verifying On-Chain TRC20...' : 'Confirm Remittance'}</span>
-                  </button>
-                </div>
+                <button
+                  type="submit"
+                  disabled={isVerifying || !invoice}
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 font-bold text-xs text-slate-950 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isVerifying ? 'Verifying…' : 'Verify payment'}</span>
+                </button>
               </form>
 
-              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                <span>
-                  Accounts that fail to remit the 50% profit share within 24 hours of profit generation are automatically disconnected by the server-side watcher.
-                </span>
-              </div>
-            </div>
+              <p className="text-[11px] text-slate-400 flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 -mt-0.5" />
+                <span>If an invoice is still unpaid after 24 hours, copying pauses until you pay it.</span>
+              </p>
+            </>
           )}
         </div>
       </div>

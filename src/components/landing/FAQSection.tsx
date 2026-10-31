@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  HelpCircle,
   ChevronDown,
   Award,
   Share2,
@@ -8,7 +7,6 @@ import {
   Clock,
   Wallet,
   Zap,
-  CheckCircle2,
   Search,
   ArrowRight,
 } from 'lucide-react';
@@ -18,73 +16,64 @@ interface FAQItem {
   category: 'profit_share' | 'referrals' | 'custody_security';
   question: string;
   answer: string;
-  highlight?: string;
 }
 
 const FAQ_ITEMS: FAQItem[] = [
   {
     id: 'ps-how-it-works',
     category: 'profit_share',
-    question: 'How does the 50% profit share model work?',
+    question: 'How does the 50% profit share work?',
     answer:
-      'You can choose between a flat $100 monthly plan and the 50% Profit Share. On the 50% Profit Share there is nothing to pay upfront: we earn only when your connected MT5 account makes net profit above your previous High-Water Mark. If there is no new profit, you owe nothing. Deposits and withdrawals are never counted as profit.',
-    highlight: 'Profit Share: nothing upfront, and the 50% fee applies only to new profit above your High-Water Mark.',
+      'Choose a flat $100 monthly plan or the 50% Profit Share. With Profit Share nothing is paid upfront: we earn only on new net profit above your previous high-water mark. If there is no new profit, you owe nothing. Deposits and withdrawals never count as profit.',
   },
   {
     id: 'ps-24h-window',
     category: 'profit_share',
-    question: 'How does the 24-hour profit settlement window operate?',
+    question: 'When do I pay my profit share?',
     answer:
-      'When your MT5 terminal closes a profitable trading cycle, an automated invoice is generated for your 50% profit share. You have a full 24-hour grace window from profit realization to remit the payment via TRC20 USDT. Your trade copying continues without interruption during this 24-hour period.',
-    highlight: '24-hour grace window to remit payment via TRC20 USDT with uninterrupted trade replication.',
+      'When profit is realised, an invoice for your 50% share is created. You have 24 hours to pay it in TRC20 USDT, and copying continues while you do.',
   },
   {
     id: 'ps-24h-watcher',
     category: 'profit_share',
-    question: 'What happens if the 50% profit share is not remitted within 24 hours?',
+    question: 'What if an invoice is not paid within 24 hours?',
     answer:
-      'The Castimofx Autonomous 24h Watcher daemon monitors all pending invoices. If an invoice remains unpaid after 24 hours of profit realization, the system automatically disconnects the MT5 bridge and blocks new trade signals to prevent unremitted replication. Once the 50% share is remitted on TRC20, trade copying re-engages immediately.',
-    highlight: 'Automated 24h watcher halts copying if unpaid after 24h, protecting network integrity.',
+      'Copying pauses: no new trades are copied, and trades that are already open still close with the master. Once your payment is confirmed, copying resumes shortly.',
   },
   {
     id: 'ref-three-phases',
     category: 'referrals',
-    question: 'How does the 3-Phase Referral Commission program work?',
+    question: 'How do the 3-phase referral commissions work?',
     answer:
-      'Our affiliate architecture is structured into 3 distinct phases, rewarding you directly from the 50% profit share remitted by traders in your network:\n• Phase 1 (Main Direct Referrer): 5% of the client’s profit share\n• Phase 2 (Secondary Referrer): 3% of the profit share from traders invited by your Phase 1 network\n• Phase 3 (Tertiary Referrer): 2% of the profit share from traders invited by your Phase 2 network',
-    highlight: 'Continuous multi-tier recurring commissions: 5% (Phase 1), 3% (Phase 2), and 2% (Phase 3).',
+      'Commissions are paid from the profit share that the traders in your network pay:\n• Phase 1 (your direct referrals): 5%\n• Phase 2 (their referrals): 3%\n• Phase 3 (the next level): 2%',
   },
   {
     id: 'ref-math-example',
     category: 'referrals',
-    question: 'Can you provide a practical calculation example of referral earnings?',
+    question: 'Can you give an example?',
     answer:
-      'Suppose a trader joins directly through your link (Phase 1) and generates $1,000 in net trading profit:\n1. 50% Profit Share Due = $500.00 USDT\n2. Phase 1 Referrer (You, 5% of share) = $25.00 USDT\n3. If your referral invites Trader B (Phase 2 for you) who makes $1,000 profit, you earn 3% ($15.00 USDT).\n4. If Trader B invites Trader C (Phase 3 for you) who makes $1,000 profit, you earn 2% ($10.00 USDT).\nTotal commissions are paid from platform shares with zero deductions from client capital.',
-    highlight: '$1,000 client profit = $500 share → Phase 1: $25 USDT, Phase 2: $15 USDT, Phase 3: $10 USDT.',
+      'A trader you invited makes $1,000 profit, so their 50% share is $500 USDT.\n• Phase 1 (you): 5% = $25.00 USDT\n• A trader invited by your referral (Phase 2) with $1,000 profit: 3% = $15.00 USDT\n• One level further (Phase 3) with $1,000 profit: 2% = $10.00 USDT\nCommissions come from the platform’s share, never from client capital.',
   },
   {
     id: 'ref-payout-methods',
     category: 'referrals',
-    question: 'When and how are referral commissions paid out?',
+    question: 'How are referral commissions paid out?',
     answer:
-      'Commissions are credited to your Referral Hub once a referred client\'s payment is verified, whether that is a monthly plan payment or a profit-share invoice. You can withdraw your available balance to your own TRC20 USDT wallet from $50, with a 10% processing fee. Requests made before Thursday 23:59 GMT join that week\'s cycle and are processed within 24 hours after it.',
-    highlight: 'Credited on verified payments. Withdraw from $50 (10% fee) to your TRC20 USDT wallet in weekly cycles.',
+      'Commissions are credited to your Referral Hub once a referred client’s payment is verified, whether a monthly plan payment or a profit-share invoice. You can withdraw from $50 to your own TRC20 USDT wallet, with a 10% processing fee. Requests made before Thursday 23:59 GMT join that week’s cycle and are processed within 24 hours after it.',
   },
   {
     id: 'sec-broker-custody',
     category: 'custody_security',
-    question: 'Who has custody of my funds and trading capital?',
+    question: 'Who holds my funds?',
     answer:
-      'You maintain 100% direct custody of your funds with your own regulated broker (e.g. IC Markets, Pepperstone, Exness, FP Markets). Castimofx never holds, accepts, or processes client deposits or trading balances. All deposits and withdrawals happen exclusively on your broker’s personal client portal.',
-    highlight: '100% direct broker custody. Castimofx connects strictly via MT5 bridge replication.',
+      'You do, at your own regulated broker. Castimofx never holds, accepts or processes client deposits or trading balances. All deposits and withdrawals happen on your broker’s own client portal.',
   },
   {
     id: 'sec-risk-floor',
     category: 'custody_security',
     question: 'What is the minimum equity to connect?',
     answer:
-      'You need at least $200.00 USD of equity in your MT5 account to start a new connection. The check is made once, when you connect. After that, your account stays connected until you disconnect it yourself.',
-    highlight: '$200 minimum to connect. Checked once, at connection.',
+      'At least $200.00 USD of equity in your MT5 account. This is checked once, when you connect. After that, your account stays connected until you disconnect it yourself.',
   },
 ];
 
@@ -108,35 +97,26 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab, hideCta }) 
       activeCategory === 'all' || item.category === activeCategory;
     const matchesSearch =
       item.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.answer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.highlight && item.highlight.toLowerCase().includes(searchQuery.toLowerCase()));
+      item.answer.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto pt-6 pb-12 animate-in fade-in duration-300">
-      {/* Title Header */}
-      <div className="text-center space-y-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-400 text-xs font-semibold">
-          <HelpCircle className="w-3.5 h-3.5" />
-          <span>Knowledge Base & Platform Mechanics</span>
-        </div>
-        <h3 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-          Frequently Asked Questions
-        </h3>
-        <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto leading-relaxed">
-          Everything you need to know about the monthly plan, the 50% profit share, billing, and the 3-level referral program.
-        </p>
+      {/* Title */}
+      <div className="text-center space-y-1">
+        <h3 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Questions and answers</h3>
+        <p className="text-xs sm:text-sm text-slate-400">The plans, billing and referrals in brief.</p>
       </div>
 
       {/* Filter Tabs and Search Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900/80 p-2 rounded-2xl border border-slate-800">
         <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto no-scrollbar">
           {[
-            { id: 'all', label: 'All Questions' },
+            { id: 'all', label: 'All' },
             { id: 'profit_share', label: '50% Profit Share' },
-            { id: 'referrals', label: '3-Phase Referrals' },
-            { id: 'custody_security', label: 'Custody & Risk' },
+            { id: 'referrals', label: 'Referrals' },
+            { id: 'custody_security', label: 'Custody' },
           ].map((cat) => (
             <button
               key={cat.id}
@@ -155,7 +135,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab, hideCta }) 
         <div className="relative w-full sm:w-64">
           <input
             type="text"
-            placeholder="Search questions..."
+            placeholder="Search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-sky-500"
@@ -168,7 +148,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab, hideCta }) 
       <div className="space-y-3">
         {filteredItems.length === 0 ? (
           <div className="p-8 text-center bg-slate-900 border border-slate-800 rounded-2xl text-slate-500 text-xs">
-            No questions found matching your search. Try another query or clear filters.
+            No matching questions.
           </div>
         ) : (
           filteredItems.map((item) => {
@@ -185,7 +165,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab, hideCta }) 
                 <button
                   type="button"
                   onClick={() => toggleItem(item.id)}
-                  className="w-full p-4 sm:p-5 flex items-center justify-between gap-4 text-left cursor-pointer transition"
+                  className="w-full px-4 py-3.5 flex items-center justify-between gap-4 text-left cursor-pointer transition"
                 >
                   <div className="flex items-center gap-3">
                     <div
@@ -205,18 +185,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab, hideCta }) 
                         <Shield className="w-4 h-4" />
                       )}
                     </div>
-                    <div>
-                      <h4 className="font-bold text-sm sm:text-base text-white">
-                        {item.question}
-                      </h4>
-                      <span className="text-[10px] font-mono uppercase text-slate-500 block mt-0.5">
-                        {item.category === 'profit_share'
-                          ? '50% Profit Share Model'
-                          : item.category === 'referrals'
-                          ? '3-Phase Affiliate Commission'
-                          : 'Custody & Security'}
-                      </span>
-                    </div>
+                    <h4 className="font-semibold text-sm text-white">{item.question}</h4>
                   </div>
 
                   <div
@@ -229,17 +198,11 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab, hideCta }) 
                 </button>
 
                 {isExpanded && (
-                  <div className="px-4 sm:px-5 pb-5 pt-1 text-xs text-slate-300 space-y-3 border-t border-slate-800/60 leading-relaxed animate-in fade-in duration-200">
+                  <div className="px-4 pb-4 pt-1 text-xs text-slate-300 border-t border-slate-800/60 leading-relaxed animate-in fade-in duration-200">
                     <div className="whitespace-pre-line mt-2 text-slate-300">
                       {item.answer}
                     </div>
 
-                    {item.highlight && (
-                      <div className="p-3 rounded-xl bg-slate-950 border border-sky-500/20 text-sky-300 text-[11px] font-medium flex items-start gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-                        <span>{item.highlight}</span>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -249,12 +212,10 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab, hideCta }) 
       </div>
 
       {/* Quick Launch CTA Strip */}
-      {!hideCta && <div className="p-6 rounded-2xl bg-gradient-to-r from-sky-950/40 via-slate-900 to-slate-900 border border-sky-800/40 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+      {!hideCta && <div className="p-5 rounded-2xl bg-gradient-to-r from-sky-950/40 via-slate-900 to-slate-900 border border-sky-800/40 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
-          <h4 className="font-bold text-base text-white">Ready to start copying or referring?</h4>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Connect your broker account or start sharing your 3-phase referral link today.
-          </p>
+          <h4 className="font-semibold text-sm text-white">Ready to start?</h4>
+          <p className="text-xs text-slate-400 mt-0.5">Connect your broker account or share your referral link.</p>
         </div>
 
         <div className="flex items-center gap-3 w-full sm:w-auto">

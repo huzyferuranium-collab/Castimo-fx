@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshCw, Trash2, ShieldCheck, CheckCircle2, XCircle } from 'lucide-react';
 import { authHeaders } from '../../services/apiAuth';
+import { Collapsible } from '../common/Collapsible';
 
 interface CopierRow {
   accountId: string;
@@ -153,15 +154,12 @@ export const AdminTerminalsPanel: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="text-xs text-slate-400 max-w-2xl">
-          Client accounts as Duplikium holds them. Duplikium does the copying; this server connects, pauses and removes accounts and reads the results.
-          The master account is never listed here.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-slate-400">Client accounts held at Duplikium.</p>
         <div className="flex items-center gap-2">
           <button type="button" onClick={runCheck} disabled={busy !== null} className={`${btn} bg-emerald-600 hover:bg-emerald-500 text-white`} title="Signs in to Duplikium, finds the master and the template, and reads the master's trades">
             <ShieldCheck className={`w-3.5 h-3.5 ${busy === 'check' ? 'animate-pulse' : ''}`} />
-            Duplikium connection check
+            Connection check
           </button>
           <button type="button" onClick={load} className={`${btn} bg-slate-800 hover:bg-slate-700 text-slate-200`}>
             <RefreshCw className="w-3.5 h-3.5" />
@@ -208,24 +206,29 @@ export const AdminTerminalsPanel: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500">Client accounts</div>
-          <div className="font-bold text-white mt-0.5">
-            {data.used ?? rows.length}
-            <span className="text-slate-500 font-normal"> / {data.limit ? data.limit : 'no limit set'}</span>
-          </div>
-          {data.perUserLimit ? <div className="text-[10px] text-slate-500">{data.perUserLimit} per client</div> : null}
+      <div className="grid grid-cols-3 gap-2.5">
+        <div className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2.5">
+          <div className="text-[11px] text-slate-400">Accounts</div>
+          <div className="text-sm font-bold font-mono text-white">{data.used ?? rows.length}</div>
+          <div className="text-[10px] text-slate-500">{data.limit ? `limit ${data.limit}` : 'no limit'}</div>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500">In service</div>
-          <div className="font-bold text-white mt-0.5">{inService}</div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2.5">
+          <div className="text-[11px] text-slate-400">In service</div>
+          <div className="text-sm font-bold font-mono text-white">{inService}</div>
         </div>
-        <div className="rounded-xl border border-slate-800 bg-slate-900 p-3">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500">Still connecting or gave up</div>
-          <div className="font-bold text-white mt-0.5">{rows.filter((r) => r.tracked).length}</div>
+        <div className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2.5">
+          <div className="text-[11px] text-slate-400">Pending</div>
+          <div className="text-sm font-bold font-mono text-white">{rows.filter((r) => r.tracked).length}</div>
         </div>
       </div>
+
+      <Collapsible title="About this list" openLabel="Details" closeLabel="Hide">
+        <p>Duplikium does the copying. This server connects, pauses and removes client accounts there and reads the results.</p>
+        <p>The master account is never listed here and cannot be removed from here. Removing a client account leaves trades already open in the client's own MT5.</p>
+        <p>
+          Pending means the account is still connecting or the server gave up. {data.perUserLimit ? `Each client may have ${data.perUserLimit} account${data.perUserLimit > 1 ? 's' : ''}.` : ''}
+        </p>
+      </Collapsible>
 
       {rows.length === 0 ? (
         <p className="text-xs text-slate-500">No client accounts at Duplikium right now.</p>

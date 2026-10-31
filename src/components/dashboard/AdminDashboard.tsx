@@ -10,6 +10,7 @@ import { LedgerAuditModal } from '../ledger/LedgerAuditModal';
 import { SettlementHistoryModal } from '../settlements/SettlementHistoryModal';
 import { MasterAccountPanel } from '../admin/MasterAccountPanel';
 import { SidebarNav, NavGroup } from '../common/SidebarNav';
+import { Collapsible } from '../common/Collapsible';
 import {
   Radio,
   Users,
@@ -34,6 +35,21 @@ import {
   CreditCard,
   ExternalLink,
 } from 'lucide-react';
+
+/** A compact summary card: a small label, one figure, and an optional short note. */
+const Stat: React.FC<{ label: string; value: React.ReactNode; note?: string; tone?: 'amber' | 'rose' | 'emerald' }> = ({ label, value, note, tone }) => (
+  <div className="px-3.5 py-3 rounded-xl bg-slate-900 border border-slate-800 min-w-0">
+    <span className="text-[11px] text-slate-400 block truncate">{label}</span>
+    <span
+      className={`text-base font-bold font-mono mt-0.5 block truncate ${
+        tone === 'amber' ? 'text-amber-400' : tone === 'rose' ? 'text-rose-400' : tone === 'emerald' ? 'text-emerald-400' : 'text-white'
+      }`}
+    >
+      {value}
+    </span>
+    {note && <span className="text-[10px] text-slate-500 block truncate mt-0.5">{note}</span>}
+  </div>
+);
 
 export const AdminDashboard: React.FC = () => {
   const { userProfile } = useAuth();
@@ -122,58 +138,34 @@ export const AdminDashboard: React.FC = () => {
   );
   const pendingInvoicesCount = invoices.filter((i) => i.status === 'pending').length;
 
-  // Streamlined, collapsible Admin navigation groups
+  // Admin navigation. Badges show real counts only.
   const adminNavGroups: NavGroup[] = [
     {
-      groupTitle: 'Signal & Infrastructure',
+      groupTitle: 'Operations',
       items: [
-        {
-          id: 'master',
-          label: 'Master MT5 Bridge',
-          icon: Radio,
-          badge: 'Broadcasting',
-          badgeVariant: 'default',
-        },
-        {
-          id: 'fleet',
-          label: 'Client Fleets',
-          icon: Users,
-          badge: supervisedAccounts.length,
-          badgeVariant: 'default',
-        },
+        { id: 'master', label: 'Master account', icon: Radio },
+        { id: 'fleet', label: 'Clients', icon: Users, badge: supervisedAccounts.length > 0 ? supervisedAccounts.length : undefined, badgeVariant: 'default' },
+        { id: 'terminals', label: 'Duplikium', icon: Layers },
+        { id: 'connectlog', label: 'Connection log', icon: Server },
       ],
     },
     {
-      groupTitle: 'Revenue & Governance',
+      groupTitle: 'Billing & risk',
       items: [
         {
           id: 'invoices',
-          label: '50% Share & Hashes',
+          label: 'Invoices',
           icon: Wallet,
-          badge: pendingInvoicesCount > 0 ? `${pendingInvoicesCount} Due` : 'Settled',
-          badgeVariant: pendingInvoicesCount > 0 ? 'warning' : 'success',
+          badge: pendingInvoicesCount > 0 ? `${pendingInvoicesCount} due` : undefined,
+          badgeVariant: 'warning',
         },
-        {
-          id: 'withdrawals',
-          label: 'Referral Withdrawals',
-          icon: Wallet,
-        },
-        {
-          id: 'terminals',
-          label: 'Duplikium Accounts',
-          icon: Layers,
-        },
-        {
-          id: 'connectlog',
-          label: 'Connection Log',
-          icon: Server,
-        },
+        { id: 'withdrawals', label: 'Withdrawals', icon: Wallet },
         {
           id: 'governance',
-          label: '24h Watcher & Risk',
+          label: 'Risk & watcher',
           icon: Clock,
-          badge: accountsDisconnected > 0 ? `${accountsDisconnected} Blocked` : 'Active',
-          badgeVariant: accountsDisconnected > 0 ? 'danger' : 'success',
+          badge: accountsDisconnected > 0 ? `${accountsDisconnected} blocked` : undefined,
+          badgeVariant: 'danger',
         },
       ],
     },
@@ -191,104 +183,68 @@ export const AdminDashboard: React.FC = () => {
         groups={adminNavGroups}
         activeId={activeTab}
         onSelect={setActiveTab}
-        title="Admin Console"
-        subtitle="Institutional Desk"
+        title="Admin"
         accentColor="purple"
-        statusBadge={{
-          text: 'Watcher Active',
-          variant: 'purple',
-          pulsing: true,
-        }}
       />
 
       {/* ========================================================
           MAIN CONTENT AREA (DECONGESTED, RESPONSIVE)
           ======================================================== */}
       <div className="flex-1 w-full space-y-4 min-w-0">
-        {/* Streamlined Top Control Header */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-purple-900/40 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0 shadow-inner">
-              <ShieldCheck className="w-5 h-5" />
+        {/* Header */}
+        <div className="px-4 py-3 rounded-2xl bg-slate-900 border border-purple-900/40 shadow-lg flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
+              <ShieldCheck className="w-4 h-4" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-black text-white">
-                  {currentTabLabel}
-                </h1>
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              </div>
-              <p className="text-xs text-slate-400 truncate">
-                Admin Oversight • 50% Profit Share Protocol • 24h Autonomous Watcher
-              </p>
-            </div>
+            <h1 className="text-sm font-semibold text-white truncate">{currentTabLabel}</h1>
           </div>
 
-          {/* Quick Actions Dropdown */}
-          <div className="flex items-center gap-2 self-end sm:self-auto" ref={actionsMenuRef}>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setActionsMenuOpen(!actionsMenuOpen)}
-                className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-md shadow-purple-950/40"
-              >
-                <Zap className="w-3.5 h-3.5 text-amber-300" />
-                <span>Supervisory Tools</span>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${actionsMenuOpen ? 'rotate-180' : ''}`} />
-              </button>
+          <div className="relative shrink-0" ref={actionsMenuRef}>
+            <button
+              type="button"
+              onClick={() => setActionsMenuOpen(!actionsMenuOpen)}
+              aria-expanded={actionsMenuOpen}
+              className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Tools</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${actionsMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
 
-              {actionsMenuOpen && (
-                <div className="absolute right-0 mt-2 w-64 rounded-xl bg-slate-900 border border-purple-900/60 shadow-2xl p-2 z-50 text-slate-200 animate-in fade-in duration-150">
-                  <div className="px-3 py-1.5 border-b border-slate-800 text-[10px] font-semibold text-purple-400 uppercase tracking-wider">
-                    Administrative Tools
-                  </div>
-                  <div className="space-y-1 pt-1">
-                    <button
-                      type="button"
-                      onClick={handleExecuteDailySettlement}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs rounded-lg hover:bg-purple-950/40 text-slate-200 hover:text-amber-300 transition text-left cursor-pointer"
-                    >
-                      <Award className="w-4 h-4 text-amber-400 shrink-0" />
-                      <div>
-                        <span className="font-semibold block">Execute 50% Settlement</span>
-                        <span className="text-[10px] text-slate-400 block">Run UTC daily performance sweep</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowRiskModal(true);
-                        setActionsMenuOpen(false);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs rounded-lg hover:bg-purple-950/40 text-slate-200 hover:text-rose-300 transition text-left cursor-pointer"
-                    >
-                      <Sliders className="w-4 h-4 text-rose-400 shrink-0" />
-                      <div>
-                        <span className="font-semibold block">Risk Settings</span>
-                        <span className="text-[10px] text-slate-400 block">Configure drawdown & lot limits</span>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowLedgerModal(true);
-                        setActionsMenuOpen(false);
-                      }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs rounded-lg hover:bg-purple-950/40 text-slate-200 hover:text-purple-300 transition text-left cursor-pointer"
-                    >
-                      <FileText className="w-4 h-4 text-purple-400 shrink-0" />
-                      <div>
-                        <span className="font-semibold block">Ledger & Audit Trail</span>
-                        <span className="text-[10px] text-slate-400 block">Cryptographic event logs</span>
-                      </div>
-                    </button>
-
-                  </div>
-                </div>
-              )}
-            </div>
+            {actionsMenuOpen && (
+              <div className="absolute right-0 mt-2 w-48 rounded-xl bg-slate-900 border border-purple-900/60 shadow-2xl p-1.5 z-50 text-slate-200 animate-in fade-in duration-150">
+                <button
+                  type="button"
+                  onClick={handleExecuteDailySettlement}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs rounded-lg hover:bg-purple-950/40 transition text-left cursor-pointer"
+                >
+                  <Award className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="font-medium">Settlement</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRiskModal(true);
+                    setActionsMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs rounded-lg hover:bg-purple-950/40 transition text-left cursor-pointer"
+                >
+                  <Sliders className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span className="font-medium">Risk settings</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLedgerModal(true);
+                    setActionsMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs rounded-lg hover:bg-purple-950/40 transition text-left cursor-pointer"
+                >
+                  <FileText className="w-4 h-4 text-purple-400 shrink-0" />
+                  <span className="font-medium">Audit ledger</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -319,71 +275,23 @@ export const AdminDashboard: React.FC = () => {
             ======================================================== */}
         {activeTab === 'fleet' && (
           <div className="space-y-4 animate-in fade-in duration-150">
-            {/* Quick KPI Strip */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-                <span className="text-[11px] text-slate-400 block font-medium">Total Terminals</span>
-                <span className="text-xl sm:text-2xl font-black font-mono text-white mt-1 block">
-                  {supervisedAccounts.length}
-                </span>
-                <span className="text-[10px] text-emerald-400 block mt-0.5">
-                  {supervisedAccounts.filter((a) => a.status === 'copying').length} Actively Copying
-                </span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-                <span className="text-[11px] text-slate-400 block font-medium">Total Client Equity</span>
-                <span className="text-xl sm:text-2xl font-black font-mono text-white mt-1 block">
-                  ${totalSupervisedEquity.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
-                  Direct broker custody
-                </span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-                <span className="text-[11px] text-slate-400 block font-medium">50% Share Due</span>
-                <span className="text-xl sm:text-2xl font-black font-mono text-amber-400 mt-1 block">
-                  ${pendingShareTotal.toFixed(2)} USDT
-                </span>
-                <span className="text-[10px] text-amber-300 block mt-0.5">
-                  24h settlement grace
-                </span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-                <span className="text-[11px] text-slate-400 block font-medium">Blocked (&gt;24h)</span>
-                <span className="text-xl sm:text-2xl font-black font-mono text-rose-400 mt-1 block">
-                  {accountsDisconnected}
-                </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
-                  Auto-disconnected by daemon
-                </span>
-              </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+              <Stat label="Clients" value={supervisedAccounts.length} note={`${supervisedAccounts.filter((a) => a.status === 'copying').length} copying`} />
+              <Stat label="Client equity" value={`$${totalSupervisedEquity.toLocaleString('en-US', { minimumFractionDigits: 2 })}`} />
+              <Stat label="Share due" value={`$${pendingShareTotal.toFixed(2)}`} note="USDT" tone="amber" />
+              <Stat label="Blocked" value={accountsDisconnected} tone="rose" />
             </div>
 
-            {/* Client Fleet List Card */}
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-                    <Users className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-white">Supervised Client Terminals</h3>
-                    <p className="text-xs text-slate-400">Real-time replication status and equity monitoring</p>
-                  </div>
-                </div>
-                <span className="text-xs text-slate-400 font-mono">
-                  {supervisedAccounts.length} Connected
-                </span>
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400">{supervisedAccounts.length} connected</span>
               </div>
 
               {/* Mobile Card View */}
               <div className="block md:hidden divide-y divide-slate-800/60">
                 {supervisedAccounts.length === 0 ? (
                   <div className="py-8 text-center text-slate-500 text-xs">
-                    No supervised MT5 client terminals connected.
+                    No clients connected yet.
                   </div>
                 ) : (
                   supervisedAccounts.map((acc) => {
@@ -460,20 +368,20 @@ export const AdminDashboard: React.FC = () => {
                 <table className="w-full text-left text-xs text-slate-300">
                   <thead className="bg-slate-950 border-b border-slate-800 text-[10px] uppercase font-semibold text-slate-400">
                     <tr>
-                      <th className="py-2.5 px-3">Account #</th>
-                      <th className="py-2.5 px-3">Broker Bridge</th>
-                      <th className="py-2.5 px-3">Live Equity</th>
-                      <th className="py-2.5 px-3">Last Profit</th>
-                      <th className="py-2.5 px-3">50% Share Due</th>
-                      <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3 text-right">Actions</th>
+                      <th className="py-2 px-3">Account</th>
+                      <th className="py-2 px-3">Broker</th>
+                      <th className="py-2 px-3">Equity</th>
+                      <th className="py-2 px-3">Last profit</th>
+                      <th className="py-2 px-3">Share due</th>
+                      <th className="py-2 px-3">Status</th>
+                      <th className="py-2 px-3 text-right"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-mono">
                     {supervisedAccounts.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="py-8 text-center text-slate-500 font-sans text-xs">
-                          No supervised MT5 client terminals connected. Awaiting client linkages.
+                          No clients connected yet.
                         </td>
                       </tr>
                     ) : (
@@ -498,7 +406,7 @@ export const AdminDashboard: React.FC = () => {
                               <span className="text-slate-300 block">{acc.brokerName || acc.brokerServer}</span>
                               {acc.isBrokerVerified ? (
                                 <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 inline-block mt-0.5">
-                                  ✓ Verified Real Broker
+                                  ✓ Verified
                                 </span>
                               ) : acc.leverage ? (
                                 <span className="text-[9px] text-slate-400 block font-mono">1:{acc.leverage}</span>
@@ -515,15 +423,15 @@ export const AdminDashboard: React.FC = () => {
                             <td className="py-2.5 px-3">
                               {isOverdue ? (
                                 <span className="text-[10px] font-bold text-rose-300 bg-rose-500/15 px-2 py-0.5 rounded border border-rose-500/30">
-                                  Blocked (&gt;24h)
+                                  Blocked
                                 </span>
                               ) : hasDue ? (
                                 <span className="text-[10px] font-bold text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded border border-amber-500/30">
-                                  Grace Period
+                                  Payment due
                                 </span>
                               ) : (
                                 <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                                  Copying Active
+                                  Active
                                 </span>
                               )}
                             </td>
@@ -546,9 +454,7 @@ export const AdminDashboard: React.FC = () => {
                                   Reconnect
                                 </button>
                               )}
-                              {!hasDue && !isOverdue && (
-                                <span className="text-[11px] text-slate-500">Auto-Monitored</span>
-                              )}
+
                             </td>
                           </tr>
                         );
@@ -566,61 +472,22 @@ export const AdminDashboard: React.FC = () => {
             ======================================================== */}
         {activeTab === 'invoices' && (
           <div className="space-y-4 animate-in fade-in duration-150">
-            {/* KPI Summary */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-                <span className="text-[11px] text-slate-400 block font-medium">Outstanding 50% Dues</span>
-                <span className="text-xl sm:text-2xl font-black font-mono text-amber-400 mt-1 block">
-                  ${pendingShareTotal.toFixed(2)} USDT
-                </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
-                  {pendingInvoicesCount} Invoices Pending
-                </span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-                <span className="text-[11px] text-slate-400 block font-medium">Total Invoices Issued</span>
-                <span className="text-xl sm:text-2xl font-black font-mono text-white mt-1 block">
-                  {invoices.length}
-                </span>
-                <span className="text-[10px] text-emerald-400 block mt-0.5">
-                  {invoices.filter((i) => i.status === 'paid').length} Settled On-Chain
-                </span>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-                <span className="text-[11px] text-slate-400 block font-medium">Remittance Rail</span>
-                <span className="text-sm font-bold text-emerald-400 mt-2 block font-mono">
-                  TRON (TRC20 USDT)
-                </span>
-                <span className="text-[10px] text-slate-400 block mt-0.5 truncate font-mono">
-                  {CASTIMO_TREASURY_ADDRESS || 'Payment address not set yet'}
-                </span>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <Stat label="Outstanding" value={`$${pendingShareTotal.toFixed(2)} USDT`} note={`${pendingInvoicesCount} pending`} tone="amber" />
+              <Stat label="Invoices" value={invoices.length} note={`${invoices.filter((i) => i.status === 'paid').length} paid`} />
+              <Stat label="Payments" value="TRC20 USDT" note={CASTIMO_TREASURY_ADDRESS || 'Payment address not set yet'} tone="emerald" />
             </div>
 
-            {/* Invoices & Hashes List */}
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
-                    <Wallet className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-white">50% Profit Share Invoices & Transaction Hashes</h3>
-                    <p className="text-xs text-slate-400">Audited remittance records with TRC20 verification hashes</p>
-                  </div>
-                </div>
-                <span className="text-xs text-slate-400 font-mono">
-                  {invoices.length} Records
-                </span>
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400">{invoices.length} total</span>
               </div>
 
               {/* Mobile View */}
               <div className="block md:hidden divide-y divide-slate-800/60">
                 {invoices.length === 0 ? (
                   <div className="py-8 text-center text-slate-500 text-xs">
-                    No profit share invoices generated. Awaiting MT5 trade closures.
+                    No invoices yet.
                   </div>
                 ) : (
                   invoices.map((inv) => (
@@ -661,7 +528,7 @@ export const AdminDashboard: React.FC = () => {
                           className="w-full py-2 text-xs font-bold rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition cursor-pointer flex items-center justify-center gap-1.5"
                         >
                           <Check className="w-3.5 h-3.5" />
-                          <span>Verify & Mark Paid (TRC20)</span>
+                          <span>Mark paid</span>
                         </button>
                       )}
                     </div>
@@ -674,20 +541,20 @@ export const AdminDashboard: React.FC = () => {
                 <table className="w-full text-left text-xs text-slate-300">
                   <thead className="bg-slate-950 border-b border-slate-800 text-[10px] uppercase font-semibold text-slate-400">
                     <tr>
-                      <th className="py-2.5 px-3">Invoice ID</th>
-                      <th className="py-2.5 px-3">Account #</th>
-                      <th className="py-2.5 px-3">Gross MT5 Profit</th>
-                      <th className="py-2.5 px-3">50% Share Due</th>
-                      <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3">Transaction Hash (TXID)</th>
-                      <th className="py-2.5 px-3 text-right">Actions</th>
+                      <th className="py-2 px-3">Invoice</th>
+                      <th className="py-2 px-3">Account</th>
+                      <th className="py-2 px-3">Profit</th>
+                      <th className="py-2 px-3">Due</th>
+                      <th className="py-2 px-3">Status</th>
+                      <th className="py-2 px-3">TXID</th>
+                      <th className="py-2 px-3 text-right"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-mono">
                     {invoices.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="py-8 text-center text-slate-500 font-sans text-xs">
-                          No 50% profit share invoices generated. Awaiting MT5 trade settlements.
+                          No invoices yet.
                         </td>
                       </tr>
                     ) : (
@@ -716,7 +583,7 @@ export const AdminDashboard: React.FC = () => {
                                 {inv.txHash.slice(0, 12)}...{inv.txHash.slice(-8)}
                               </span>
                             ) : (
-                              <span className="text-slate-500 italic">Awaiting submission</span>
+                              <span className="text-slate-500">Not paid yet</span>
                             )}
                           </td>
                           <td className="py-2.5 px-3 text-right font-sans">
@@ -769,106 +636,69 @@ export const AdminDashboard: React.FC = () => {
 
         {activeTab === 'governance' && (
           <div className="space-y-4 animate-in fade-in duration-150">
-            {/* Autonomous 24h Watcher Daemon Card */}
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="relative flex items-center justify-center">
-                    <div className="w-3 h-3 rounded-full bg-emerald-400 animate-ping absolute" />
-                    <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                      <span>Autonomous 24-Hour Settlement Watcher</span>
-                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                        ACTIVE
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Continuous watcher reads closed MT5 profits, issues 50% invoices, and terminates copying after 24 hours.
-                    </p>
-                  </div>
+            <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-white">Payment watcher</h3>
+                  <p className="text-xs text-slate-400">Pauses copying when an invoice is unpaid past its due time.</p>
                 </div>
-
-                {/* Billing tools */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleTriggerWatcherSweep}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 cursor-pointer"
-                    title="Runs background sweep daemon"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Run Sweep</span>
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleTriggerWatcherSweep}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Run sweep</span>
+                </button>
               </div>
+              <Collapsible title="How billing and pausing work" openLabel="Details" closeLabel="Hide">
+                <p>Monthly-plan clients are never judged by invoices. If their month ends unpaid, copying pauses until they pay again.</p>
+                <p>Profit-share clients are invoiced from real profit once per settlement period and have the invoice due time to pay. Unpaid, copying pauses until it is paid.</p>
+                <p>A paused client is set to close only: no new trades are copied, and trades already open still close when the master closes them.</p>
+              </Collapsible>
             </div>
 
-            {/* Risk Floor & Ledger Cards Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Risk Floor Card */}
-              <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400">
-                    <Sliders className="w-4 h-4" />
-                  </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
+                <h4 className="text-sm font-semibold text-white">Risk</h4>
+                <div className="px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 grid grid-cols-2 gap-2 text-xs font-mono">
                   <div>
-                    <h4 className="text-sm font-bold text-white">Minimum Equity to Connect</h4>
-                    <p className="text-xs text-slate-400">Checked once, when a client connects</p>
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 grid grid-cols-2 gap-2 text-xs font-mono">
-                  <div>
-                    <span className="text-[10px] text-slate-500 block">Connection minimum:</span>
+                    <span className="text-[10px] text-slate-500 block">Connection minimum</span>
                     <span className="font-bold text-red-400">$200.00 USD</span>
                   </div>
                   <div className="text-right">
-                    <span className="text-[10px] text-slate-500 block">Lot Multiplier:</span>
+                    <span className="text-[10px] text-slate-500 block">Lot multiplier</span>
                     <span className="font-bold text-white">{riskSettings.lotSizeMultiplier || 1.0}x</span>
                   </div>
                 </div>
-
                 <button
                   type="button"
                   onClick={() => setShowRiskModal(true)}
-                  className="w-full py-2.5 px-4 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/40 text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
+                  className="w-full py-2 px-4 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/40 text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
                 >
                   <Sliders className="w-3.5 h-3.5" />
-                  <span>Adjust Risk Safety Floor & Multipliers</span>
+                  <span>Risk settings</span>
                 </button>
               </div>
 
-              {/* Daily Settlement & Ledger Records */}
-              <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-                    <FileText className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-white">Cryptographic Audit & Daily Settlements</h4>
-                    <p className="text-xs text-slate-400">SHA-256 ledger integrity tracking</p>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 pt-2">
+              <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
+                <h4 className="text-sm font-semibold text-white">Records</h4>
+                <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => setShowSettlementModal(true)}
-                    className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
                     <Award className="w-3.5 h-3.5 text-amber-400" />
                     <span>Settlements</span>
                   </button>
-
                   <button
                     type="button"
                     onClick={() => setShowLedgerModal(true)}
-                    className="flex-1 py-2.5 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-md"
+                    className="flex-1 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    <span>Audit Ledger</span>
+                    <span>Audit ledger</span>
                   </button>
                 </div>
               </div>

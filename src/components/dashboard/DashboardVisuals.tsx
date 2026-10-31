@@ -72,7 +72,7 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail
     </div>
 
     <div className="relative mt-2 max-w-xl sm:max-w-[56%] lg:max-w-xl">
-      <h1 className="font-display font-extrabold tracking-tight text-3xl sm:text-5xl leading-[1.05] break-words">{name}</h1>
+      <h1 className="font-display font-extrabold tracking-tight text-2xl sm:text-4xl leading-[1.1] break-words">{name}</h1>
       <p className="mt-3 text-base sm:text-lg font-bold">{headline}</p>
       <p className="mt-1.5 text-sm on-aurora-soft leading-relaxed">{detail}</p>
 

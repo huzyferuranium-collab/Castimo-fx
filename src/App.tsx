@@ -30,9 +30,8 @@ const TickerBar: React.FC = () => {
     <div className="bg-slate-100 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800/80 py-1.5 px-4 overflow-x-auto text-[11px] font-mono text-slate-600 dark:text-slate-400 flex items-center justify-between gap-6 no-scrollbar">
       <div className="flex items-center gap-6 shrink-0">
         <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span className="text-slate-800 dark:text-slate-300 font-bold">TRON NETWORK:</span>
-          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">TRC20 USDT ACTIVE</span>
+          <span className="text-slate-800 dark:text-slate-300 font-bold">PAYMENTS:</span>
+          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">USDT (TRC20)</span>
         </div>
       </div>
       <div className="hidden lg:flex items-center gap-3 shrink-0 text-[10px] text-slate-500 dark:text-slate-500">
@@ -40,7 +39,7 @@ const TickerBar: React.FC = () => {
         <span>•</span>
         <span>REFERRALS: 5% / 3% / 2%</span>
         <span>•</span>
-        <span>24H WATCHER: ACTIVE</span>
+        <span>INVOICES DUE IN 24H</span>
       </div>
     </div>
   );

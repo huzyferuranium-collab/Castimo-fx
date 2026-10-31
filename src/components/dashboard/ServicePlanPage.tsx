@@ -85,18 +85,18 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
         </div>
 
         {isSub ? (
-          <ul className="relative text-xs text-slate-600 dark:text-slate-300 space-y-1.5 list-disc pl-4">
-            <li>One flat price. Once you have paid, we take no share of your profit and there is no 50% invoice.</li>
-            <li>Paid in USDT (TRC20). Copying starts only after the payment is verified on the network.</li>
-            <li>No automatic charges. When the period ends, copying stops until you pay again.</li>
+          <ul className="relative text-xs text-slate-600 dark:text-slate-300 space-y-1 list-disc pl-4">
+            <li>One flat price, with no profit share.</li>
+            <li>Paid in USDT (TRC20). Copying starts once the payment is verified.</li>
+            <li>No automatic charges: copying stops when the period ends, until you pay again.</li>
             <li>Paying early adds to the time you have left.</li>
           </ul>
         ) : (
-          <ul className="relative text-xs text-slate-600 dark:text-slate-300 space-y-1.5 list-disc pl-4">
-            <li>No upfront fee. We take {view.price.feePct}% of NEW profit only, measured on your broker equity.</li>
-            <li>Deposits and withdrawals are never counted as profit. Losses are recovered before any new fee.</li>
-            <li>At the end of each settlement period an invoice is created if there is new profit, payable in USDT (TRC20).</li>
-            <li>Each invoice is due within {view.price.dueHours ?? 24} hours. If it is still unpaid after that, copying is disconnected until you pay it.</li>
+          <ul className="relative text-xs text-slate-600 dark:text-slate-300 space-y-1 list-disc pl-4">
+            <li>No upfront fee. {view.price.feePct}% of NEW profit only, measured on your broker equity.</li>
+            <li>Deposits and withdrawals never count as profit. Losses are recovered first.</li>
+            <li>If a period has new profit, an invoice is created, payable in USDT (TRC20) within {view.price.dueHours ?? 24} hours.</li>
+            <li>While an invoice is unpaid after that, copying is paused.</li>
           </ul>
         )}
 

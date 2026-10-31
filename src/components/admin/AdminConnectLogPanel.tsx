@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { authHeaders } from '../../services/apiAuth';
+import { Collapsible } from '../common/Collapsible';
 
 type Timings = Record<string, number>;
 
@@ -72,9 +73,7 @@ export const AdminConnectLogPanel: React.FC = () => {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-400">
-          Connection attempts since the server last started. Passwords are never recorded.
-        </p>
+        <p className="text-xs text-slate-400">Since the server last started. Passwords are never recorded.</p>
         <button
           type="button"
           onClick={load}
@@ -86,7 +85,7 @@ export const AdminConnectLogPanel: React.FC = () => {
       </div>
       {error && <p className="text-xs text-rose-400">{error}</p>}
 
-      <h4 className="text-xs font-semibold text-slate-300 pt-1">Attempts that did not finish in the browser</h4>
+      <h4 className="text-xs font-semibold text-slate-300 pt-1">Needs a look</h4>
       {rows.length === 0 ? (
         <p className="text-xs text-slate-500">None recorded.</p>
       ) : (
@@ -118,9 +117,14 @@ export const AdminConnectLogPanel: React.FC = () => {
         </div>
       )}
 
-      <h4 className="text-xs font-semibold text-slate-300 pt-2">Recent successful connections</h4>
+      <Collapsible
+        title={`Recent successful connections (${successes.length})`}
+        openLabel="Show"
+        closeLabel="Hide"
+        className="mt-2"
+      >
       {successes.length === 0 ? (
-        <p className="text-xs text-slate-500">None recorded yet.</p>
+        <p className="text-slate-500">None recorded yet.</p>
       ) : (
         <div className="space-y-2">
           {successes.map((s, i) => (
@@ -139,6 +143,7 @@ export const AdminConnectLogPanel: React.FC = () => {
           ))}
         </div>
       )}
+      </Collapsible>
     </div>
   );
 };

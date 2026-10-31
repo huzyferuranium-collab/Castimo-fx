@@ -466,17 +466,17 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
           </div>
         )}
 
-        {/* Critical Watcher Alert Banners */}
+        {/* Unpaid profit share: copying is paused */}
         {!isSubscriber && isBlockedUnpaid && isConnected && (
           <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl animate-in fade-in">
             <div className="flex items-start gap-3">
               <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
               <div>
                 <h4 className="font-bold text-sm text-rose-300">
-                  Trade Copying Suspended: 50% Profit Share Unpaid (&gt;24h)
+                  Copying paused: profit share unpaid
                 </h4>
                 <p className="text-xs text-rose-200/90 mt-0.5">
-                  Remit your 50% profit share (${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT) to immediately resume automated trade replication.
+                  Pay ${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT to resume copying.
                 </p>
               </div>
             </div>
@@ -522,7 +522,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                     ? 'This updates by itself as soon as your account is ready. You do not need to keep this page open.'
                     : pending?.kind === 'failed'
                       ? 'You can try again whenever you are ready.'
-                      : 'Connect your MT5 login and broker server to mirror institutional signals with balance-scaled lots.'
+                      : 'Connect your MT5 login and broker server to begin.'
               }
               chips={[
                 isConnected
@@ -896,8 +896,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                     <Wallet className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                      <span>50% Profit Share Remittance & Verification</span>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                      <span>Profit share</span>
                       <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-bold ${
                         hasPendingShare
                           ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
@@ -907,7 +907,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                       </span>
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Zero upfront management fee • 50/50 net profit split • TRON TRC-20 USDT settlement
+                      50% of new profit · paid in USDT (TRC20)
                     </p>
                   </div>
                 </div>
@@ -922,32 +922,29 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
               {/* Dues KPI Overview */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 font-mono">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-sans">Current 50% Share Due</span>
-                  <span className="text-2xl font-black text-amber-500 dark:text-amber-400 mt-1 block">
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-sans">Share due</span>
+                  <span className="text-xl font-bold text-amber-500 dark:text-amber-400 mt-1 block">
                     ${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT
                   </span>
                   <span className="text-[10px] text-slate-400 block mt-0.5">
-                    {hasPendingShare ? 'Remittance required' : 'No overdue remittance'}
+                    {hasPendingShare ? 'Payment needed' : 'Nothing due'}
                   </span>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 font-mono">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-sans">24h Settlement Grace</span>
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-sans">Time to pay</span>
                   <span className="text-base font-bold text-slate-800 dark:text-slate-200 mt-2 block">
-                    {hasPendingShare ? countdownText : 'Grace Window Inactive'}
+                    {hasPendingShare ? countdownText : '—'}
                   </span>
                   <span className="text-[10px] text-slate-400 block mt-0.5">
-                    Auto-disconnect after 24h
+                    Copying pauses if unpaid after 24h
                   </span>
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 font-mono">
-                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-sans">Settlement Protocol</span>
+                  <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-sans">Network</span>
                   <span className="text-base font-bold text-emerald-600 dark:text-emerald-400 mt-2 block">
-                    TRON (TRC20 USDT)
-                  </span>
-                  <span className="text-[10px] text-slate-400 block mt-0.5">
-                    Fast on-chain confirmation
+                    TRON (USDT TRC20)
                   </span>
                 </div>
               </div>
@@ -957,9 +954,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-white flex items-center gap-1.5">
                     <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                    <span>Castimo Treasury TRC-20 Receiving Address</span>
+                    <span>Payment address</span>
                   </span>
-                  <span className="text-[10px] text-slate-400 font-mono">TRON Network Only</span>
+                  <span className="text-[10px] text-slate-400 font-mono">TRON only</span>
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
@@ -973,11 +970,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                     className="px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0 shadow-sm"
                   >
                     {copyFeedback ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copyFeedback ? 'Copied!' : 'Copy Address'}</span>
+                    <span>{copyFeedback ? 'Copied' : 'Copy'}</span>
                   </button>
                 </div>
                 <p className="text-[10px] text-slate-400">
-                  ⚠️ Send only TRC20 USDT on the TRON network to this address. After broadcasting, copy the transaction hash (TXID) from your wallet and paste it below.
+                  Send TRC20 USDT only, on the TRON network. Then paste the transaction ID (TXID) from your wallet below.
                 </p>
               </div>
 
@@ -986,15 +983,12 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <h4 className="text-sm font-bold text-white">Paste Transaction Hash (TXID) to Verify Live</h4>
+                    <h4 className="text-sm font-semibold text-white">Verify your payment</h4>
                   </div>
-                  <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
-                    Live On-Chain Validator
-                  </span>
                 </div>
 
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Once you have remitted your 50% profit share in USDT, paste the 64-character transaction hash (TXID) generated by your TRON wallet. The system will verify the transaction on the network, mark your invoice as settled, and ensure uninterrupted MT5 trade copying.
+                  Paste the 64-character transaction ID (TXID) from your wallet. We check it on the network and mark your invoice paid.
                 </p>
 
                 <form onSubmit={handleVerifyHash} className="space-y-3">
@@ -1005,7 +999,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                         type="text"
                         value={txHashInput}
                         onChange={(e) => setTxHashInput(e.target.value)}
-                        placeholder="Paste 64-character TRC20 TXID (e.g. 8f4a12bc90...)"
+                        placeholder="Transaction ID (TXID)"
                         className="w-full pl-9 pr-3 py-2.5 text-xs bg-slate-950 border border-slate-700/80 rounded-xl focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 text-white placeholder-slate-500 font-mono tracking-tight"
                       />
                     </div>
@@ -1048,12 +1042,12 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                       {isVerifyingHash ? (
                         <>
                           <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>Verifying on TRON Network...</span>
+                          <span>Verifying…</span>
                         </>
                       ) : (
                         <>
                           <Zap className="w-4 h-4" />
-                          <span>Verify & Confirm Payment Live</span>
+                          <span>Verify payment</span>
                         </>
                       )}
                     </button>
@@ -1064,7 +1058,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                       className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
                     >
                       <QrCode className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Show QR Code & Wallet Modal</span>
+                      <span>Show QR code</span>
                     </button>
                   </div>
                 </form>
@@ -1074,16 +1068,16 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
               <div className="pt-2">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                    Past Profit Share Remittance & Verified Hashes
+                    Past invoices
                   </h4>
                   <span className="text-[10px] text-slate-500 font-mono">
-                    {invoices.length} Records
+                    {invoices.length}
                   </span>
                 </div>
 
                 {invoices.length === 0 ? (
                   <div className="p-6 text-center text-slate-500 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-                    No 50% profit share remittance records yet. As your MT5 terminal mirrors institutional profits, invoices will appear here.
+                    No invoices yet. One appears here when your account makes new profit.
                   </div>
                 ) : (
                   <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
@@ -1091,10 +1085,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                       <thead className="bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 text-[10px] uppercase border-b border-slate-200 dark:border-slate-800">
                         <tr>
                           <th className="py-2.5 px-3">Invoice</th>
-                          <th className="py-2.5 px-3">Gross Gain</th>
+                          <th className="py-2.5 px-3">Profit</th>
                           <th className="py-2.5 px-3">50% Share</th>
                           <th className="py-2.5 px-3">Status</th>
-                          <th className="py-2.5 px-3">Transaction Hash (TXID)</th>
+                          <th className="py-2.5 px-3">TXID</th>
                           <th className="py-2.5 px-3">Date</th>
                         </tr>
                       </thead>
@@ -1152,7 +1146,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                   </div>
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-base font-black text-slate-900 dark:text-white">
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
                         {userProfile?.displayName || 'Client Trader'}
                       </h3>
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold">
@@ -1160,7 +1154,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      {userProfile?.email} • Account Custody Active
+                      {userProfile?.email}
                     </p>
                   </div>
                 </div>
