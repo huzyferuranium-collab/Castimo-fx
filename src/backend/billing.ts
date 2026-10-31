@@ -3,8 +3,9 @@
  *
  *  - When a client's account is broker-verified, a ledger is opened with their equity as the starting
  *    high-water mark (HWM).
- *  - Every settlement period the server asks the broker for the account's equity and its deposits and
- *    withdrawals, works out 50% of NEW profit, and creates an invoice.
+ *  - Every settlement period the server takes the account's equity from the copier service and the period's deposits
+ *    and withdrawals, works out 50% of NEW profit, and creates an invoice. If the deposits and withdrawals cannot be
+ *    read, nothing is invoiced (profit would be confused with money paid in) and the sweep says so in the log.
  *  - Clients pay USDT (TRC20) to the treasury wallet; the payment is checked on the TRON blockchain.
  *  - An invoice that stays unpaid past its due time stops copying for that client until it is paid.
  *
@@ -21,7 +22,6 @@ import {
   invoiceId,
   isSettlementDue,
   round2,
-  sumAccountFlows,
 } from './profitShare';
 import { readLimit } from './brokerVerification';
 import { accrueCommissions, recordEvent } from './referralService';
@@ -95,6 +95,8 @@ export class BillingService {
   private manager = Mt5ConnectionManager.getInstance();
   private timer: NodeJS.Timeout | null = null;
   private sweeping = false;
+  /** Clients due for settlement in the current sweep whose deposits and withdrawals could not be read. */
+  private skippedForFlows = 0;
 
   static getInstance(): BillingService {
     if (!this.instance) this.instance = new BillingService();
@@ -146,6 +148,7 @@ export class BillingService {
   async sweep(): Promise<void> {
     if (this.sweeping || !billingEnabled()) return;
     this.sweeping = true;
+    this.skippedForFlows = 0;
     try {
       const cfg = billingConfig();
       for (const rec of uniqueVerifiedClients(this.manager)) {
@@ -164,6 +167,11 @@ export class BillingService {
           console.warn(`⚠️ [BILLING] Sweep failed for ${rec.userId}:`, e?.message);
         }
       }
+      if (this.skippedForFlows > 0) {
+        console.warn(
+          `⚠️ [BILLING] ${this.skippedForFlows} profit-share client(s) were due for settlement but NOT invoiced: the copier service does not give their deposits and withdrawals, so profit cannot be told apart from money paid in. See DEPLOY.md.`
+        );
+      }
     } finally {
       this.sweeping = false;
     }
@@ -171,18 +179,21 @@ export class BillingService {
 
   private async settle(rec: ClientConnectionRecord, ledger: ClientLedger): Promise<void> {
     const cfg = billingConfig();
-    const rpc: any = rec.rpcConnection;
-    if (!rpc) return;
     if (String(rec.currency).toUpperCase() !== 'USD') {
       console.warn(`⚠️ [BILLING] ${rec.userId} trades in ${rec.currency}; only USD accounts are billed automatically.`);
       return;
     }
     const now = new Date();
-    const info = await rpc.getAccountInformation();
-    const equity = Number(info?.equity);
-    if (!Number.isFinite(equity)) return;
-    const dealsRes = await rpc.getDealsByTimeRange(new Date(ledger.settledThrough), now);
-    const flows = sumAccountFlows(Array.isArray(dealsRes?.deals) ? dealsRes.deals : []);
+    // Equity is what the copier service last reported for the account (a few minutes old at most).
+    const equity = Number(rec.equity);
+    if (!Number.isFinite(equity) || equity <= 0) return;
+    // Profit is billed only when the period's deposits and withdrawals are known: otherwise a deposit would be
+    // billed as profit and a withdrawal would hide it. When they cannot be read, nothing is invoiced.
+    const flows = await this.manager.getAccountFlows(rec.userId, new Date(ledger.settledThrough), now);
+    if (flows === null) {
+      this.skippedForFlows += 1;
+      return;
+    }
 
     const r = computeSettlement({ hwm: ledger.hwm, equity, flows, feePct: cfg.feePct });
     const nowIso = now.toISOString();

@@ -22,7 +22,6 @@ import {
   Wallet,
   Activity,
   Check,
-  RotateCcw,
   Sliders,
   FileText,
   Award,
@@ -115,13 +114,6 @@ export const AdminDashboard: React.FC = () => {
     setTimeout(() => setActionSuccess(null), 3000);
   };
 
-  const handleResetToInitialState = () => {
-    tradingEngine.resetAdminToInitialState();
-    setActionSuccess('Admin oversight console & Master MT5 bridge reset to initial clean state ($0.00, Disconnected).');
-    setActionsMenuOpen(false);
-    setTimeout(() => setActionSuccess(null), 4000);
-  };
-
   const totalSupervisedEquity = supervisedAccounts.reduce((sum, a) => sum + a.equity, 0);
   const accountsDisconnected = supervisedAccounts.filter((a) => a.status === 'blocked_unpaid').length;
   const pendingShareTotal = supervisedAccounts.reduce(
@@ -168,7 +160,7 @@ export const AdminDashboard: React.FC = () => {
         },
         {
           id: 'terminals',
-          label: 'Client Terminals',
+          label: 'Duplikium Accounts',
           icon: Layers,
         },
         {
@@ -293,19 +285,6 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                     </button>
 
-                    <div className="border-t border-slate-800 my-1" />
-
-                    <button
-                      type="button"
-                      onClick={handleResetToInitialState}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition text-left cursor-pointer"
-                    >
-                      <RotateCcw className="w-4 h-4 text-slate-400 shrink-0" />
-                      <div>
-                        <span className="font-semibold block">Reset Console to Initial</span>
-                        <span className="text-[10px] text-slate-500 block">Clear to $0.00 standby mode</span>
-                      </div>
-                    </button>
                   </div>
                 </div>
               )}
@@ -521,9 +500,9 @@ export const AdminDashboard: React.FC = () => {
                                 <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 inline-block mt-0.5">
                                   ✓ Verified Real Broker
                                 </span>
-                              ) : (
-                                <span className="text-[9px] text-slate-400 block font-mono">1:{acc.leverage || 500}</span>
-                              )}
+                              ) : acc.leverage ? (
+                                <span className="text-[9px] text-slate-400 block font-mono">1:{acc.leverage}</span>
+                              ) : null}
                             </td>
                             <td className="py-2.5 px-3 font-bold text-white">
                               ${acc.equity.toFixed(2)}

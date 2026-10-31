@@ -1,7 +1,7 @@
 /**
  * Remembers each client's connected account so they never have to enter it again.
  * Stored in Firestore (`mt5_accounts/{userId}`) by the server. NO password is ever stored here:
- * the broker password lives only inside MetaApi, which keeps the account logged in.
+ * the broker password lives only at the copier service (Duplikium), which keeps the account logged in.
  */
 import { getDoc, isFirestoreAdminConfigured, setDoc } from './firestoreAdmin';
 
@@ -39,4 +39,25 @@ export async function loadSavedStatus(userId: string): Promise<'ACTIVE' | 'IDLE'
   if (!isFirestoreAdminConfigured()) return null;
   const doc = (await getDoc('mt5_accounts', userId).catch(() => null)) as any;
   return doc?.mirrorStatus === 'IDLE' ? 'IDLE' : doc?.mirrorStatus === 'ACTIVE' ? 'ACTIVE' : null;
+}
+
+/**
+ * Answers "was this very account verified for this user before?" from what the server saved when the
+ * client was put into service (`mt5_accounts/{userId}`, which holds the account's id at the copier service).
+ *  - 'yes'     the saved record names this account
+ *  - 'no'      there is no saved record, or it names a different account
+ *  - 'unknown' the lookup failed: callers treat that as "connected before" so nobody is ever judged in doubt
+ */
+export function verifiedTerminalLookup(
+  read: (userId: string) => Promise<Record<string, unknown> | null>
+): (userId: string, accountId: string) => Promise<'yes' | 'no' | 'unknown'> {
+  return async (userId, accountId) => {
+    try {
+      const doc = await read(userId);
+      if (!doc) return 'no';
+      return typeof doc.accountId === 'string' && doc.accountId === accountId ? 'yes' : 'no';
+    } catch {
+      return 'unknown';
+    }
+  };
 }

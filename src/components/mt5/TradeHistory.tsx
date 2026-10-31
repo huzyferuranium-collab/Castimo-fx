@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { tradingEngine } from '../../services/tradingEngine';
 import { CopiedTrade } from '../../types';
+import { price, hasCosts } from '../../utils/tradeFormat';
 import {
   History,
   TrendingUp,
@@ -245,9 +246,11 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
                     >
                       {isProfit ? `+$${trade.pnl.toFixed(2)}` : `-$${Math.abs(trade.pnl).toFixed(2)}`}
                     </div>
-                    <span className="text-[10px] text-slate-500 font-mono">
-                      Comm: -${trade.commission.toFixed(2)}
-                    </span>
+                    {hasCosts(trade) && (
+                      <span className="text-[10px] text-slate-500 font-mono">
+                        Comm: -${trade.commission.toFixed(2)}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -255,7 +258,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
                   <div>
                     <span className="text-[10px] text-slate-500 block">Entry → Exit:</span>
                     <span className="text-slate-200">
-                      {trade.openPrice.toFixed(trade.symbol.includes('JPY') ? 3 : trade.symbol.includes('XAU') ? 2 : 4)} → {(trade.closePrice || trade.currentPrice).toFixed(trade.symbol.includes('JPY') ? 3 : trade.symbol.includes('XAU') ? 2 : 4)}
+                      {price(trade.openPrice, trade.symbol.includes('JPY') ? 3 : trade.symbol.includes('XAU') ? 2 : 4)} → {price(trade.closePrice || trade.currentPrice, trade.symbol.includes('JPY') ? 3 : trade.symbol.includes('XAU') ? 2 : 4)}
                     </span>
                   </div>
                   <div className="text-right">
@@ -364,14 +367,14 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
                     {/* Execution Prices */}
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1 text-xs">
-                        <span className="text-slate-400">{trade.openPrice.toFixed(trade.symbol.includes('JPY') ? 3 : trade.symbol.includes('XAU') ? 2 : 5)}</span>
+                        <span className="text-slate-400">{price(trade.openPrice, trade.symbol.includes('JPY') ? 3 : trade.symbol.includes('XAU') ? 2 : 5)}</span>
                         <span className="text-slate-600">→</span>
                         <span className="font-bold text-white">
-                          {(trade.closePrice || trade.currentPrice).toFixed(trade.symbol.includes('JPY') ? 3 : trade.symbol.includes('XAU') ? 2 : 5)}
+                          {price(trade.closePrice || trade.currentPrice, trade.symbol.includes('JPY') ? 3 : trade.symbol.includes('XAU') ? 2 : 5)}
                         </span>
                       </div>
                       <div className="text-[10px] text-slate-500 mt-0.5">
-                        SL: {trade.sl} • TP: {trade.tp}
+                        SL: {price(trade.sl, 5)} • TP: {price(trade.tp, 5)}
                       </div>
                     </td>
 
@@ -384,9 +387,11 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
                       >
                         {isProfit ? `+$${trade.pnl.toFixed(2)}` : `-$${Math.abs(trade.pnl).toFixed(2)}`}
                       </div>
-                      <div className="text-[10px] text-slate-500 mt-0.5">
-                        Comm: -${trade.commission.toFixed(2)}
-                      </div>
+                      {hasCosts(trade) && (
+                        <div className="text-[10px] text-slate-500 mt-0.5">
+                          Comm: -${trade.commission.toFixed(2)}
+                        </div>
+                      )}
                     </td>
 
                     {/* Status */}

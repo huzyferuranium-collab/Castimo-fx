@@ -1,20 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  verifyBrokerAccountInfo,
+  verifyCopierAccount,
   validateSubmittedCredentials,
   isOwnedBy,
   clientAccountName,
-  translateBrokerError,
+  translateCopierError,
+  classifyState,
+  hasFigures,
   BrokerVerificationError,
   checkConnectEligibility,
 } from '../src/backend/brokerVerification.ts';
+import { DuplikiumError, type DuplikiumAccount } from '../src/backend/duplikiumClient.ts';
 
 const creds = { login: '12345678', server: 'HFMarketsGlobal-Demo' };
-const good = {
-  login: 12345678, server: 'HFMarketsGlobal-Demo', broker: 'HF Markets (SV) Ltd.', name: 'Jane Doe',
-  currency: 'USD', balance: 1000, equity: 1012.5, freeMargin: 990, leverage: 500,
-  tradeAllowed: true, investorMode: false,
+const good: DuplikiumAccount = {
+  accountId: 'A1', name: 'CastimoFX Client u1 #12345678', login: '12345678', server: 'HFMarketsGlobal-Demo', broker: 'mt5',
+  type: 'slave', enabled: true, balance: 1000, equity: 1012.5, freeMargin: 990, currency: 'USD', state: 'CONNECTED',
+  lastUpdate: '2026-10-30 10:00:00', groupId: 'T', subscriptionKey: null, openTrades: 0,
 };
 const code = (fn: () => unknown) => {
   try { fn(); } catch (e: any) { return e instanceof BrokerVerificationError ? e.code : 'OTHER:' + e?.message; }
@@ -22,42 +25,65 @@ const code = (fn: () => unknown) => {
 };
 
 test('accepts a genuine broker answer and uses the broker\'s numbers', () => {
-  const v = verifyBrokerAccountInfo(good, creds);
+  const v = verifyCopierAccount(good, creds);
   assert.equal(v.equity, 1012.5);
   assert.equal(v.balance, 1000);
-  assert.equal(v.brokerName, 'HF Markets (SV) Ltd.');
+  assert.equal(v.freeMargin, 990);
+  assert.equal(v.currency, 'USD');
   assert.equal(v.accountType, 'demo');
 });
 
+test('figures that the service does not report are not invented', () => {
+  const v = verifyCopierAccount(good, creds);
+  assert.equal(v.leverage, 0); // not reported, so none is shown
+  assert.equal(v.accountHolderName, '');
+});
+
 test('real server is labelled real', () => {
-  assert.equal(verifyBrokerAccountInfo({ ...good, server: 'HFMarketsGlobal-Live20' }, creds).accountType, 'real');
+  assert.equal(verifyCopierAccount({ ...good, server: 'HFMarketsGlobal-Live20' }, creds).accountType, 'real');
 });
 
 test('rejects missing / empty answers', () => {
-  assert.equal(code(() => verifyBrokerAccountInfo(null, creds)), 'BAD_BROKER_RESPONSE');
-  assert.equal(code(() => verifyBrokerAccountInfo(undefined, creds)), 'BAD_BROKER_RESPONSE');
-  assert.equal(code(() => verifyBrokerAccountInfo({} as any, creds)), 'BAD_BROKER_RESPONSE');
+  assert.equal(code(() => verifyCopierAccount(null, creds)), 'BAD_BROKER_RESPONSE');
+  assert.equal(code(() => verifyCopierAccount(undefined, creds)), 'BAD_BROKER_RESPONSE');
 });
 
-test('rejects an answer that does not name a broker', () => {
-  assert.equal(code(() => verifyBrokerAccountInfo({ ...good, broker: '' }, creds)), 'BAD_BROKER_RESPONSE');
-  assert.equal(code(() => verifyBrokerAccountInfo({ ...good, broker: undefined }, creds)), 'BAD_BROKER_RESPONSE');
+test('rejects missing, negative or infinite money figures and a missing currency', () => {
+  assert.equal(code(() => verifyCopierAccount({ ...good, equity: null }, creds)), 'BAD_BROKER_RESPONSE');
+  assert.equal(code(() => verifyCopierAccount({ ...good, balance: null }, creds)), 'BAD_BROKER_RESPONSE');
+  assert.equal(code(() => verifyCopierAccount({ ...good, balance: -5 }, creds)), 'BAD_BROKER_RESPONSE');
+  assert.equal(code(() => verifyCopierAccount({ ...good, equity: Infinity }, creds)), 'BAD_BROKER_RESPONSE');
+  assert.equal(code(() => verifyCopierAccount({ ...good, currency: '' }, creds)), 'BAD_BROKER_RESPONSE');
 });
 
-test('rejects non-numeric, negative or infinite money figures', () => {
-  assert.equal(code(() => verifyBrokerAccountInfo({ ...good, equity: '1000' }, creds)), 'BAD_BROKER_RESPONSE');
-  assert.equal(code(() => verifyBrokerAccountInfo({ ...good, balance: -5 }, creds)), 'BAD_BROKER_RESPONSE');
-  assert.equal(code(() => verifyBrokerAccountInfo({ ...good, equity: Infinity }, creds)), 'BAD_BROKER_RESPONSE');
-  assert.equal(code(() => verifyBrokerAccountInfo({ ...good, balance: NaN }, creds)), 'BAD_BROKER_RESPONSE');
+test('free margin falls back to equity only when the service did not report it', () => {
+  assert.equal(verifyCopierAccount({ ...good, freeMargin: null }, creds).freeMargin, 1012.5);
 });
 
 test('rejects a login that differs from the one submitted', () => {
-  assert.equal(code(() => verifyBrokerAccountInfo({ ...good, login: 99999999 }, creds)), 'LOGIN_MISMATCH');
+  assert.equal(code(() => verifyCopierAccount({ ...good, login: '99999999' }, creds)), 'LOGIN_MISMATCH');
 });
 
-test('rejects read-only (investor) and trading-disabled logins', () => {
-  assert.equal(code(() => verifyBrokerAccountInfo({ ...good, investorMode: true }, creds)), 'TRADING_NOT_ALLOWED');
-  assert.equal(code(() => verifyBrokerAccountInfo({ ...good, tradeAllowed: false }, creds)), 'TRADING_NOT_ALLOWED');
+test('rejects read-only (investor) logins', () => {
+  assert.equal(code(() => verifyCopierAccount({ ...good, state: 'INVESTOR_PASSWORD' }, creds)), 'TRADING_NOT_ALLOWED');
+});
+
+test('the service\'s state words are read correctly', () => {
+  for (const s of ['CONNECTED', 'ORDER_FAILED', 'ORDER_FAILED_MARGIN', 'SYMBOL_NOT_FOUND', 'SELLOUT_SL', 'CLOSE_ONLY_TP', 'FROZEN_SL', 'connected']) {
+    assert.equal(classifyState(s), 'connected', s);
+  }
+  assert.equal(classifyState('INVESTOR_PASSWORD'), 'investor');
+  assert.equal(classifyState('DISCONNECTED'), 'disconnected');
+  assert.equal(classifyState('EMPTY_EWALLET'), 'service');
+  for (const s of ['NONE', '', 'SOMETHING_NEW']) assert.equal(classifyState(s), 'pending', s);
+});
+
+test('figures count as real only when balance, equity and currency are all there', () => {
+  assert.equal(hasFigures(good), true);
+  assert.equal(hasFigures({ balance: null, equity: 1, currency: 'USD' }), false);
+  assert.equal(hasFigures({ balance: 1, equity: null, currency: 'USD' }), false);
+  assert.equal(hasFigures({ balance: 1, equity: 1, currency: '' }), false);
+  assert.equal(hasFigures(null), false);
 });
 
 test('input validation', () => {
@@ -72,7 +98,34 @@ test('input validation', () => {
   );
 });
 
-test('only the owner may reuse an existing MetaApi account', () => {
+test('copier service errors become calm, correct client messages and never leak raw text', () => {
+  const t = (kind: any, message: string, c?: string) => translateCopierError(new DuplikiumError(kind, message, { code: c }), creds);
+  // Our own login being refused is never blamed on the client
+  assert.equal(t('AUTH', 'bad token').code, 'VERIFICATION_UNAVAILABLE');
+  assert.equal(t('NOT_CONFIGURED', 'x').code, 'VERIFICATION_UNAVAILABLE');
+  assert.equal(t('RATE_LIMIT', 'busy').code, 'BROKER_SLOW');
+  assert.equal(t('NETWORK', 'down').code, 'BROKER_UNREACHABLE');
+  assert.equal(t('BAD_RESPONSE', 'junk').code, 'BAD_BROKER_RESPONSE');
+  // The service's own limits are ours to fix
+  assert.equal(t('API', 'Account limit reached for your subscription').code, 'CAPACITY');
+  assert.equal(t('API', 'Not enough credit in e-wallet').code, 'CAPACITY');
+  assert.equal(t('API', 'Account already exists').code, 'ALREADY_LINKED');
+  assert.equal(t('API', 'Unknown server').code, 'BROKER_SERVER_NOT_FOUND');
+  assert.equal(t('API', 'Invalid password').code, 'BROKER_AUTH_FAILED');
+  const other = t('API', 'ECONNRESET 10.0.0.5:443 secret-stack', '77');
+  assert.equal(other.code, 'BROKER_UNREACHABLE');
+  assert.ok(!other.message.includes('10.0.0.5'));
+  assert.equal(other.ref, '77');
+  // Unknown errors are calm and carry a short reference only
+  const odd = translateCopierError(new TypeError('boom secret'), creds);
+  assert.equal(odd.code, 'BROKER_UNREACHABLE');
+  assert.ok(!odd.message.includes('secret'));
+  // An error that is already a client-safe error passes through unchanged
+  const mine = new BrokerVerificationError('MIN_EQUITY', 'x');
+  assert.equal(translateCopierError(mine, creds), mine);
+});
+
+test('only the owner may reuse an existing copier account', () => {
   const name = clientAccountName('uidA', '12345678');
   assert.equal(isOwnedBy(name, 'uidA'), true);
   assert.equal(isOwnedBy(name, 'uidB'), false);
@@ -86,28 +139,12 @@ test('only the owner may reuse an existing MetaApi account', () => {
   assert.equal(isOwnedBy('CastimoFX Client - uidA (#12345678)', 'uidB'), false);
 });
 
-test('broker error translation never leaks raw errors', () => {
-  assert.equal(translateBrokerError({ details: { code: 'E_AUTH' }, message: 'x' }, creds).code, 'BROKER_AUTH_FAILED');
-  assert.equal(translateBrokerError({ message: 'account connection validation failed' }, creds).code, 'BROKER_AUTH_FAILED');
-  assert.equal(translateBrokerError({ details: { code: 'E_SRV_NOT_FOUND' }, message: 'x' }, creds).code, 'BROKER_SERVER_NOT_FOUND');
-  assert.equal(translateBrokerError({ message: 'Please top up your account' }, creds).code, 'CAPACITY');
-  const other = translateBrokerError({ message: 'ECONNRESET 10.0.0.5:443 secret-stack' }, creds);
-  assert.equal(other.code, 'BROKER_UNREACHABLE');
-  assert.ok(!other.message.includes('10.0.0.5'));
-});
-
-import { normalizeBrokerServer, pickServerAlias } from '../src/backend/brokerVerification.ts';
+import { normalizeBrokerServer } from '../src/backend/brokerVerification.ts';
 
 test('normalizeBrokerServer fixes common spellings and leaves others alone', () => {
   assert.equal(normalizeBrokerServer('Exness-Real9'), 'Exness-MT5Real9');
   assert.equal(normalizeBrokerServer('HFMarkets-Live20'), 'HFMarketsGlobal-Live20');
   assert.equal(normalizeBrokerServer('  Some-Broker-Live  '), 'Some-Broker-Live');
-});
-
-test('pickServerAlias only returns names from the supplied list', () => {
-  assert.equal(pickServerAlias('exness-real9', ['Exness-MT5Real9', 'Exness-MT5Real10']), 'Exness-MT5Real9');
-  assert.equal(pickServerAlias('Fake-Server', ['Exness-MT5Real9']), null);
-  assert.equal(pickServerAlias('Exness-MT5Real9', ['Exness-MT5Real9']), null);
 });
 
 import { countClientAccounts, readLimit } from '../src/backend/brokerVerification.ts';

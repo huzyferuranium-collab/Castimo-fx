@@ -1,64 +1,75 @@
 # Hosting the verifying server (Render, step by step)
 
-Cloudflare only serves web pages. The broker check runs in `server.ts`, which needs a Node host.
+Cloudflare only serves web pages. The broker check and the copier control run in `server.ts`, which needs a Node host.
 This repo has a Dockerfile, so any Docker host works (Render, Railway, Google Cloud Run).
+
+CASTIMOFx uses **Duplikium** (trade-copier.com) to copy trades. Duplikium logs in to each client's MT5 account and copies the master
+account's trades onto it. This server connects clients to Duplikium, switches copying on or off to match each client's plan and payments,
+and reads balances and trades back for the dashboards.
+
+## One-time setup at Duplikium
+1. Add your master HFM account (261089492, server HFMarketsGlobal-Live20) in the Duplikium dashboard as a **master**.
+2. Create one **default slave template** there with the copy size you want every client to get. The server reads the template's copy size and gives the same to
+   each new client (or use `DUPLIKIUM_RISK_TYPE` / `DUPLIKIUM_RISK_VALUE` below to set it from Render instead).
+3. Note the master's account id and the template's id as Duplikium shows them. If you cannot find them, ask Duplikium support.
+4. Ask Duplikium support, in writing: how many client accounts one cockpit may hold, whether there is an account limit or per-account price,
+   and how they store and protect the MT5 passwords clients give.
 
 ## Render
 1. render.com -> New -> Web Service -> connect `huzyferuranium-collab/Castimo-fx`, branch `main`.
-2. Runtime: Docker. Instance type: the smallest paid one (free sleeps and drops broker connections).
+2. Runtime: Docker. Instance type: the smallest paid one (free sleeps and drops connections).
 3. Environment variables:
-   - `METAAPI_TOKEN`  = your MetaApi token (app.metaapi.cloud)
-   - `MASTER_ACCOUNT_ID` = MetaApi account id of YOUR master HFM account
+   - `DUPLIKIUM_API_USER`   = the login of your Duplikium cockpit (the API user)
+   - `DUPLIKIUM_API_TOKEN`  = the API password for that user (a secret: only ever type it into Render, never into chat or GitHub)
+   - `DUPLIKIUM_MASTER_ID`  = the Duplikium id of your master account
+   - `DUPLIKIUM_TEMPLATE_ID` = the Duplikium id of the default slave template
    - `PORT` is set by Render automatically.
 4. Deploy, then open `https://<your-service>.onrender.com/api/health`. It should say `UP`.
-5. Firebase console -> Authentication -> Settings -> Authorized domains -> add the onrender.com domain.
-6. Publish `firestore.rules` from this repo in the Firebase console.
+5. Sign in as the administrator -> Admin console -> **Duplikium Accounts** -> **Duplikium connection check**. It signs in to Duplikium, finds the master
+   and the template, and asks for the master's open trades. Every step says what it found. Do this before inviting any client.
+6. Firebase console -> Authentication -> Settings -> Authorized domains -> add the onrender.com domain.
+7. Publish `firestore.rules` from this repo in the Firebase console.
+
+If a setting is missing the server does not guess: connecting clients is refused with a plain message and nothing is copied.
 
 ## Test
-Sign in with a real account, connect one HFM **demo** MT5 login. A wrong password or fake number
-must be rejected. A right one shows the balance the broker reports.
-Your HFM account must be a hedging account; netting accounts are not supported by MetaApi.
+Sign in with a real client account and connect one HFM **demo** MT5 login. A wrong password or a fake number must be rejected. A right one shows the
+balance the broker reports (Duplikium refreshes balances after each trade and about every five minutes, so a figure can be a few minutes old).
+Accounts must be USD with at least `MIN_CONNECT_EQUITY` (default $200). Read-only (investor) passwords are refused.
 
-## Cost limits (MetaApi charges per account)
-Set these on Render next to `METAAPI_TOKEN`:
-- `MAX_CLIENT_ACCOUNTS` = most client accounts allowed in total (default 5, `0` = no limit). Set it to what your MetaApi plan includes.
+## What the server does with a client
+- **Connect:** the client gives login, server and trading password. The password goes to Duplikium to log in; the server keeps only Duplikium's
+  account id, the login and the server (Firestore `mt5_accounts/{userId}`), never the password. The new account starts with copying **frozen**; it is switched
+  on only after the broker login is confirmed, balances are read and the account passes the checks.
+- **Pause / resume:** a client who pauses, or whose plan is unpaid or expired, is set to **close only**: no new trades are copied, and trades already
+  open are still closed when the master closes them. Switching copying on again sets it back to on. After a restart the server checks every account against what it should be.
+- **Disconnect:** the account is removed from Duplikium. Trades that are already open stay open in the client's own MT5 account; nothing is closed for them.
+- **Dashboards:** balance, equity and free margin come from Duplikium. Open and closed trades are read from Duplikium; a price, stop or target Duplikium did not
+  report is shown as a dash, never made up. Leverage and the account holder's name are not reported by Duplikium and are not shown.
+- **Castimo AI panel:** shows the master account's real open trades, or says plainly that they are unavailable.
+
+## Limits (Duplikium may charge per account)
+Set these on Render next to the Duplikium settings:
+- `MAX_CLIENT_ACCOUNTS` = most client accounts allowed in total (default `0` = no limit). Set it to what your Duplikium plan includes.
 - `MAX_ACCOUNTS_PER_USER` = accounts per client (default 1).
-Clients who disconnect are removed from MetaApi, which stops their charge. Admins can see usage at `/api/trade/capacity`.
+Admins can see usage at `/api/trade/capacity` and in Admin console -> **Duplikium Accounts**, where a leftover or stuck account can be removed.
+A client who is in service (or has billing history) needs a second confirmation before their account can be removed there.
 
-## How client terminals are looked after (terminal supervisor)
-Connecting a client's MT5 account no longer depends on the browser staying open. As soon as a client's terminal exists in
-MetaApi the server remembers it (Firestore `client_connections/{userId}`, no passwords) and a background supervisor moves it forward:
-- starts a terminal that MetaApi left undeployed, and restarts one that stays "deployed but disconnected" (what pressing Redeploy in MetaApi does);
-- reads the account from the broker when the terminal connects, applies the usual rules and puts the client into service;
-- if a brand-new terminal never connects within 15 minutes it is removed and the client is told kindly (and can simply press Connect again);
-- a client who was verified before (or has billing history) is never given up on or cleaned up automatically: their terminal is restarted patiently, and no minimum-equity check is repeated;
-- after every deploy or restart, unfinished connections and existing client terminals are picked up again by themselves;
-- a connected client whose link stays down for a while gets their terminal restarted gently.
+Optional settings (defaults in brackets):
+- `DUPLIKIUM_REFRESH_SECONDS` [60] how often the server reads accounts from Duplikium.
+- `DUPLIKIUM_RISK_TYPE` / `DUPLIKIUM_RISK_VALUE` copy size given to every new client; if unset the template's own is used.
+- `MIN_CONNECT_EQUITY` [200], `CONNECT_SYNC_WAIT_SECONDS` [120], `CONNECT_PROBE_MS` [4000], `CONNECT_DISCONNECT_GRACE_MS` [45000],
+  `CONNECT_BACKGROUND_MINUTES` [20], `CONNECT_MAX_PARALLEL` [3]. A slow broker is not a failure: when the browser's wait is over the connection keeps going in the
+  background and the dashboard updates by itself.
+- `MASTER_LOGIN` / `MASTER_SERVER` an extra guard so the master account can never be added as a client.
 
-The client sees a calm "your terminal is connecting" notice on the dashboard instead of an error, and it turns into the normal connected view by itself.
-Admin console -> **Client Terminals** lists every client terminal as MetaApi sees it (state, broker link, restarts, time left) with Restart / Remove buttons
-and "Clean up leftovers" (the master is never listed; clients in service cannot be removed there; a terminal of a client verified before needs a second confirmation).
-**Connection Log** shows how long each connecting step took, so a slow broker or region is easy to spot.
-Optional settings are in `.env.example` (`CONNECT_MAX_PARALLEL`, `SUPERVISOR_MAX_PARALLEL`, the three `CONNECT_*_WAIT_SECONDS`).
+## Moving from MetaApi
+MetaApi is gone from the code. `METAAPI_TOKEN`, `MASTER_ACCOUNT_ID` and the other MetaApi settings are no longer read; remove them from Render.
+Clients connected before the change must connect again (their old MetaApi account ids mean nothing to Duplikium). Existing profit-share records,
+plans and invoices are untouched.
 
-## Copy trades and restarts (copy memory)
-Every trade copied to a client is labelled `CastimoCopy #<master trade id>` at the client's broker. The server used to keep
-"which client trade belongs to which master trade" only in memory, so a restart (every deploy) made it forget, and a copy opened before
-the restart was not closed when the master closed its trade. Now the link is rebuilt from the brokers themselves:
-- on start-up the master's already-open trades are remembered but **never copied again** (no double trades after a restart);
-- every 30 seconds, and right after a client is connected or restored, each client's open positions are compared with the master's: copies
-  are found again and follow the master trade (stop-loss/take-profit changes and the final close);
-- a copy whose master trade is gone, or a second copy of the same master trade, is closed, but only after it looked wrong on two checks
-  at least 20 seconds apart, and never while the master's trades cannot be read;
-- only positions labelled exactly `CastimoCopy #<digits>` are ever touched; a client's own trades are left alone;
-- if the master link is rebuilt, the live listener is attached to the new connection (it used to stay on the old one);
-- `/api/trade/metrics` (admins only) shows the real counts under `copyMemory`.
-
-Log lines to look for: `[COPY_MEMORY] Start-up look done`, `Found client … copy #… of master trade #…`, `Closing a leftover copy`.
-Two copies of the server run side by side for about two minutes during every Render deploy. If the master opens a trade in that window both can copy
-it; the double is closed within about a minute by the check above, but it is still best to deploy while the master has no new trade about to open.
-
-- **Audit-log addresses** are the address the server saw for that person's own session.
+## Audit log
+Audit-log addresses are the address the server saw for that person's own session.
 
 ## Email confirmation codes (optional)
 Besides the verification link, people can get a 6-digit code by email (random, valid 10 minutes, 5 tries, only a salted hash is stored).

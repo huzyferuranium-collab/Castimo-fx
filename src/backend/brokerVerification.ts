@@ -4,7 +4,12 @@
  * The one rule of this platform: an account is only "connected" if the BROKER itself
  * answered for it. Nothing the browser sends (balance, equity, names, flags) is ever
  * trusted. These helpers decide what counts as a real, usable broker account.
+ *
+ * The broker's answer reaches us through Duplikium (trade-copier.com), which logs in to the client's MT5
+ * account and reports the account's real balance, equity, free margin and connection state.
  */
+
+import { DuplikiumError, type DuplikiumAccount } from './duplikiumClient.ts';
 
 export type BrokerErrorCode =
   | 'BAD_INPUT'
@@ -31,7 +36,7 @@ export class BrokerVerificationError extends Error {
   stage?: string;
   /** Technical detail for the administrator only (never shown to clients). */
   detail?: string;
-  /** Set when the client's terminal exists and was kept (the failure was not final), so it can be finished in the background. */
+  /** Set when the client's copier account exists and was kept (the failure was not final), so it can be finished in the background. */
   accountId?: string;
   constructor(code: BrokerErrorCode, message: string) {
     super(message);
@@ -40,25 +45,11 @@ export class BrokerVerificationError extends Error {
   }
 }
 
-/** Account information as reported by the broker terminal (via MetaApi). */
-export interface BrokerAccountInfo {
-  login?: string | number;
-  server?: string;
-  broker?: string;
-  name?: string;
-  currency?: string;
-  balance?: unknown;
-  equity?: unknown;
-  freeMargin?: unknown;
-  leverage?: unknown;
-  tradeAllowed?: boolean;
-  investorMode?: boolean;
-}
-
 export interface VerifiedBrokerAccount {
   balance: number;
   equity: number;
   freeMargin: number;
+  /** 0 means the service does not report leverage, so none is shown. */
   leverage: number;
   currency: string;
   brokerName: string;
@@ -130,67 +121,94 @@ export function checkConnectEligibility(
   }
 }
 
+// ---------- reading the broker's answer ----------
+
+/**
+ * What Duplikium's last known state means for us.
+ *  - connected:    the account is logged in (a failed order or a protection stop is about trading, not the login)
+ *  - investor:     only the read-only (investor) password was given, so trades cannot be copied
+ *  - disconnected: Duplikium could not log in (wrong number, password or server, or the broker is unreachable)
+ *  - service:      Duplikium's own balance for copying is empty: our problem, never the client's
+ *  - pending:      no answer yet
+ */
+export type LinkKind = 'connected' | 'investor' | 'disconnected' | 'service' | 'pending';
+
+export function classifyState(state: string): LinkKind {
+  const s = String(state || '').trim().toUpperCase();
+  if (s === 'INVESTOR_PASSWORD') return 'investor';
+  if (s === 'DISCONNECTED') return 'disconnected';
+  if (s === 'EMPTY_EWALLET') return 'service';
+  if (
+    s === 'CONNECTED' ||
+    s === 'ORDER_FAILED' ||
+    s === 'ORDER_FAILED_MARGIN' ||
+    s === 'SYMBOL_NOT_FOUND' ||
+    s.startsWith('SELLOUT_') ||
+    s.startsWith('CLOSE_ONLY_') ||
+    s.startsWith('FROZEN_')
+  ) {
+    return 'connected';
+  }
+  return 'pending';
+}
+
+/** True once Duplikium has reported the real figures we need (balance, equity and currency). */
+export function hasFigures(a: Pick<DuplikiumAccount, 'balance' | 'equity' | 'currency'> | null | undefined): boolean {
+  return Boolean(a) && isFiniteNumber(a!.balance) && isFiniteNumber(a!.equity) && String(a!.currency || '') !== '';
+}
+
 /**
  * Decides whether the broker's answer describes a real, tradable account.
  * Throws a BrokerVerificationError for anything else.
  */
-export function verifyBrokerAccountInfo(
-  info: BrokerAccountInfo | null | undefined,
+export function verifyCopierAccount(
+  acc: DuplikiumAccount | null | undefined,
   submitted: SubmittedCredentials
 ): VerifiedBrokerAccount {
-  if (!info || typeof info !== 'object') {
+  if (!acc || typeof acc !== 'object') {
     throw new BrokerVerificationError('BAD_BROKER_RESPONSE', 'The broker returned no account information.');
   }
-
-  // The broker's own answer must name the broker and carry real money figures.
-  const brokerName = typeof info.broker === 'string' ? info.broker.trim() : '';
-  if (!brokerName) {
-    throw new BrokerVerificationError('BAD_BROKER_RESPONSE', 'The broker did not identify itself.');
-  }
-  if (!isFiniteNumber(info.balance) || !isFiniteNumber(info.equity) || info.balance < 0 || info.equity < 0) {
-    throw new BrokerVerificationError('BAD_BROKER_RESPONSE', 'The broker returned invalid balance figures.');
-  }
-
-  // If the broker reports a login, it must be the one that was submitted.
-  if (info.login !== undefined && info.login !== null && !sameLogin(info.login, submitted.login)) {
-    throw new BrokerVerificationError('LOGIN_MISMATCH', 'The broker reported a different account number from the one you entered. Please check it and try again.');
-  }
-
-  // Copying needs permission to place orders. A read-only (investor) login cannot be copied onto.
-  if (info.tradeAllowed === false || info.investorMode === true) {
+  if (classifyState(acc.state) === 'investor') {
     throw new BrokerVerificationError(
       'TRADING_NOT_ALLOWED',
       'This login can only view the account (investor password) or has trading switched off. Please use your trading password so trades can be copied.'
     );
   }
-
-  const server = String(info.server || submitted.server || '');
-  const equity = info.equity;
+  if (!hasFigures(acc) || acc.balance! < 0 || acc.equity! < 0) {
+    throw new BrokerVerificationError('BAD_BROKER_RESPONSE', 'The broker returned invalid balance figures.');
+  }
+  // If the service reports a login, it must be the one that was submitted.
+  if (acc.login && !sameLogin(acc.login, submitted.login)) {
+    throw new BrokerVerificationError('LOGIN_MISMATCH', 'The broker reported a different account number from the one you entered. Please check it and try again.');
+  }
+  const server = String(acc.server || submitted.server || '');
+  const equity = acc.equity as number;
   return {
-    balance: info.balance,
+    balance: acc.balance as number,
     equity,
-    freeMargin: isFiniteNumber(info.freeMargin) ? info.freeMargin : equity,
-    leverage: isFiniteNumber(info.leverage) && info.leverage > 0 ? info.leverage : 100,
-    currency: typeof info.currency === 'string' && info.currency ? info.currency : 'USD',
-    brokerName,
-    accountHolderName: typeof info.name === 'string' ? info.name.trim() : '',
+    freeMargin: isFiniteNumber(acc.freeMargin) ? acc.freeMargin : equity,
+    leverage: 0,
+    currency: acc.currency,
+    // The service does not report the broker's company name, so the server name (which the client typed
+    // and the broker accepted) is shown instead.
+    brokerName: server,
+    accountHolderName: '',
     tradeAllowed: true,
     investorMode: false,
-    accountType: /demo/i.test(server) ? 'demo' : 'real',
+    accountType: /demo|trial/i.test(server) ? 'demo' : 'real',
   };
 }
 
-// ---------- ownership of broker accounts inside MetaApi ----------
+// ---------- ownership of broker accounts inside Duplikium ----------
 
-/** Every account we create in MetaApi is named after the user who linked it. */
+/** Every account we create in Duplikium is named after the user who linked it. */
 export function clientAccountName(userId: string, login: string): string {
   return `CastimoFX Client ${userId} #${login}`;
 }
 
 /**
- * True only if a MetaApi account was created for this exact user. Accounts that belong to
+ * True only if a Duplikium account was created for this exact user. Accounts that belong to
  * another user, the master account, or that were created by hand are NOT owned.
- * (The older name format is still recognised so earlier test links keep working.)
  */
 export function isOwnedBy(accountName: unknown, userId: string): boolean {
   if (typeof accountName !== 'string' || !userId) return false;
@@ -200,78 +218,67 @@ export function isOwnedBy(accountName: unknown, userId: string): boolean {
   );
 }
 
-/** Maps raw MetaApi errors to errors that are safe and useful to show a client. */
-export function translateBrokerError(
-  err: any,
-  creds: SubmittedCredentials
-): BrokerVerificationError {
-  const msg: string = String(err?.message || '');
-  const code: string = String(err?.details?.code || err?.code || '');
+/** Maps errors from the copier service to errors that are safe and useful to show a client. */
+export function translateCopierError(err: any, creds: SubmittedCredentials): BrokerVerificationError {
+  if (err instanceof BrokerVerificationError) return err;
 
-  // Our own MetaApi token being refused is OUR problem, never the client's password.
-  const status = Number(err?.status ?? err?.statusCode ?? 0);
-  if (
-    status === 401 ||
-    String(err?.name || '') === 'UnauthorizedError' ||
-    (/\btoken\b/i.test(msg) && /(invalid|expired|unauthori[sz]ed|not valid)/i.test(msg))
-  ) {
-    return new BrokerVerificationError(
-      'VERIFICATION_UNAVAILABLE',
-      'Account verification is temporarily unavailable. Please try again in a few minutes.'
-    );
+  if (err instanceof DuplikiumError) {
+    // Our own login to the service being refused or missing is OUR problem, never the client's password.
+    if (err.kind === 'AUTH' || err.kind === 'NOT_CONFIGURED') {
+      const e = new BrokerVerificationError(
+        'VERIFICATION_UNAVAILABLE',
+        'Account verification is temporarily unavailable. Please try again in a few minutes.'
+      );
+      e.ref = err.kind === 'AUTH' ? 'COPIER_AUTH' : 'COPIER_NOT_CONFIGURED';
+      return e;
+    }
+    if (err.kind === 'RATE_LIMIT') {
+      const busy = new BrokerVerificationError('BROKER_SLOW', 'Our verification service is busy. Please try again in a minute.');
+      busy.ref = 'RATE_LIMITED';
+      return busy;
+    }
+    if (err.kind === 'NETWORK') {
+      const e = new BrokerVerificationError('BROKER_UNREACHABLE', 'We could not reach the verification service just yet. Please try again in a minute.');
+      e.ref = 'COPIER_NETWORK';
+      return e;
+    }
+    if (err.kind === 'BAD_RESPONSE') {
+      const e = new BrokerVerificationError('BAD_BROKER_RESPONSE', 'The verification service sent an answer we could not read. Please try again in a minute.');
+      e.ref = 'COPIER_BAD_RESPONSE';
+      return e;
+    }
+
+    const msg = err.message;
+    let out: BrokerVerificationError;
+    if (/already|duplicate/i.test(msg)) {
+      out = new BrokerVerificationError('ALREADY_LINKED', 'This broker account is already linked.');
+    } else if (/limit|quota|maximum|subscription|plan|credit|wallet|upgrade|payment/i.test(msg)) {
+      // The copier service's own limits or balance: ours to fix, not the client's.
+      out = new BrokerVerificationError(
+        'CAPACITY',
+        'We cannot add new accounts at this moment. Please try again a little later, or contact support and we will help.'
+      );
+    } else if (/server/i.test(msg) && !/password/i.test(msg)) {
+      out = new BrokerVerificationError(
+        'BROKER_SERVER_NOT_FOUND',
+        `Broker server '${creds.server}' was not recognised. Check that it matches your broker's official MT5 server name.`
+      );
+    } else if (/password|credential|login|invalid|authent|denied|refused|wrong/i.test(msg)) {
+      out = new BrokerVerificationError(
+        'BROKER_AUTH_FAILED',
+        `Your broker did not accept the login for account #${creds.login} on '${creds.server}'. Please double-check the account number, trading password and server, then try again.`
+      );
+    } else {
+      out = new BrokerVerificationError('BROKER_UNREACHABLE', 'We could not reach your broker just yet. Please try again in a minute.');
+    }
+    out.ref = (err.code || 'API').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40) || 'API';
+    out.detail = msg.slice(0, 200);
+    return out;
   }
 
-  // Too many requests: a busy moment, not a wrong password and not a full quota.
-  if (status === 429 || /too ?many ?requests/i.test(msg)) {
-    const busy = new BrokerVerificationError('BROKER_SLOW', 'Our verification service is busy. Please try again in a minute.');
-    busy.ref = 'RATE_LIMITED';
-    return busy;
-  }
-
-  // MetaApi is still detecting the broker's server settings (time zone, DST). It says "retry later": a busy
-  // moment on the first connection to a new server, never a wrong password and never the client's doing.
-  if (code === 'E_SERVER_TIMEZONE' || /server time ?zone|broker settings detection|detect(ing)? (the )?broker('s)? settings/i.test(msg)) {
-    const detecting = new BrokerVerificationError(
-      'BROKER_SLOW',
-      "Your broker's settings are still being set up on our side. This can take a few minutes the first time for a server. Nothing is lost, so please try again in a minute or two."
-    );
-    detecting.ref = 'BROKER_SETTINGS_DETECTION';
-    return detecting;
-  }
-
-  if (msg.includes('.dat file for server') || code === 'E_SRV_NOT_FOUND') {
-    const suggestions: string[] = err?.details?.serversByBrokers
-      ? (Object.values(err.details.serversByBrokers).flat() as string[]).slice(0, 5)
-      : [];
-    return new BrokerVerificationError(
-      'BROKER_SERVER_NOT_FOUND',
-      `Broker server '${creds.server}' was not recognised.` +
-        (suggestions.length ? ` Servers that exist: ${suggestions.join(', ')}.` : '') +
-        ' Check that it matches your broker\'s official MT5 server name.'
-    );
-  }
-  if (
-    code === 'E_AUTH' ||
-    code === 'INVALID_CREDENTIALS' ||
-    /INVALID_CREDENTIALS|authori[sz]ation|authentication|account connection validation failed/i.test(msg)
-  ) {
-    return new BrokerVerificationError(
-      'BROKER_AUTH_FAILED',
-      `Your broker did not accept the login for account #${creds.login} on '${creds.server}'. Please double-check the account number, trading password and server, then try again.`
-    );
-  }
-  if (/top[- ]?up|not enough funds|insufficient|quota|limit/i.test(msg) || code === 'E_QUOTA_EXCEEDED') {
-    return new BrokerVerificationError(
-      'CAPACITY',
-      'We cannot add new accounts at this moment. Please try again a little later, or contact support and we will help.'
-    );
-  }
   // Anything else: keep the wording calm and attach a short reference that matches the server log.
-  const e = new BrokerVerificationError(
-    'BROKER_UNREACHABLE',
-    'We could not reach your broker just yet. Please try again in a minute.'
-  );
-  e.ref = (code || String(err?.name || '') || 'UNKNOWN').replace(/[^A-Za-z0-9_]/g, '').slice(0, 40);
+  const e = new BrokerVerificationError('BROKER_UNREACHABLE', 'We could not reach your broker just yet. Please try again in a minute.');
+  e.ref = (String(err?.name || 'UNKNOWN')).replace(/[^A-Za-z0-9_]/g, '').slice(0, 40) || 'UNKNOWN';
   return e;
 }
 
@@ -289,30 +296,13 @@ export function normalizeBrokerServer(raw: string): string {
   return server;
 }
 
-const strip = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-
-/**
- * If MetaApi says a server name is unknown but lists real servers, pick the one that is the same
- * name written differently (case, dashes, "MT5" inserted). Only names from MetaApi's own list are
- * ever returned, so this can never point an account at an invented server.
- */
-export function pickServerAlias(requested: string, suggestions: string[]): string | null {
-  const target = strip(requested);
-  if (!target) return null;
-  const hit = suggestions.find((s) => {
-    const t = strip(s);
-    return t === target || t === target.replace('real', 'mt5real') || t === target.replace('trial', 'mt5trial');
-  });
-  return hit && hit !== requested ? hit : null;
-}
-
-// ---------- account capacity (MetaApi charges per account) ----------
+// ---------- account capacity ----------
 
 export function isPlatformClientAccount(accountName: unknown): boolean {
   return typeof accountName === 'string' && accountName.startsWith('CastimoFX Client');
 }
 
-/** How many of the given MetaApi accounts were created for clients (not the master). */
+/** How many of the given copier accounts were created for clients (not the master). */
 export function countClientAccounts(accounts: Array<{ name?: unknown }>): number {
   return accounts.filter((a) => isPlatformClientAccount(a?.name)).length;
 }
@@ -322,7 +312,7 @@ export function readLimit(raw: string | undefined, fallback: number): number {
   return Number.isInteger(n) && n >= 0 ? n : fallback;
 }
 
-/** Reads the user id and MT5 login back out of the name we gave a client's MetaApi account. */
+/** Reads the user id and MT5 login back out of the name we gave a client's copier account. */
 export function parseClientAccountName(name: unknown): { userId: string; login: string } | null {
   if (typeof name !== 'string') return null;
   const m = name.match(/^CastimoFX Client (\S+) #(\d+)$/) || name.match(/^CastimoFX Client - (\S+) \(#(\d+)\)$/);

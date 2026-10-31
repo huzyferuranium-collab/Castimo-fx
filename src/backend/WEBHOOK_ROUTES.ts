@@ -2,18 +2,18 @@
  * CASTIMOFX - Webhook & Trade API Routes
  * 
  * Express API endpoints providing communication between the frontend client dashboard
- * and the MetaApi backend replication engine.
- * 
- * - POST /api/trade/toggle-mirror: Toggles user terminal copy relationship state (ACTIVE <-> IDLE).
- * - GET  /api/trade/account-status: Checks MetaApi terminal synchronization connection status for UI banners.
- * - POST /api/trade/provision-client: Provisions new client MT5 terminals.
- * - GET  /api/trade/metrics: Returns execution statistics and replication telemetry.
+ * and the Duplikium copier service (Duplikium does the copying; we connect accounts and read results).
+ *
+ * - POST /api/trade/toggle-mirror: Pauses or resumes a client's copying (ACTIVE <-> IDLE).
+ * - GET  /api/trade/account-status: Master account connection status for UI banners.
+ * - POST /api/trade/provision-client: Connects a client's MT5 account.
+ * - GET  /api/trade/my-trades: The caller's own open and closed trades, as the copier service reports them.
+ * - GET  /api/trade/admin/copier-check: Administrator's connection check of the copier service.
  */
 
 import { clientIpFrom } from './clientIp';
 import { Router, Request, Response } from 'express';
 import { Mt5ConnectionManager } from './MT5_CONNECTION_MANAGER';
-import { ReplicationEngine } from './REPLICATION_ENGINE';
 import { requireUser, requireAdmin, getAuthUser, isAdminUser } from './firebaseAuth';
 import { hasAcceptedTermsServer } from './termsCheck';
 import { recordEvent } from './referralService';
@@ -24,10 +24,9 @@ import { BillingService, BillingError, billingConfig, billingEnabled } from './b
 export const tradeRouter = Router();
 
 const connectionManager = Mt5ConnectionManager.getInstance();
-const replicationEngine = ReplicationEngine.getInstance();
 /**
  * One background connection per user, polled by the browser (see clientBridge.ts). If the overall time limit
- * is reached while the user's terminal exists, the terminal supervisor carries on and the job says so.
+ * is reached while the user's account exists at the copier service, the server carries on and the job says so.
  */
 export const connectJobs = new ConnectJobs<ReturnType<typeof toPublicClient>>({
   canContinueInBackground: (uid) => connectionManager.continueInBackground(uid),
@@ -85,27 +84,21 @@ const STATUS_BY_CODE: Record<string, number> = {
 
 /**
  * GET /api/trade/account-status
- * Checks if the MetaApi terminal synchronization is currently connected or disconnected
- * to supply real-time connection status to the frontend UI banner.
+ * Whether the master account is connected at the copier service, for the status banners in the UI.
  */
 tradeRouter.get('/account-status', async (req: Request, res: Response) => {
   try {
     const metrics = connectionManager.getMasterMetrics();
     const isConnected = connectionManager.isConnected();
     const activeClients = connectionManager.getActiveClients();
-    const replicationStats = replicationEngine.getReplicationMetrics();
-
-    const topUpNotice = connectionManager.getTopUpNotice();
 
     return res.status(200).json({
       success: true,
       connected: isConnected,
       status: metrics.state,
       connectionStatus: metrics.connectionStatus,
-      latencyMs: metrics.latencyMs,
       lastPing: metrics.lastHeartbeat,
-      topUpNotice,
-      mode: 'LIVE_METAAPI',
+      mode: 'LIVE_DUPLIKIUM',
       master: {
         accountId: metrics.accountId || '',
         login: metrics.login || '',
@@ -113,16 +106,10 @@ tradeRouter.get('/account-status', async (req: Request, res: Response) => {
         balance: metrics.balance,
         equity: metrics.equity,
         freeMargin: metrics.freeMargin,
-        marginLevel: metrics.marginLevel,
         currency: metrics.currency,
         openPositionsCount: metrics.openPositionsCount,
       },
       activeClientsCount: activeClients.length,
-      replication: {
-        totalCopiedTrades: replicationStats.totalReplicatedTrades,
-        successfulCopies: replicationStats.successfulCopies,
-        successRatePct: replicationStats.successRatePct,
-      },
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -131,7 +118,7 @@ tradeRouter.get('/account-status', async (req: Request, res: Response) => {
       success: false,
       connected: false,
       status: 'ERROR',
-      error: error?.message || 'Internal server error while querying terminal status',
+      error: 'Could not read the master account status.',
     });
   }
 });
@@ -191,20 +178,32 @@ tradeRouter.post('/toggle-mirror', requireUser, async (req: Request, res: Respon
       }
     }
 
-    client.status = newState;
-    client.lastSync = new Date().toISOString();
-    connectionManager.registerClient(client);
+    // The change is made at the copier service and checked there; the answer is only "ok" if it really took.
+    let updated;
+    try {
+      updated = await connectionManager.setCopyStatus(user.uid, newState);
+    } catch (e: any) {
+      console.error('❌ [API /api/trade/toggle-mirror] copier service:', String(e?.message || e).slice(0, 200));
+      return res.status(502).json({
+        success: false,
+        code: 'COPIER_UNAVAILABLE',
+        error: 'We could not change copying just now, so nothing was changed. Please try again in a minute.',
+      });
+    }
+    if (!updated) {
+      return res.status(409).json({ success: false, code: 'NO_VERIFIED_ACCOUNT', error: 'Connect a broker-verified MT5 account first.' });
+    }
 
     return res.status(200).json({
       success: true,
-      userId: client.userId,
-      accountId: client.accountId,
-      status: client.status,
+      userId: updated.userId,
+      accountId: updated.accountId,
+      status: updated.status,
       message:
         newState === 'ACTIVE'
-          ? 'Trade mirroring activated. Orders on the master account will now be replicated with lot scaling.'
-          : 'Trade mirroring paused. New master orders will not be executed on this account.',
-      updatedAt: client.lastSync,
+          ? 'Trade copying activated. New trades on the master account will now be copied to your account.'
+          : 'Trade copying paused. New master trades will not be opened on your account. Trades already open still follow the master\'s closes.',
+      updatedAt: updated.lastSync,
     });
   } catch (error: any) {
     if (error instanceof BillingError) {
@@ -296,8 +295,8 @@ tradeRouter.get('/connect-status', requireUser, (req: Request, res: Response) =>
   return res.status(200).json({
     success: true,
     job: connectJobs.get(user.uid),
-    // The terminal the supervisor is still looking after for this client (null when there is none).
-    pending: pendingFor(connectionManager.getSupervisor()?.view(user.uid), connectJobs.get(user.uid)),
+    // The connection the server is still looking after for this client (null when there is none).
+    pending: pendingFor(connectionManager.pendingView(user.uid), connectJobs.get(user.uid)),
     connected: Boolean(live && live.isBrokerVerified),
   });
 });
@@ -311,53 +310,36 @@ tradeRouter.get('/admin/connect-failures', requireAdmin, (_req: Request, res: Re
 });
 
 /**
- * Client terminals as MetaApi sees them, and what the supervisor is doing about each one (administrators only).
+ * Client accounts as the copier service holds them, and what we are doing about each one (administrators only).
  * The master account is never listed and can never be touched from here.
  */
-tradeRouter.get('/admin/terminals', requireAdmin, async (_req: Request, res: Response) => {
-  const sup = connectionManager.getSupervisor();
-  if (!sup) return res.status(503).json({ success: false, error: 'The terminal supervisor is not running (MetaApi is not connected).' });
+tradeRouter.get('/admin/copier-accounts', requireAdmin, async (_req: Request, res: Response) => {
   try {
-    const rows = await sup.inventory();
-    return res.status(200).json({ success: true, terminals: rows, supervisor: sup.stats, ...(await connectionManager.getCapacity().catch(() => ({}))) });
+    const accounts = await connectionManager.listCopierAccounts();
+    return res.status(200).json({ success: true, accounts, ...(await connectionManager.getCapacity().catch(() => ({}))) });
   } catch (e: any) {
-    console.error('❌ [API /admin/terminals]', e?.message || e);
-    return res.status(502).json({ success: false, error: 'Could not read the terminals from MetaApi.' });
+    console.error('❌ [API /admin/copier-accounts]', e?.message || e);
+    return res.status(502).json({ success: false, error: 'Could not read the accounts from the copier service.' });
   }
 });
 
-tradeRouter.post('/admin/terminals/redeploy', requireAdmin, async (req: Request, res: Response) => {
-  const sup = connectionManager.getSupervisor();
-  if (!sup) return res.status(503).json({ success: false, error: 'The terminal supervisor is not running.' });
+tradeRouter.post('/admin/copier-accounts/remove', requireAdmin, async (req: Request, res: Response) => {
   try {
-    const r = await sup.redeployTerminal(String(req.body?.accountId ?? ''));
-    return res.status(r.ok ? 200 : r.reason === 'NOT_FOUND' ? 404 : 400).json({ success: r.ok, reason: r.reason });
-  } catch (e: any) {
-    console.error('❌ [API /admin/terminals/redeploy]', e?.message || e);
-    return res.status(502).json({ success: false, error: 'MetaApi did not accept the restart.' });
-  }
-});
-
-tradeRouter.post('/admin/terminals/remove', requireAdmin, async (req: Request, res: Response) => {
-  const sup = connectionManager.getSupervisor();
-  if (!sup) return res.status(503).json({ success: false, error: 'The terminal supervisor is not running.' });
-  try {
-    const r = await sup.removeTerminal(String(req.body?.accountId ?? ''), { force: req.body?.force === true });
+    const r = await connectionManager.removeCopierAccount(String(req.body?.accountId ?? ''), req.body?.force === true);
     return res.status(r.ok ? 200 : r.reason === 'NOT_FOUND' ? 404 : 409).json({ success: r.ok, reason: r.reason });
   } catch (e: any) {
-    console.error('❌ [API /admin/terminals/remove]', e?.message || e);
-    return res.status(502).json({ success: false, error: 'MetaApi did not remove the terminal.' });
+    console.error('❌ [API /admin/copier-accounts/remove]', e?.message || e);
+    return res.status(502).json({ success: false, error: 'The copier service did not remove the account.' });
   }
 });
 
-tradeRouter.post('/admin/terminals/cleanup', requireAdmin, async (_req: Request, res: Response) => {
-  const sup = connectionManager.getSupervisor();
-  if (!sup) return res.status(503).json({ success: false, error: 'The terminal supervisor is not running.' });
+/** GET /api/trade/admin/copier-check: signs in, finds the master and the template, reads trades. No secrets are returned. */
+tradeRouter.get('/admin/copier-check', requireAdmin, async (_req: Request, res: Response) => {
   try {
-    return res.status(200).json({ success: true, ...(await sup.cleanupStale()) });
+    return res.status(200).json({ success: true, ...(await connectionManager.runConnectionCheck()), note: connectionManager.getMasterNote() });
   } catch (e: any) {
-    console.error('❌ [API /admin/terminals/cleanup]', e?.message || e);
-    return res.status(502).json({ success: false, error: 'Could not clean up the terminals.' });
+    console.error('❌ [API /admin/copier-check]', e?.message || e);
+    return res.status(500).json({ success: false, error: 'The connection check could not run.' });
   }
 });
 
@@ -375,7 +357,7 @@ tradeRouter.post('/update-client', requireAdmin, async (req: Request, res: Respo
     if (status !== 'ACTIVE' && status !== 'IDLE') {
       return res.status(400).json({ success: false, error: 'status must be ACTIVE or IDLE.' });
     }
-    const updated = connectionManager.updateClientMetrics(String(targetId), { status });
+    const updated = await connectionManager.setCopyStatus(String(targetId), status);
     if (!updated) {
       return res.status(404).json({ success: false, error: 'No verified client with that id.' });
     }
@@ -412,7 +394,7 @@ tradeRouter.post('/reverify-client', requireUser, async (req: Request, res: Resp
 
 /**
  * POST /api/trade/disconnect-client  (signed-in users; administrators may name any user)
- * Removes the broker account from the platform and from MetaApi, which stops its monthly charge.
+ * Removes the broker account from the platform and from the copier service. Trades already open stay open on the broker account.
  */
 tradeRouter.post('/disconnect-client', requireUser, async (req: Request, res: Response) => {
   try {
@@ -552,30 +534,72 @@ tradeRouter.get('/my-account', requireUser, async (req: Request, res: Response) 
     // Not in service yet: if a terminal is still connecting (or could not), say so, so the dashboard can show it.
     return res
       .status(200)
-      .json({ success: true, connected: false, client: null, pending: pendingFor(connectionManager.getSupervisor()?.view(user.uid), connectJobs.get(user.uid)) });
+      .json({ success: true, connected: false, client: null, pending: pendingFor(connectionManager.pendingView(user.uid), connectJobs.get(user.uid)) });
   }
   return res.status(200).json({ success: true, connected: true, client: toPublicClient(c) });
 });
 
 /**
  * GET /api/trade/robot-state
- * What the master terminal is actually doing right now.
- *  - UNAVAILABLE: the master feed is down or not live, so nothing can be said about trades.
- *  - NO_TRADE: the feed is live and the master has no open position.
- *  - TRADE: the feed is live and the master has at least one open position.
+ * What the master account is actually doing right now, as the copier service reports it.
+ *  - UNAVAILABLE: the master is not connected or its trades could not be read, so nothing can be said about trades.
+ *  - NO_TRADE: the master is connected and has no open position.
+ *  - TRADE: the master is connected and has at least one open position.
  */
-tradeRouter.get('/robot-state', requireUser, (_req: Request, res: Response) => {
-  const live = connectionManager.isConnected();
-  if (!live) {
-    return res.status(200).json({ success: true, state: 'UNAVAILABLE', trades: [], updatedAt: new Date().toISOString() });
+tradeRouter.get('/robot-state', requireUser, async (_req: Request, res: Response) => {
+  const unavailable = () => res.status(200).json({ success: true, state: 'UNAVAILABLE', trades: [], updatedAt: new Date().toISOString() });
+  if (!connectionManager.isConnected()) return unavailable();
+  try {
+    const trades = await connectionManager.getMasterTrades();
+    return res.status(200).json({
+      success: true,
+      state: trades.length > 0 ? 'TRADE' : 'NO_TRADE',
+      trades,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch {
+    return unavailable();
   }
-  const trades = replicationEngine.getMasterTradeSnapshot();
-  return res.status(200).json({
-    success: true,
-    state: trades.length > 0 ? 'TRADE' : 'NO_TRADE',
-    trades,
-    updatedAt: new Date().toISOString(),
-  });
+});
+
+/**
+ * GET /api/trade/my-trades  (signed-in users)
+ * The caller's own open and closed trades as the copier service reports them. Nothing is estimated: a value the
+ * service does not report is left out, and a trade that cannot be read is skipped rather than guessed.
+ */
+tradeRouter.get('/my-trades', requireUser, async (req: Request, res: Response) => {
+  const user = getAuthUser(req);
+  try {
+    const t = await connectionManager.getClientTrades(user.uid);
+    if (!t) return res.status(200).json({ success: true, connected: false, trades: [] });
+    const toTrade = (p: any, status: 'OPEN' | 'CLOSED') => ({
+      id: p.id,
+      masterTradeId: '',
+      symbol: p.symbol,
+      direction: p.side,
+      volume: p.volume,
+      openPrice: p.openPrice ?? 0,
+      currentPrice: status === 'CLOSED' ? p.closePrice ?? 0 : 0,
+      closePrice: p.closePrice ?? undefined,
+      sl: p.stopLoss ?? 0,
+      tp: p.takeProfit ?? 0,
+      pnl: p.profit ?? 0,
+      commission: p.commission ?? 0,
+      swap: p.swap ?? 0,
+      status,
+      openTime: p.openTime ?? '',
+      closeTime: p.closeTime ?? undefined,
+      idempotencyKey: p.id,
+    });
+    return res.status(200).json({
+      success: true,
+      connected: true,
+      trades: [...t.open.map((p) => toTrade(p, 'OPEN')), ...t.closed.map((p) => toTrade(p, 'CLOSED'))],
+    });
+  } catch (e: any) {
+    console.warn('⚠️ [API /my-trades]', String(e?.message || e).slice(0, 160));
+    return res.status(502).json({ success: false, error: 'Your trades could not be read just now.' });
+  }
 });
 
 /** GET /api/trade/my-ip: the address this request came from, so the person's own audit entries can show it. */
@@ -593,26 +617,6 @@ tradeRouter.get('/clients', requireAdmin, (req: Request, res: Response) => {
     return res.status(200).json({ success: true, count: clients.length, clients: clients.map(toPublicClient) });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: 'Failed to fetch clients' });
-  }
-});
-
-/**
- * GET /api/trade/metrics  (administrators only)
- * Returns comprehensive performance and execution statistics. It lists recent copy results per client,
- * so it is not for the public.
- */
-tradeRouter.get('/metrics', requireAdmin, (req: Request, res: Response) => {
-  try {
-    const metrics = replicationEngine.getReplicationMetrics();
-    return res.status(200).json({
-      success: true,
-      metrics,
-    });
-  } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      error: error?.message || 'Failed to fetch metrics',
-    });
   }
 });
 

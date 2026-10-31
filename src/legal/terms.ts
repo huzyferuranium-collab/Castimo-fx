@@ -4,7 +4,7 @@
  *
  * IMPORTANT: this is a plain-language DRAFT. Have a lawyer in your country review it before launch.
  */
-export const TERMS_VERSION = '2026-10-v2';
+export const TERMS_VERSION = '2026-10-v3';
 
 export interface TermsSection {
   title: string;
@@ -25,7 +25,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
       'Trading forex, gold and other leveraged products is risky. You can lose some or all of the money in your account, and with leverage you can lose quickly.',
       'Past results of the master account do not guarantee future results. Nothing on this platform is a promise or guarantee of profit.',
       'Copied trades will not always match the master account. Differences in price, spread, slippage, delays, minimum lot size, margin and your broker\'s rules can cause your results to differ, sometimes by a lot. A trade may fail to copy, copy late, or close at a different price.',
-      'Technical problems (internet, servers, MetaApi, your broker, or our systems) can interrupt copying while trades are still open. We cannot promise the service will be uninterrupted or error-free.',
+      'Technical problems (internet, servers, our trade-copying provider Duplikium, your broker, or our systems) can interrupt copying while trades are still open. We cannot promise the service will be uninterrupted or error-free.',
       'Only trade with money you can afford to lose.',
     ],
   },
@@ -33,7 +33,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
     title: '3. Your account and login details',
     body: [
       'You confirm you are at least 18 years old, that trading is legal where you live, and that all information you give is true.',
-      'To copy trades we need your MT5 account number, server and TRADING password. The password is sent securely to our trade-connection provider (MetaApi) to log in to your broker. Read-only (investor) passwords cannot be used. You can change your MT5 password or disconnect at any time.',
+      'To copy trades we need your MT5 account number, server and TRADING password. The password is sent securely to our trade-copying provider (Duplikium), which holds it in order to log in to your broker and copy trades onto your account. We do not keep your MT5 password on our own servers. Read-only (investor) passwords cannot be used. You can change your MT5 password or disconnect at any time.',
       'You may connect only an account that belongs to you. We may refuse or remove any account we cannot verify with the broker.',
     ],
   },
@@ -66,7 +66,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   {
     title: '7. Your data',
     body: [
-      'We store your sign-in details, the MT5 account number and server you connect, the balance and equity figures reported by your broker, your invoices and payments, and a record that you accepted these terms. Your MT5 password is passed to our connection provider to log in to your broker and is not shown back to you.',
+      'We store your sign-in details, the MT5 account number and server you connect, the balance and equity figures reported by your broker, your invoices and payments, and a record that you accepted these terms. Your MT5 password is passed to our trade-copying provider (Duplikium), which holds it to log in to your broker; we do not keep it on our own servers, and it is not shown back to you.',
       'We do not sell your personal data.',
     ],
   },
@@ -79,7 +79,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
   {
     title: '9. Third parties and conflicts of interest',
     body: [
-      'Copying runs through third parties: your broker, our trade-connection provider (MetaApi), blockchain networks and hosting providers. We do not control them and are not responsible for their errors, outages or decisions.',
+      'Copying runs through third parties: your broker, our trade-copying provider (Duplikium), blockchain networks and hosting providers. We do not control them and are not responsible for their errors, outages or decisions.',
       'The master account is traded by CASTIMOFx and may hold the same positions that you copy. We earn a fee only when you profit, but we may also trade our own money in the master account.',
     ],
   },

@@ -1,0 +1,311 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  DuplikiumClient,
+  DuplikiumError,
+  RateLimiter,
+  DEFAULT_LIMITS,
+  normalizeAccount,
+  normalizePosition,
+  readPositions,
+  toIso,
+  num,
+  COPIER,
+  type Transport,
+  type TransportRequest,
+} from '../src/backend/duplikiumClient.ts';
+
+// ---------- a pretend Duplikium: records every request and answers from a script ----------
+
+type Reply = { status?: number; body: unknown } | ((req: TransportRequest) => { status?: number; body: unknown });
+
+function pretend(script: Record<string, Reply | Reply[]>) {
+  const requests: TransportRequest[] = [];
+  const counts: Record<string, number> = {};
+  const transport: Transport = async (req) => {
+    requests.push(req);
+    const path = req.url.replace('https://www.trade-copier.com/webservice/v4/', '');
+    const entry = script[path];
+    if (!entry) return { status: 404, text: JSON.stringify({ code: 404, error: `no script for ${path}` }) };
+    const i = (counts[path] = (counts[path] ?? -1) + 1);
+    const r = Array.isArray(entry) ? entry[Math.min(i, entry.length - 1)] : entry;
+    const out = typeof r === 'function' ? r(req) : r;
+    return { status: out.status ?? 200, text: typeof out.body === 'string' ? out.body : JSON.stringify(out.body) };
+  };
+  return { transport, requests, counts };
+}
+
+const fast = () => new RateLimiter(DEFAULT_LIMITS, () => clock.now, async (ms) => void (clock.now += ms));
+const clock = { now: 1_800_000_000_000 };
+const exp = (offsetSeconds: number) => Math.floor(clock.now / 1000) + offsetSeconds;
+const TOKEN = (n: number, e = 48 * 3600) => ({ body: { token: `jwt-${n}`, exp: exp(e) } });
+
+function client(script: Record<string, Reply | Reply[]>, extra: Partial<ConstructorParameters<typeof DuplikiumClient>[0]> = {}) {
+  clock.now = 1_800_000_000_000;
+  const p = pretend(script);
+  const c = new DuplikiumClient({ user: 'cockpit-user', password: 'p@ss:word', transport: p.transport, now: () => clock.now, limiter: fast(), ...extra });
+  return { c, ...p };
+}
+const form = (req: TransportRequest) => Object.fromEntries(new URLSearchParams(req.body));
+
+// ---------- signing in ----------
+
+test('signs in with HTTP Basic (user:password) and sends the token as Bearer', async () => {
+  const { c, requests } = client({ 'access/getToken.php': TOKEN(1), 'account/getAccounts.php': { body: { accounts: [] } } });
+  await c.getAccounts();
+  assert.equal(requests[0].headers.Authorization, `Basic ${Buffer.from('cockpit-user:p@ss:word').toString('base64')}`);
+  assert.equal(requests[1].headers.Authorization, 'Bearer jwt-1');
+  assert.ok(requests.every((r) => r.url.startsWith('https://')));
+});
+
+test('the token is reused until it is close to expiry, then refreshed', async () => {
+  const { c, counts } = client({ 'access/getToken.php': [TOKEN(1), TOKEN(2)], 'account/getAccounts.php': { body: { accounts: [] } } });
+  await c.getAccounts();
+  await c.getAccounts();
+  assert.equal(counts['access/getToken.php'], 0); // one sign-in so far (index 0)
+  clock.now += 47.5 * 3600 * 1000; // less than an hour of life left
+  await c.getAccounts();
+  assert.equal(counts['access/getToken.php'], 1); // refreshed once
+});
+
+test('two calls at the same moment share one sign-in', async () => {
+  const { c, counts } = client({ 'access/getToken.php': TOKEN(1), 'account/getAccounts.php': { body: { accounts: [] } } });
+  await Promise.all([c.getAccounts(), c.getAccounts(), c.getAccounts()]);
+  assert.equal(counts['access/getToken.php'], 0);
+});
+
+test('a refused sign-in is an AUTH error and never mentions the password', async () => {
+  const { c } = client({ 'access/getToken.php': { status: 401, body: { code: 401, error: 'Invalid credentials' } } });
+  await assert.rejects(c.getAccounts(), (e: any) => e instanceof DuplikiumError && e.kind === 'AUTH' && !String(e.message).includes('p@ss'));
+});
+
+test('an expired token is replaced once and the call is repeated', async () => {
+  const { c, counts } = client({
+    'access/getToken.php': [TOKEN(1), TOKEN(2)],
+    'account/getAccounts.php': [{ status: 401, body: { code: 401, error: 'Token expired' } }, { body: { accounts: [] } }],
+  });
+  assert.deepEqual(await c.getAccounts(), []);
+  assert.equal(counts['access/getToken.php'], 1);
+});
+
+test('if the new token is refused too, it stops (no endless loop)', async () => {
+  const { c } = client({ 'access/getToken.php': TOKEN(1), 'account/getAccounts.php': { status: 401, body: { error: 'Invalid token' } } });
+  await assert.rejects(c.getAccounts(), (e: any) => e.kind === 'AUTH');
+});
+
+test('only HTTPS is accepted', () => {
+  assert.throws(() => new DuplikiumClient({ user: 'u', password: 'p', baseUrl: 'http://www.trade-copier.com/webservice/v4/' }), (e: any) => e.kind === 'NOT_CONFIGURED');
+});
+
+test('fromEnv needs both the user and the password', () => {
+  assert.equal(DuplikiumClient.fromEnv({}), null);
+  assert.equal(DuplikiumClient.fromEnv({ DUPLIKIUM_API_USER: 'u' }), null);
+  assert.ok(DuplikiumClient.fromEnv({ DUPLIKIUM_API_USER: 'u', DUPLIKIUM_API_TOKEN: 'p' }));
+});
+
+// ---------- accounts ----------
+
+test('addAccount sends a slave built from the template and returns the new id', async () => {
+  const { c, requests } = client({
+    'access/getToken.php': TOKEN(1),
+    'account/addAccount.php': { body: { account: { account_id: 'ABC123', name: 'x', login: '1', server: 's' } } },
+  });
+  const r = await c.addAccount({ type: 'slave', name: 'CastimoFX Client u1 #5551234', broker: 'mt5', login: '5551234', password: 'Tr@d1ng pw&=', server: 'HFMarketsGlobal-Live20', enabled: true, group: 'TPL', subscription: 'auto' });
+  assert.equal(r.accountId, 'ABC123');
+  const f = form(requests[1]);
+  assert.equal(f.type, '1');
+  assert.equal(f.broker, 'mt5');
+  assert.equal(f.status, '1');
+  assert.equal(f.group, 'TPL');
+  assert.equal(f.subscription, 'auto');
+  assert.equal(f.password, 'Tr@d1ng pw&='); // special characters survive the encoding
+  assert.equal(requests[1].headers['Content-Type'], 'application/x-www-form-urlencoded');
+});
+
+test('addAccount without an id in the answer is an error, not a made-up account', async () => {
+  const { c } = client({ 'access/getToken.php': TOKEN(1), 'account/addAccount.php': { body: { account: {} } } });
+  await assert.rejects(c.addAccount({ type: 'slave', name: 'n', broker: 'mt5', login: '1', password: 'p', server: 's', enabled: true }), (e: any) => e.kind === 'BAD_RESPONSE');
+});
+
+test('Duplikium error messages become API errors with their code', async () => {
+  const { c } = client({ 'access/getToken.php': TOKEN(1), 'account/addAccount.php': { status: 400, body: { code: 1042, error: 'Account limit reached' } } });
+  await assert.rejects(c.addAccount({ type: 'slave', name: 'n', broker: 'mt5', login: '1', password: 'p', server: 's', enabled: true }), (e: any) => e.kind === 'API' && e.code === '1042' && /limit/.test(e.message));
+});
+
+test('getAccounts reads numbers from text and leaves unreported figures as null', () => {
+  const a = normalizeAccount({ account_id: 'A1', name: 'n', login: '77', server: 'S', broker: 'MT5', type: 1, status: 1, balance: '1,250.50', equity: '1200', free_margin: '', ccy: 'usd', state: 'connected', lastUpdate: '2026-10-30 12:00:00', groupid: 'G', open_trades: 2 });
+  assert.equal(a!.balance, 1250.5);
+  assert.equal(a!.equity, 1200);
+  assert.equal(a!.freeMargin, null);
+  assert.equal(a!.currency, 'USD');
+  assert.equal(a!.state, 'CONNECTED');
+  assert.equal(a!.type, 'slave');
+  assert.equal(a!.enabled, true);
+  assert.equal(a!.openTrades, 2);
+  assert.equal(normalizeAccount({ name: 'no id' }), null);
+  assert.equal(normalizeAccount(null), null);
+  const m = normalizeAccount({ account_id: 'M', type: 0, status: 0 });
+  assert.equal(m!.type, 'master');
+  assert.equal(m!.enabled, false);
+  assert.equal(m!.balance, null);
+});
+
+test('getAccounts can ask for one account or several', async () => {
+  const { c, requests } = client({ 'access/getToken.php': TOKEN(1), 'account/getAccounts.php': { body: { accounts: [{ account_id: 'A' }] } } });
+  await c.getAccounts('A');
+  await c.getAccounts(['A', 'B']);
+  await c.getAccounts();
+  assert.equal(form(requests[1]).account_id, 'A');
+  assert.deepEqual(form(requests[2]), { 'account_id[0]': 'A', 'account_id[1]': 'B' });
+  assert.deepEqual(form(requests[3]), {});
+});
+
+test('an account list that cannot be read is an error, not an empty list', async () => {
+  const { c } = client({ 'access/getToken.php': TOKEN(1), 'account/getAccounts.php': { body: { something: 'else' } } });
+  await assert.rejects(c.getAccounts(), (e: any) => e.kind === 'BAD_RESPONSE');
+});
+
+test('an answer that is not JSON is a BAD_RESPONSE', async () => {
+  const { c } = client({ 'access/getToken.php': TOKEN(1), 'account/getAccounts.php': { body: '<html>oops</html>' } });
+  await assert.rejects(c.getAccounts(), (e: any) => e.kind === 'BAD_RESPONSE');
+});
+
+test('deleteAccount treats "already gone" as success but reports real failures', async () => {
+  const gone = client({ 'access/getToken.php': TOKEN(1), 'account/deleteAccount.php': { status: 404, body: { code: 404, error: 'Account not found' } } });
+  await gone.c.deleteAccount('X');
+  const broken = client({ 'access/getToken.php': TOKEN(1), 'account/deleteAccount.php': { status: 500, body: { code: 500, error: 'Internal problem' } } });
+  await assert.rejects(broken.c.deleteAccount('X'), (e: any) => e.kind === 'API');
+});
+
+test('updateAccount sends only what changes', async () => {
+  const { c, requests } = client({ 'access/getToken.php': TOKEN(1), 'account/updateAccount.php': { body: { account: {} } } });
+  await c.updateAccount('A1', { enabled: false });
+  assert.deepEqual(form(requests[1]), { account_id: 'A1', status: '0' });
+  await c.updateAccount('A1', { password: 'new', enabled: true });
+  assert.deepEqual(form(requests[2]), { account_id: 'A1', status: '1', password: 'new' });
+});
+
+// ---------- settings ----------
+
+test('setSettings needs exactly one of slave or template', async () => {
+  const { c } = client({ 'access/getToken.php': TOKEN(1), 'settings/setSettings.php': { body: { success: 'ok' } } });
+  await assert.rejects(c.setSettings({ idMaster: 'M', copierStatus: 1 }), (e: any) => e.kind === 'API');
+  await assert.rejects(c.setSettings({ idMaster: 'M', idSlave: 'S', idGroup: 'G', copierStatus: 1 }), (e: any) => e.kind === 'API');
+});
+
+test('setSettings sends the copier status and copy size', async () => {
+  const { c, requests } = client({ 'access/getToken.php': TOKEN(1), 'settings/setSettings.php': { body: { success: 'ok' } } });
+  await c.setSettings({ idMaster: 'M', idSlave: 'S', copierStatus: COPIER.CLOSE_ONLY, riskFactorType: 11, riskFactorValue: 0.5 });
+  assert.deepEqual(form(requests[1]), { id_master: 'M', id_slave: 'S', copier_status: '-1', risk_factor_type: '11', risk_factor_value: '0.5' });
+});
+
+test('getSettings reads the copier status and copy size', async () => {
+  const { c } = client({
+    'access/getToken.php': TOKEN(1),
+    'settings/getSettings.php': { body: { settings: [{ id_master: 'M', id_slave: 'S', id_group: null, copier_status: '1', risk_factor_type: 11, risk_factor_value: '1' }] } },
+  });
+  const rows = await c.getSettings({ idMaster: 'M' });
+  assert.deepEqual(rows, [{ idMaster: 'M', idSlave: 'S', idGroup: null, copierStatus: 1, riskFactorType: 11, riskFactorValue: 1 }]);
+});
+
+// ---------- positions ----------
+
+test('a position is read under several spellings; unreadable ones are skipped, never invented', () => {
+  const r = readPositions({
+    positions: [
+      { ticket: 555, symbol: 'XAUUSD', type: 'Buy', volume: '0.10', open_price: '2650.5', profit: '12.3', commission: '-0.7', swap: '0', sl: 0, tp: '2700', open_time: '2026-10-30 08:15:00' },
+      { position_id: 'p2', symbol: 'EURUSD', side: 'SELL', lots: 1, price_open: 1.1, close_price: 1.09, close_time: '2026-10-30T09:00:00Z', open_time: '2026-10-30T08:00:00Z' },
+      { ticket: 3, symbol: 'GBPUSD', volume: 1 }, // no buy/sell side
+      { ticket: 4, symbol: 'GBPUSD', type: 'buy', volume: 0 }, // no size
+      'junk',
+    ],
+  });
+  assert.equal(r.positions.length, 2);
+  assert.equal(r.skipped, 3);
+  const [a, b] = r.positions;
+  assert.equal(a.id, '555');
+  assert.equal(a.side, 'BUY');
+  assert.equal(a.volume, 0.1);
+  assert.equal(a.openPrice, 2650.5);
+  assert.equal(a.profit, 12.3);
+  assert.equal(a.takeProfit, 2700);
+  assert.equal(a.openTime, '2026-10-30T08:15:00.000Z');
+  assert.equal(a.rawOpenTime, '2026-10-30 08:15:00');
+  assert.equal(a.closePrice, null);
+  assert.equal(b.side, 'SELL');
+  assert.equal(b.closeTime, '2026-10-30T09:00:00.000Z');
+});
+
+test('the list of positions is found whatever it is called, and an empty answer is an empty list', () => {
+  assert.equal(readPositions([{ ticket: 1, symbol: 'X', type: 'buy', volume: 1 }]).positions.length, 1);
+  assert.equal(readPositions({ trades: [{ ticket: 1, symbol: 'X', type: 'sell', volume: 1 }] }).positions.length, 1);
+  assert.equal(readPositions({ whatever: [{ ticket: 1, symbol: 'X', type: 'sell', volume: 1 }] }).positions.length, 1);
+  assert.deepEqual(readPositions({}), { positions: [], skipped: 0 });
+  assert.deepEqual(readPositions(null), { positions: [], skipped: 0 });
+  assert.equal(normalizePosition({ ticket: 1, symbol: 'X', type: 'buy', volume: 'abc' }), null);
+});
+
+test('getOpenPositions asks for one account', async () => {
+  const { c, requests } = client({ 'access/getToken.php': TOKEN(1), 'position/getOpenPositions.php': { body: { positions: [] } } });
+  assert.deepEqual(await c.getOpenPositions('M1'), { positions: [], skipped: 0 });
+  assert.deepEqual(form(requests[1]), { account_id: 'M1' });
+});
+
+test('times and numbers are read carefully', () => {
+  assert.equal(toIso('2026-10-30 08:15:00'), '2026-10-30T08:15:00.000Z');
+  assert.equal(toIso('2026-10-30T08:15:00+02:00'), '2026-10-30T06:15:00.000Z');
+  assert.equal(toIso(1761812100), '2025-10-30T08:15:00.000Z');
+  assert.equal(toIso(''), null);
+  assert.equal(toIso('not a date'), null);
+  assert.equal(num('  12.5 '), 12.5);
+  assert.equal(num('x'), null);
+  assert.equal(num(NaN), null);
+  assert.equal(num(null), null);
+});
+
+// ---------- limits ----------
+
+test('calls are spaced to stay inside the per-second limit', async () => {
+  const sleeps: number[] = [];
+  const t = { now: 0 };
+  const lim = new RateLimiter(DEFAULT_LIMITS, () => t.now, async (ms) => { sleeps.push(ms); t.now += ms; });
+  for (let i = 0; i < 4; i++) await lim.acquire('settings'); // settings: 1 per second
+  assert.ok(sleeps.length >= 3, 'it waited between calls');
+  assert.ok(t.now >= 3000, 'at least three seconds passed for four calls');
+});
+
+test('the per-minute limit is respected too', async () => {
+  const t = { now: 0 };
+  const lim = new RateLimiter({ ...DEFAULT_LIMITS, other: { perSec: 100, perMin: 3, perHour: 1000 } }, () => t.now, async (ms) => { t.now += ms; }, 120_000);
+  for (let i = 0; i < 3; i++) await lim.acquire('other');
+  const before = t.now;
+  await lim.acquire('other'); // the 4th must wait for the minute window
+  assert.ok(t.now - before >= 59_000);
+});
+
+test('when waiting would take too long it says so instead of hanging', async () => {
+  const t = { now: 0 };
+  const lim = new RateLimiter({ ...DEFAULT_LIMITS, other: { perSec: 100, perMin: 1, perHour: 1000 } }, () => t.now, async (ms) => { t.now += ms; }, 5_000);
+  await lim.acquire('other');
+  await assert.rejects(lim.acquire('other'), (e: any) => e.kind === 'RATE_LIMIT');
+});
+
+test('different kinds of call have their own limits', async () => {
+  const t = { now: 0 };
+  const lim = new RateLimiter(DEFAULT_LIMITS, () => t.now, async (ms) => { t.now += ms; });
+  await lim.acquire('settings');
+  await lim.acquire('accounts'); // no wait: a different class
+  await lim.acquire('open');
+  assert.equal(t.now, 0);
+});
+
+test('network failures are reported as NETWORK, not as a wrong login', async () => {
+  const c = new DuplikiumClient({
+    user: 'u',
+    password: 'p',
+    transport: async () => {
+      throw new DuplikiumError('NETWORK', 'Could not reach the copier service.');
+    },
+  });
+  await assert.rejects(c.getAccounts(), (e: any) => e.kind === 'NETWORK');
+});

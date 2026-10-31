@@ -3,7 +3,7 @@
  * 
  * Express HTTP server providing:
  * - Trade API routes (/api/trade/*)
- * - MetaApi MT5 Connection Manager & High-Frequency Replication Engine
+ * - MT5 connection manager for the Duplikium copier service (Duplikium does the copying)
  * - Vite dev middlewares (development) & static file serving (production)
  */
 
@@ -15,11 +15,9 @@ import { tradeRouter } from './src/backend/WEBHOOK_ROUTES';
 import { referralRouter } from './src/backend/REFERRAL_ROUTES';
 import { emailCodeRouter } from './src/backend/EMAIL_CODE_ROUTES';
 import { Mt5ConnectionManager } from './src/backend/MT5_CONNECTION_MANAGER';
-import { ReplicationEngine } from './src/backend/REPLICATION_ENGINE';
 import { BillingService } from './src/backend/billing';
-import { saveClientRecord, loadSavedStatus } from './src/backend/clientStore';
-import { getDoc, setDoc, deleteDoc, listAll, isFirestoreAdminConfigured } from './src/backend/firestoreAdmin';
-import { firestoreConnectionStore, verifiedTerminalLookup } from './src/backend/connectionStore';
+import { saveClientRecord, loadSavedStatus, verifiedTerminalLookup } from './src/backend/clientStore';
+import { getDoc, isFirestoreAdminConfigured } from './src/backend/firestoreAdmin';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,34 +25,12 @@ const __dirname = path.dirname(__filename);
 const isProduction = process.env.NODE_ENV === 'production';
 const PORT = Number(process.env.PORT) || 3000;
 
-function isTransientSocketError(err: any): boolean {
-  if (!err) return false;
-  const str = `${err?.name || ''} ${err?.message || ''} ${err?.type || ''} ${err?.description || ''} ${String(err)}`.toLowerCase();
-  return (
-    str.includes('xhr post error') ||
-    str.includes('restorerejecterror') ||
-    str.includes('socket does not have mapped wrapper') ||
-    str.includes('transporterror') ||
-    str.includes('websocket client closed') ||
-    str.includes('cannot restore connection session') ||
-    str.includes('connection lost')
-  );
-}
-
-// Prevent transient WebSocket/XHR socket reconnection hiccups from crashing Node
+// A stray rejection or exception is logged and must not take the whole server down.
 process.on('unhandledRejection', (reason: any) => {
-  if (isTransientSocketError(reason)) {
-    console.log('ℹ️ [SOCKET_SUPERVISOR] MetaApi cloud socket recovery event handled gracefully.');
-    return;
-  }
   console.warn('⚠️ [SERVER] Handled unhandled rejection:', reason);
 });
 
 process.on('uncaughtException', (err: any) => {
-  if (isTransientSocketError(err)) {
-    console.log('ℹ️ [SOCKET_SUPERVISOR] Transient socket exception handled gracefully.');
-    return;
-  }
   console.error('❌ [SERVER] Uncaught exception:', err);
 });
 
@@ -79,8 +55,11 @@ async function startServer() {
     });
   });
 
-  if (isProduction && !process.env.METAAPI_TOKEN) {
-    console.error('❌ [SERVER] METAAPI_TOKEN is not set. Broker verification is OFF: no client account can be connected until it is set.');
+  if (isProduction) {
+    const missing = ['DUPLIKIUM_API_USER', 'DUPLIKIUM_API_TOKEN', 'DUPLIKIUM_MASTER_ID', 'DUPLIKIUM_TEMPLATE_ID'].filter((k) => !(process.env[k] || '').trim());
+    if (missing.length) {
+      console.error(`❌ [SERVER] ${missing.join(', ')} not set. Broker verification is OFF: no client account can be connected until they are set.`);
+    }
   }
 
   // Vite middleware in dev or static files in production
@@ -114,31 +93,24 @@ async function startServer() {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 [SERVER] CASTIMOFx Server listening on http://0.0.0.0:${PORT}`);
 
-    // Asynchronously bootstrap MT5 Connection Manager, Replication Engine, and Billing in background
+    // Asynchronously bootstrap the MT5 connection manager and billing in the background
     void (async () => {
       try {
-        console.log('🔌 [SERVER] Bootstrapping MT5 Connection Manager & Replication Engine in background...');
+        console.log('🔌 [SERVER] Bootstrapping the MT5 connection manager (Duplikium) in background...');
         const connectionManager = Mt5ConnectionManager.getInstance();
-        const replicationEngine = ReplicationEngine.getInstance();
-        // A client that has just come back (or just connected) is compared with the master straight away, so a copy
-        // opened before a restart follows its master trade again instead of being forgotten.
-        connectionManager.onClientVerified = () => replicationEngine.reconcileSoon();
         connectionManager.onClientSaved = (rec) => void saveClientRecord(rec).catch((e) => console.warn('[STORE] save failed:', e?.message));
         connectionManager.loadSavedStatus = loadSavedStatus;
         if (isFirestoreAdminConfigured()) {
-          // Unfinished connections are remembered, so a restart (every deploy) never loses one.
-          connectionManager.setConnectionStore(firestoreConnectionStore({ getDoc, setDoc, deleteDoc, listAll }));
           connectionManager.wasVerified = verifiedTerminalLookup((uid) => getDoc('mt5_accounts', uid));
         } else {
-          console.warn('⚠️ [SERVER] FIREBASE_SERVICE_ACCOUNT is not set: unfinished connections cannot be remembered across restarts.');
+          console.warn('⚠️ [SERVER] FIREBASE_SERVICE_ACCOUNT is not set: connected accounts cannot be remembered across restarts.');
         }
         await connectionManager.initialize();
 
-        replicationEngine.attachToMasterStream();
         BillingService.getInstance().start();
-        console.log('✅ [SERVER] CastimoFX MT5 Replication Engine initialized and listening.');
+        console.log('✅ [SERVER] CastimoFX connection manager initialized.');
       } catch (err: any) {
-        console.warn('⚠️ [SERVER] Background MT5 Connection Manager initialization deferred:', err?.message || err);
+        console.warn('⚠️ [SERVER] Background MT5 connection manager initialization deferred:', err?.message || err);
       }
     })();
   });

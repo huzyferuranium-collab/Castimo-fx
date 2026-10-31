@@ -217,7 +217,7 @@ class TradingEngine {
   }
 
   /**
-   * Synchronizes the in-browser Master Account with live data from MetaApi server
+   * Synchronizes the in-browser Master Account with what the copier service reports for the master
    */
   public syncMasterAccountFromCloud(masterData: any, activeClientsCount?: number): void {
     if (!masterData) return;
@@ -368,63 +368,6 @@ class TradingEngine {
     this.settlements = [];
     this.withdrawals = [];
     this.notify();
-  }
-
-  public executeMasterTrade(
-    symbol: string,
-    direction: 'BUY' | 'SELL',
-    volume: number,
-    sl?: number,
-    tp?: number
-  ): { masterTradeId: string; replicatedCount: number } {
-    const masterTradeId = `MST-${Date.now().toString().slice(-5)}`;
-    const currentPrice =
-      symbol === 'XAUUSD' ? 2655.4 : symbol === 'EURUSD' ? 1.0862 : symbol === 'GBPUSD' ? 1.3045 : 152.4;
-
-    const newMasterTrade: CopiedTrade = {
-      id: `trade-master-${Date.now().toString().slice(-4)}`,
-      masterTradeId,
-      symbol,
-      direction,
-      volume,
-      openPrice: currentPrice,
-      currentPrice,
-      sl: sl || (direction === 'BUY' ? parseFloat((currentPrice * 0.995).toFixed(2)) : parseFloat((currentPrice * 1.005).toFixed(2))),
-      tp: tp || (direction === 'BUY' ? parseFloat((currentPrice * 1.015).toFixed(2)) : parseFloat((currentPrice * 0.985).toFixed(2))),
-      pnl: 0.0,
-      commission: parseFloat((volume * 7.0).toFixed(2)),
-      swap: 0.0,
-      status: 'OPEN',
-      openTime: new Date().toISOString(),
-      idempotencyKey: `${masterTradeId}-client-${this.mt5Account.accountNumber}`,
-    };
-
-    let replicatedCount = 0;
-    if (this.mt5Account.status === 'copying' && this.masterAccount.signalBroadcasting) {
-      const mult = this.riskSettings.lotSizeMultiplier || 1.0;
-      const clientTrade: CopiedTrade = {
-        ...newMasterTrade,
-        id: `trade-cp-${Date.now().toString().slice(-4)}`,
-        volume: parseFloat((volume * mult).toFixed(2)),
-      };
-      this.trades.unshift(clientTrade);
-      replicatedCount++;
-    }
-
-    this.masterAccount.openTradesCount = (this.masterAccount.openTradesCount || 0) + 1;
-    this.masterAccount.lastPing = new Date().toISOString();
-
-    this.logAudit(
-      'admin-lead-master',
-      'Master Signal Publisher',
-      'MASTER_TRADE_BROADCASTED',
-      'MT5',
-      `Master Order ${direction} ${volume} Lots ${symbol} executed at ${currentPrice}. Instantaneously replicated to ${replicatedCount} connected client terminals.`,
-      'SUCCESS'
-    );
-
-    this.notify();
-    return { masterTradeId, replicatedCount };
   }
 
   public getSupervisedAccounts(): Mt5Account[] {
@@ -1100,7 +1043,7 @@ class TradingEngine {
       equity,
       freeMargin: Number(c.freeMargin ?? equity),
       marginLevel: 0,
-      leverage: Number(c.leverage),
+      leverage: Number(c.leverage) || 0,
       riskStatus: 'normal',
       brokerName: c.brokerName,
       accountHolderName: c.accountHolderName || '',
@@ -1178,7 +1121,7 @@ class TradingEngine {
           equity: Number(c.equity),
           freeMargin: Number(c.freeMargin ?? c.equity),
           marginLevel: 0,
-          leverage: Number(c.leverage),
+          leverage: Number(c.leverage) || 0,
           riskStatus: 'normal',
           profitShareStatus: 'up_to_date',
           unpaidProfitShareUsdt: 0,
@@ -1230,6 +1173,8 @@ class TradingEngine {
           };
         }
       }
+      // A client's own trades come from the copier service. The list for an administrator has no trades of its own.
+      if (own && clients.length > 0) await this.syncOwnTrades(headers);
       if (clients.length > 0) {
         this.masterAccount.activeCopiersCount = this.supervisedAccounts.length;
         this.notify();
@@ -1238,6 +1183,23 @@ class TradingEngine {
       }
     } catch {
       // Non-blocking background sync
+    }
+  }
+
+  /**
+   * Loads the signed-in client's open and closed trades as the copier service reports them. When the server cannot
+   * read them just now, the last list stays on screen rather than being replaced by a guess.
+   */
+  private async syncOwnTrades(headers: Record<string, string>): Promise<void> {
+    try {
+      const res = await fetch('/api/trade/my-trades', { headers });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.success && data.connected !== false && Array.isArray(data.trades)) {
+        this.trades = data.trades as CopiedTrade[];
+      }
+    } catch {
+      // Keep the last list.
     }
   }
 
@@ -1295,15 +1257,15 @@ class TradingEngine {
     this.logAudit(
       userId,
       'MT5 Copier Service',
-      'CLOSING_COPIED_POSITIONS',
+      'REMOVING_FROM_COPIER',
       'MT5',
-      `Closing ${this.getOpenTrades().length} open copied positions.`,
+      'Removing the account from the copier. Trades already open stay open in the MT5 account.',
       'SUCCESS'
     );
     this.notify();
     await new Promise((res) => setTimeout(res, 1200));
 
-    // Ask the server to stop copying and remove the account from MetaApi. Only continue if it worked.
+    // Ask the server to stop copying and remove the account from the copier. Only continue if it worked.
     try {
       const headers = await authHeaders();
       const res = await fetch('/api/trade/disconnect-client', {
@@ -1323,15 +1285,9 @@ class TradingEngine {
       return { success: false, error: 'Could not reach the server. Please try again.' };
     }
 
-    // Close all open trades
-    const now = new Date().toISOString();
-    this.trades.forEach((t) => {
-      if (t.status === 'OPEN') {
-        t.status = 'CLOSED';
-        t.closePrice = t.currentPrice;
-        t.closeTime = now;
-      }
-    });
+    // The account is gone from the copier, so there is nothing of ours left to list. Trades that were open stay
+    // open in the person's own MT5; we do not mark anything as closed that was not.
+    this.trades = [];
 
     // Step 3: disconnected
     this.mt5Account = {

@@ -142,11 +142,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     setShowConnectModal(true);
   };
 
-  // Real-time MetaApi WebSocket Synchronizer & Mirror State
-  const [metaApiStatus, setMetaApiStatus] = useState<{
+  // Copier service status (master reading) and this client's copy switch
+  const [copierStatus, setCopierStatus] = useState<{
     connected: boolean;
     status: string;
-    latencyMs: number;
     masterBalance: number;
     masterEquity: number;
     openPositionsCount: number;
@@ -154,12 +153,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     mirrorActive: boolean;
     loading: boolean;
     error?: string;
-    topUpNotice?: { required: boolean; message: string; topUpUrl: string };
     mode?: string;
   }>({
     connected: false,
     status: 'UNKNOWN',
-    latencyMs: 0,
     masterBalance: 0,
     masterEquity: 0,
     openPositionsCount: 0,
@@ -171,21 +168,19 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const [isRetryingMaster, setIsRetryingMaster] = useState(false);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
 
-  const fetchMetaApiStatus = async () => {
+  const fetchCopierStatus = async () => {
     try {
       const res = await fetch('/api/trade/account-status');
       if (res.ok) {
         const data = await res.json();
-        setMetaApiStatus((prev) => ({
+        setCopierStatus((prev) => ({
           ...prev,
           connected: data.connected === true,
           status: data.status || 'UNKNOWN',
-          latencyMs: Number(data.latencyMs) || 0,
           masterBalance: data.master?.balance != null ? Number(data.master.balance) : prev.masterBalance,
           masterEquity: data.master?.equity != null ? Number(data.master.equity) : prev.masterEquity,
           openPositionsCount: data.master?.openPositionsCount ?? 0,
           activeClientsCount: Number(data.activeClientsCount) || 0,
-          topUpNotice: data.topUpNotice,
           mode: data.mode,
         }));
         if (data.master) {
@@ -194,7 +189,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         }
       }
     } catch {
-      // In offline / fallback mode, retain default live status
+      // The last reading stays on screen until the next one succeeds
     }
   };
 
@@ -205,7 +200,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
       const res = await fetch('/api/trade/retry-master', { method: 'POST', headers: await authHeaders() });
       const data = await res.json();
       setRetryMessage(data.message || data.error || (data.success ? 'Master connected' : 'Retry completed'));
-      await fetchMetaApiStatus();
+      await fetchCopierStatus();
     } catch {
       setRetryMessage('Network error while requesting master reconnect');
     } finally {
@@ -214,13 +209,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   };
 
   useEffect(() => {
-    fetchMetaApiStatus();
+    fetchCopierStatus();
     tradingEngine.syncClientsFromBackend();
     tradingEngine.syncInvoicesFromBackend();
     void tradingEngine.syncClientIp();
     let tick = 0;
     const interval = setInterval(() => {
-      fetchMetaApiStatus();
+      fetchCopierStatus();
       tradingEngine.syncClientsFromBackend();
       if (++tick % 6 === 0) tradingEngine.syncInvoicesFromBackend();
     }, 4000);
@@ -229,8 +224,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
 
   const handleToggleMirror = async () => {
     try {
-      setMetaApiStatus((prev) => ({ ...prev, loading: true, error: undefined }));
-      const targetState = metaApiStatus.mirrorActive ? 'IDLE' : 'ACTIVE';
+      setCopierStatus((prev) => ({ ...prev, loading: true, error: undefined }));
+      const targetState = copierStatus.mirrorActive ? 'IDLE' : 'ACTIVE';
       const res = await fetch('/api/trade/toggle-mirror', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
@@ -238,20 +233,20 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setMetaApiStatus((prev) => ({
+        setCopierStatus((prev) => ({
           ...prev,
           mirrorActive: data.status === 'ACTIVE',
           loading: false,
         }));
       } else {
-        setMetaApiStatus((prev) => ({
+        setCopierStatus((prev) => ({
           ...prev,
           loading: false,
           error: data.error || 'Failed to toggle mirror state',
         }));
       }
     } catch (err: any) {
-      setMetaApiStatus((prev) => ({
+      setCopierStatus((prev) => ({
         ...prev,
         loading: false,
         error: err?.message || 'Network error while contacting trade server',
@@ -861,7 +856,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 </span>
               </div>
               <span className="text-[11px] text-slate-500 font-mono">
-                Terminal: #{account.accountNumber} • 1:{account.leverage}
+                Terminal: #{account.accountNumber}{account.leverage ? ` • 1:${account.leverage}` : ''}
               </span>
             </div>
 
@@ -1229,12 +1224,14 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                     </span>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] text-slate-500 uppercase block font-sans">Terminal Leverage</span>
-                    <span className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 block">
-                      1:{account.leverage}
-                    </span>
-                  </div>
+                  {account.leverage ? (
+                    <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                      <span className="text-[10px] text-slate-500 uppercase block font-sans">Terminal Leverage</span>
+                      <span className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 block">
+                        1:{account.leverage}
+                      </span>
+                    </div>
+                  ) : null}
 
                 </div>
 

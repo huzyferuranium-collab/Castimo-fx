@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CopiedTrade } from '../../types';
+import { price, hasCosts } from '../../utils/tradeFormat';
 import {
   Activity,
   TrendingUp,
@@ -165,13 +166,13 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
                   <div>
                     <span className="text-[10px] text-slate-500 block">Entry / Current:</span>
                     <span className="text-slate-200">
-                      {trade.openPrice.toFixed(trade.symbol.includes('JPY') ? 3 : 5)} → {trade.currentPrice.toFixed(trade.symbol.includes('JPY') ? 3 : 5)}
+                      {price(trade.openPrice, trade.symbol.includes('JPY') ? 3 : 5)} → {price(trade.currentPrice, trade.symbol.includes('JPY') ? 3 : 5)}
                     </span>
                   </div>
                   <div className="text-right">
                     <span className="text-[10px] text-slate-500 block">SL / TP:</span>
                     <span className="text-slate-300">
-                      {trade.sl.toFixed(trade.symbol.includes('JPY') ? 3 : 4)} / {trade.tp.toFixed(trade.symbol.includes('JPY') ? 3 : 4)}
+                      {price(trade.sl, trade.symbol.includes('JPY') ? 3 : 4)} / {price(trade.tp, trade.symbol.includes('JPY') ? 3 : 4)}
                     </span>
                   </div>
                 </div>
@@ -183,7 +184,7 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
                       {new Date(trade.openTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </span>
-                  <span>Comm: -${trade.commission.toFixed(2)} • Swap: ${trade.swap.toFixed(2)}</span>
+                  {hasCosts(trade) ? <span>Comm: -${trade.commission.toFixed(2)} • Swap: ${trade.swap.toFixed(2)}</span> : <span />}
                 </div>
               </div>
             );
@@ -257,20 +258,26 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
                     </td>
 
                     <td className="py-3.5 px-4 font-mono text-[11px]">
-                      <div className="text-slate-200">{trade.openPrice.toFixed(trade.symbol.includes('JPY') ? 3 : 5)}</div>
+                      <div className="text-slate-200">{price(trade.openPrice, trade.symbol.includes('JPY') ? 3 : 5)}</div>
                       <div className="text-slate-400 text-[10px]">
-                        now: {trade.currentPrice.toFixed(trade.symbol.includes('JPY') ? 3 : 5)}
+                        now: {price(trade.currentPrice, trade.symbol.includes('JPY') ? 3 : 5)}
                       </div>
                     </td>
 
                     <td className="py-3.5 px-4 font-mono text-[10px] text-slate-400">
-                      <div>SL: {trade.sl.toFixed(trade.symbol.includes('JPY') ? 3 : 5)}</div>
-                      <div>TP: {trade.tp.toFixed(trade.symbol.includes('JPY') ? 3 : 5)}</div>
+                      <div>SL: {price(trade.sl, trade.symbol.includes('JPY') ? 3 : 5)}</div>
+                      <div>TP: {price(trade.tp, trade.symbol.includes('JPY') ? 3 : 5)}</div>
                     </td>
 
                     <td className="py-3.5 px-4 font-mono text-[10px] text-slate-400">
-                      <div>Comm: -${trade.commission.toFixed(2)}</div>
-                      <div>Swap: ${trade.swap.toFixed(2)}</div>
+                      {hasCosts(trade) ? (
+                        <>
+                          <div>Comm: -${trade.commission.toFixed(2)}</div>
+                          <div>Swap: ${trade.swap.toFixed(2)}</div>
+                        </>
+                      ) : (
+                        <div>{'\u2014'}</div>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4 text-right">
