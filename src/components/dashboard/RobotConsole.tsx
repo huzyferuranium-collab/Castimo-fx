@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AITradingAssistant, ConsoleState, MasterTrade } from './AITradingAssistant';
 import { authHeaders } from '../../services/apiAuth';
+import { HumanoidAiRobot } from './HumanoidAiRobot';
 
 
 /**
@@ -36,5 +37,14 @@ export const RobotConsole: React.FC = () => {
     };
   }, []);
 
-  return <AITradingAssistant state={state} trades={trades} />;
+  const first = trades[0];
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl bg-slate-900/95 border border-slate-800 overflow-hidden">
+        {/* The graphic is decorative. Its words come only from the master's real state. */}
+        <HumanoidAiRobot state={state} currentMarket={state === 'TRADE' ? first?.symbol || '' : ''} direction={first?.side} />
+      </div>
+      <AITradingAssistant state={state} trades={trades} />
+    </div>
+  );
 };

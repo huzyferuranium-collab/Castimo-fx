@@ -1443,6 +1443,24 @@ class TradingEngine {
   }
 
   // --- AUDIT LOGGING (Section 14) ---
+  /** The signed-in person's address as the server sees it. Empty until the server has told us. */
+  private clientIp = '';
+
+  /** Asks the server for this person's address, once; later audit entries carry it. Never invented. */
+  public async syncClientIp(): Promise<void> {
+    if (this.clientIp) return;
+    try {
+      const headers = await authHeaders();
+      if (!headers.Authorization) return;
+      const res = await fetch('/api/trade/my-ip', { headers });
+      if (!res.ok) return;
+      const d = await res.json();
+      if (d?.success && typeof d.ip === 'string') this.clientIp = d.ip;
+    } catch {
+      // keep it empty
+    }
+  }
+
   public logAudit(
     userId: string,
     actor: string,
@@ -1458,7 +1476,7 @@ class TradingEngine {
       action,
       category,
       details,
-      ip: '', // no address is recorded here, so none is shown
+      ip: this.clientIp, // the address the server saw for this person; empty (hidden) until known
       timestamp: new Date().toISOString(),
       status,
     };

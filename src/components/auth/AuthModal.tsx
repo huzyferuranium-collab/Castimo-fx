@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import {
   Shield,
@@ -12,6 +12,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { UserRole } from '../../types';
+import { emailCodesAvailable, sendEmailCode, verifyEmailCode } from '../../services/emailCodeApi';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -63,12 +64,49 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [email, setEmail] = useState(prefillEmail || '');
   const [verifyNote, setVerifyNote] = useState<string | null>(null);
   const [verifyBusy, setVerifyBusy] = useState(false);
+  const [codesOn, setCodesOn] = useState(false);
+  const [codeSent, setCodeSent] = useState(false);
+  const [codeInput, setCodeInput] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   // New accounts are always clients. Admin rights can only be granted in Firebase.
   const role: UserRole = 'client';
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen || tab !== 'verify' || !user) return;
+    let cancelled = false;
+    emailCodesAvailable().then((v) => {
+      if (!cancelled) setCodesOn(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, tab, user]);
+
+  const handleSendCode = async () => {
+    setVerifyBusy(true);
+    setVerifyNote(null);
+    const r = await sendEmailCode();
+    setVerifyBusy(false);
+    if (r.ok) {
+      setCodeSent(true);
+      setVerifyNote(r.data?.alreadyVerified ? 'Your email is already verified.' : 'We sent a 6-digit code. It works for 10 minutes. Please check your inbox and spam folder.');
+    } else setVerifyNote(r.error || 'Could not send the code.');
+  };
+
+  const handleConfirmCode = async () => {
+    setVerifyBusy(true);
+    setVerifyNote(null);
+    const r = await verifyEmailCode(codeInput.trim());
+    if (r.ok) {
+      const ok = await refreshEmailVerified();
+      setVerifyNote(ok ? 'Your email is confirmed. Thank you!' : 'Your code was accepted. If the page does not update, press "I have verified".');
+      setCodeInput('');
+    } else setVerifyNote(r.error || 'That code could not be checked.');
+    setVerifyBusy(false);
+  };
 
   if (!isOpen) return null;
 
@@ -212,6 +250,40 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               )}
               {verifyNote && <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-700/60 text-slate-200">{verifyNote}</div>}
+              {codesOn && !isEmailVerified && (
+                <div className="space-y-2 p-3 rounded-xl bg-slate-950/50 border border-slate-700/60">
+                  <p className="text-slate-300">Prefer a code? We can email you 6 digits to type here.</p>
+                  <button
+                    type="button"
+                    disabled={verifyBusy || !user}
+                    onClick={handleSendCode}
+                    className="w-full py-2 px-3 font-semibold rounded-xl bg-emerald-500 text-slate-950 disabled:opacity-50 cursor-pointer"
+                  >
+                    {codeSent ? 'Send a new code' : 'Email me a code'}
+                  </button>
+                  {codeSent && (
+                    <div className="flex gap-2">
+                      <input
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        value={codeInput}
+                        onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, ''))}
+                        placeholder="6-digit code"
+                        className="flex-1 px-3 py-2 rounded-xl border border-slate-700 bg-slate-950 text-white font-mono tracking-widest"
+                      />
+                      <button
+                        type="button"
+                        disabled={verifyBusy || codeInput.length !== 6}
+                        onClick={handleConfirmCode}
+                        className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-semibold disabled:opacity-50 cursor-pointer"
+                      >
+                        Confirm
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               <button
                 type="button"
                 disabled={verifyBusy || !user}

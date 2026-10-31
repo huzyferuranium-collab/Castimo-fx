@@ -13,6 +13,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { tradeRouter } from './src/backend/WEBHOOK_ROUTES';
 import { referralRouter } from './src/backend/REFERRAL_ROUTES';
+import { emailCodeRouter } from './src/backend/EMAIL_CODE_ROUTES';
 import { Mt5ConnectionManager } from './src/backend/MT5_CONNECTION_MANAGER';
 import { ReplicationEngine } from './src/backend/REPLICATION_ENGINE';
 import { BillingService } from './src/backend/billing';
@@ -67,6 +68,7 @@ async function startServer() {
   // Mount Trade & Webhook API routes
   app.use('/api/trade', tradeRouter);
   app.use('/api/referrals', referralRouter);
+  app.use('/api/email-code', emailCodeRouter);
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {

@@ -45,6 +45,10 @@ service cloud.firestore {
       allow write: if false;
     }
     // Service plans and subscription payments are written only by the server. A user can read their own.
+    // Email confirmation codes (salted hashes). Only the server can read or write them.
+    match /email_codes/{id} {
+      allow read, write: if false;
+    }
     match /service_plans/{id} {
       allow read: if isSignedIn() && (id == request.auth.uid || isAdmin());
       allow write: if false;

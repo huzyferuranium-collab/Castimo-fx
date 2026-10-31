@@ -81,12 +81,12 @@ function b64url(input: Buffer | string): string {
 }
 
 /** Builds the signed login request Google exchanges for an access token. Exported for tests. */
-export function buildServiceAccountJwt(sa: ServiceAccount, nowSec: number): string {
+export function buildServiceAccountJwt(sa: ServiceAccount, nowSec: number, scope = 'https://www.googleapis.com/auth/datastore'): string {
   const header = b64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
   const claims = b64url(
     JSON.stringify({
       iss: sa.client_email,
-      scope: 'https://www.googleapis.com/auth/datastore',
+      scope,
       aud: 'https://oauth2.googleapis.com/token',
       iat: nowSec,
       exp: nowSec + 3600,
@@ -97,11 +97,13 @@ export function buildServiceAccountJwt(sa: ServiceAccount, nowSec: number): stri
   return `${header}.${claims}.${b64url(signer.sign(sa.private_key))}`;
 }
 
-let tokenCache: { token: string; expiresAt: number } | null = null;
+const tokenCache = new Map<string, { token: string; expiresAt: number }>();
+const DATASTORE_SCOPE = 'https://www.googleapis.com/auth/datastore';
 
-async function accessToken(sa: ServiceAccount): Promise<string> {
-  if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000) return tokenCache.token;
-  const jwt = buildServiceAccountJwt(sa, Math.floor(Date.now() / 1000));
+async function accessToken(sa: ServiceAccount, scope: string = DATASTORE_SCOPE): Promise<string> {
+  const cached = tokenCache.get(scope);
+  if (cached && cached.expiresAt > Date.now() + 60_000) return cached.token;
+  const jwt = buildServiceAccountJwt(sa, Math.floor(Date.now() / 1000), scope);
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -109,8 +111,9 @@ async function accessToken(sa: ServiceAccount): Promise<string> {
   });
   if (!res.ok) throw new Error(`Could not sign in to Google (${res.status}).`);
   const data: any = await res.json();
-  tokenCache = { token: data.access_token, expiresAt: Date.now() + (Number(data.expires_in) || 3600) * 1000 };
-  return tokenCache.token;
+  const entry = { token: data.access_token, expiresAt: Date.now() + (Number(data.expires_in) || 3600) * 1000 };
+  tokenCache.set(scope, entry);
+  return entry.token;
 }
 
 function settings(sa: ServiceAccount): { projectId: string; databaseId: string } {
@@ -234,4 +237,17 @@ export async function listAll(collection: string): Promise<Record<string, unknow
     pageToken = data.nextPageToken || '';
   } while (pageToken);
   return out;
+}
+
+/** For other server modules that must call a Google API as the service account (for example to confirm an email). */
+export async function adminAccessToken(scope: string): Promise<string> {
+  const sa = readServiceAccount();
+  if (!sa) throw new Error('FIREBASE_SERVICE_ACCOUNT is not set on the server.');
+  return accessToken(sa, scope);
+}
+
+export function adminProjectId(): string {
+  const sa = readServiceAccount();
+  if (!sa) throw new Error('FIREBASE_SERVICE_ACCOUNT is not set on the server.');
+  return settings(sa).projectId;
 }

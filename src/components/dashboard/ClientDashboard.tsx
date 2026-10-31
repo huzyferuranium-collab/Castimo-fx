@@ -21,6 +21,8 @@ import { LedgerAuditModal } from '../ledger/LedgerAuditModal';
 import { SidebarNav, NavGroup } from '../common/SidebarNav';
 
 import { RobotConsole } from './RobotConsole';
+import { MarketWatchPanel } from './MarketWatchPanel';
+import { ActivityPanel } from './ActivityPanel';
 import { AuthModal } from '../auth/AuthModal';
 import { ServicePlanPage } from './ServicePlanPage';
 import { getPlanView, PlanView } from '../../services/servicePlanApi';
@@ -213,6 +215,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     fetchMetaApiStatus();
     tradingEngine.syncClientsFromBackend();
     tradingEngine.syncInvoicesFromBackend();
+    void tradingEngine.syncClientIp();
     let tick = 0;
     const interval = setInterval(() => {
       fetchMetaApiStatus();
@@ -345,6 +348,14 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const openTradesCount = openTrades.length;
   const floatingPnl = openTrades.reduce((acc, trade) => acc + (trade.pnl || 0), 0);
 
+  const shareNavItem: NavGroup['items'][number] = {
+    id: 'settlement_due',
+    label: '50% Profit Share',
+    icon: Wallet,
+    badge: hasPendingShare ? `$${(account.unpaidProfitShareUsdt || 0).toFixed(0)} Due` : 'Settled',
+    badgeVariant: hasPendingShare ? 'warning' : 'success',
+  };
+
   // Streamlined collapsible sidebar navigation: clean, responsive, with Profile & 50% Share
   const navGroups: NavGroup[] = [
     {
@@ -379,15 +390,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     {
       groupTitle: 'More',
       items: [
-        ...(isSubscriber ? [] : [
-        {
-          id: 'settlement_due',
-          label: '50% Profit Share',
-          icon: Wallet,
-          badge: hasPendingShare ? `$${(account.unpaidProfitShareUsdt || 0).toFixed(0)} Due` : 'Settled',
-          badgeVariant: hasPendingShare ? 'warning' : 'success',
-        },
-        ]),
+        ...(isSubscriber ? [] : [shareNavItem]),
         {
           id: 'profile',
           label: 'Profile',
@@ -751,6 +754,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             )}
 
             <RobotConsole />
+            <MarketWatchPanel />
+            <ActivityPanel />
           </div>
         )}
 

@@ -59,6 +59,7 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     tradingEngine.syncClientsFromBackend();
+    void tradingEngine.syncClientIp();
     tradingEngine.syncInvoicesFromBackend(true);
     const invTimer = setInterval(() => tradingEngine.syncInvoicesFromBackend(true), 30000);
     const unsub = tradingEngine.subscribe(() => {
