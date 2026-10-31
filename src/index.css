@@ -4,7 +4,7 @@
 
 /* ---- Premium visual layer: glass, glows, hero motion, dual-tone headings ---- */
 @theme {
-  --color-ink: #060a12;
+  --color-ink: #050505;
   --color-neon: #4ade80;
   /* Premium multicolour palette */
   --color-ruby-300: #fda4af; --color-ruby-400: #fb7185; --color-ruby-500: #e11d48; --color-ruby-600: #be123c; --color-ruby-700: #9f1239;
@@ -64,7 +64,7 @@
 }
 
 @utility glass {
-  background: linear-gradient(160deg, rgba(30,40,95,.78), rgba(14,19,50,.84) 60%);
+  background: linear-gradient(160deg, rgba(29,32,39,.92), rgba(16,17,20,.96) 60%);
   border: 1px solid rgba(255,255,255,.08);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 24px 48px -24px rgba(0,0,0,.7), var(--glow, 0 0 #0000);
 }
@@ -119,7 +119,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  background-color: #0b1120;
+  background-color: #050505;
 }
 
 .font-mono,
@@ -146,6 +146,27 @@ samp {
 
 html.dark {
   color-scheme: dark;
+  /* ---- Black luxury palette. Depth comes from stepping through these surfaces, never one flat black. ----
+     page #050505 > secondary #101114 > card #15171C > elevated #1D2027 > hairline #30343D
+     The slate scale below is re-pointed at that ladder, so every existing slate class follows it in dark only
+     (the light theme has its own explicit overrides and is not affected). */
+  --lux-black: #050505;
+  --lux-charcoal: #101114;
+  --lux-card: #15171C;
+  --lux-graphite: #1D2027;
+  --lux-line: #30343D;
+  --lux-text-soft: #B8BEC9;
+  --color-slate-50: #ffffff;
+  --color-slate-100: #f2f4f8;
+  --color-slate-200: #dadee6;
+  --color-slate-300: #b8bec9;
+  --color-slate-400: #9aa2b1;
+  --color-slate-500: #8a92a1;
+  --color-slate-600: #656c7b;
+  --color-slate-700: #30343d;
+  --color-slate-800: #1d2027;
+  --color-slate-900: #15171c;
+  --color-slate-950: #101114;
 }
 
 :root {
@@ -908,9 +929,9 @@ html.dark .min-h-screen.bg-slate-950 { background-color: transparent; }
 
 /* Header: translucent with a hairline of teal light */
 html.dark header.sticky {
-  background-color: rgba(6,10,18,.92);
-  border-bottom-color: rgba(255,255,255,.07);
-  box-shadow: 0 1px 0 rgba(var(--rim-accent), .18);
+  background-color: rgba(5,5,5,.92);
+  border-bottom-color: rgba(48,52,61,.7);
+  box-shadow: 0 1px 0 rgba(var(--rim-accent), .22), 0 10px 30px -18px rgba(var(--rim-accent), .35);
 }
 
 /* Status pills (Active, Settled, TRC20 ACTIVE ...) get a soft, desaturated glow */
@@ -953,14 +974,9 @@ html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class
   border: 1px solid rgba(15,23,42,.08);
   box-shadow: 0 1px 2px rgba(15,23,42,.05), 0 18px 40px -20px rgba(15,23,42,.18);
 }
-html.dark .surface {
-  background: linear-gradient(160deg, rgba(30,40,95,.80), rgba(14,19,50,.86) 60%);
-  border-color: rgba(255,255,255,.08);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.09), 0 24px 48px -26px rgba(0,0,0,.75);
-}
 .surface-hover { transition: transform .35s cubic-bezier(.2,.7,.2,1), box-shadow .35s ease; }
 .surface-hover:hover { transform: translateY(-4px); }
-html.dark .surface-hover:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 30px 60px -28px rgba(45,212,191,.35); }
+html.dark .surface-hover:hover { box-shadow: inset 0 0 0 1px rgba(48,52,61,.8), inset 0 1px 0 rgba(255,255,255,.12), 0 30px 60px -28px rgba(var(--rim-accent), .5); }
 
 /* Featured plan: gradient edge */
 .edge-gradient::after {
@@ -1014,8 +1030,8 @@ html.dark .surface-hover:hover { box-shadow: inset 0 1px 0 rgba(255,255,255,.12)
   transition: transform .25s ease, background .25s ease, border-color .25s ease;
 }
 .btn-ghost:hover { transform: translateY(-2px); background: #fff; border-color: rgba(37,99,235,.5); }
-html.dark .btn-ghost { background: rgba(255,255,255,.05); color: #bfdbfe; border-color: rgba(147,197,253,.25); }
-html.dark .btn-ghost:hover { background: rgba(255,255,255,.09); border-color: rgba(147,197,253,.5); }
+html.dark .btn-ghost { background: rgba(255,255,255,.04); color: #e8ebf2; border-color: rgba(184,190,201,.28); box-shadow: inset 0 1px 0 rgba(255,255,255,.08); }
+html.dark .btn-ghost:hover { background: rgba(56,189,248,.08); border-color: rgba(56,189,248,.6); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 0 26px -8px rgba(56,189,248,.55); }
 
 /* Gradient text that also reads on a light page */
 .text-electric-soft {
@@ -1075,11 +1091,6 @@ html.dark .text-grad-gold { background-image: var(--g-gold); }
 html.dark .surface::before {
   background: linear-gradient(145deg, rgba(255,255,255,.30) 0%, rgba(255,255,255,.07) 22%, rgba(255,255,255,0) 48%, rgba(var(--rim-accent), 0) 66%, rgba(var(--rim-accent), .34) 100%);
 }
-html.dark .surface {
-  background:
-    radial-gradient(120% 90% at 100% 0%, rgba(var(--rim-accent), .09), transparent 60%),
-    linear-gradient(160deg, rgba(255,255,255,.075), rgba(255,255,255,.022) 60%);
-}
 
 /* silver + gold finishing details */
 .hairline-gold { height: 1px; background: linear-gradient(90deg, transparent, #e4c35e 30%, #fff3c4 50%, #e4c35e 70%, transparent); opacity: .85; }
@@ -1112,17 +1123,18 @@ html button[class~="bg-emerald-500"][class*="text-slate-950"]:disabled { filter:
    v3: FLOWING SURFACES — no grid, no outlines, depth from colour + light
    Dark = midnight navy with luminous accents. Light = pearl with coloured washes.
    ======================================================== */
-/* Dark: a midnight-navy night sky, lit from the corners by crimson, electric blue, violet and cyan.
+/* Dark: a deep black sky (#050505), lit softly from the corners by crimson, electric blue, violet, cyan and a hint of champagne.
    The glow sits on its own fixed layer (not background-attachment: fixed) so scrolling never repaints it. */
-html.dark body { background-color: #050816; background-image: none; }
+html.dark body { background-color: #050505; color: #ffffff; background-image: none; }
 html.dark::before {
   content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background-image:
-    radial-gradient(1000px 620px at 2% -8%, rgba(var(--c-crimson), .20), transparent 60%),
-    radial-gradient(900px 620px at 100% 0%, rgba(var(--c-electric), .26), transparent 62%),
-    radial-gradient(760px 520px at 78% 112%, rgba(var(--c-violet), .22), transparent 60%),
-    radial-gradient(680px 480px at 0% 100%, rgba(var(--c-cyan), .12), transparent 60%),
-    radial-gradient(520px 380px at 46% 40%, rgba(var(--c-magenta), .05), transparent 70%);
+    radial-gradient(1000px 620px at 2% -8%, rgba(var(--c-crimson), .15), transparent 60%),
+    radial-gradient(900px 620px at 100% 0%, rgba(var(--c-electric), .19), transparent 62%),
+    radial-gradient(760px 520px at 78% 112%, rgba(var(--c-violet), .16), transparent 60%),
+    radial-gradient(680px 480px at 0% 100%, rgba(var(--c-turquoise), .09), transparent 60%),
+    radial-gradient(520px 380px at 46% 40%, rgba(var(--c-magenta), .035), transparent 70%),
+    radial-gradient(480px 320px at 100% 58%, rgba(var(--c-gold), .05), transparent 70%);
 }
 /* Light: pearl white with luminous washes of sky, cyan, magenta and a touch of champagne. */
 html.light body { background-color: #F8FAFF !important; background-image: none !important; }
@@ -1148,9 +1160,10 @@ html.light::before {
 /* Cards: soft rounded surfaces. No outlines; separation comes from colour, light and shadow. */
 html.dark :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) {
   background:
-    radial-gradient(130% 100% at 100% 0%, rgba(var(--rim-accent), .15), transparent 55%),
-    linear-gradient(155deg, rgba(34,44,102,.74), rgba(14,19,50,.80) 60%, rgba(10,14,38,.86));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 28px 60px -30px rgba(0,0,0,.85), 0 14px 44px -26px rgba(var(--rim-accent), .38);
+    linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0) 32%),
+    radial-gradient(130% 100% at 100% 0%, rgba(var(--rim-accent), .12), transparent 55%),
+    linear-gradient(155deg, #1b1e25, #15171c 55%, #121418);
+  box-shadow: inset 0 0 0 1px rgba(48,52,61,.6), inset 0 1px 0 rgba(255,255,255,.07), 0 26px 56px -30px rgba(0,0,0,.95), 0 14px 44px -28px rgba(var(--rim-accent), .34);
 }
 html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) {
   background:
@@ -1162,9 +1175,9 @@ html.dark :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*
 
 /* Quiet every outline: panels lose their borders, dividers become barely-there tints */
 html:is(.dark, .light) :is(.rounded-xl, .rounded-2xl, .rounded-3xl):not(button, input, select, textarea, .keep-border)[class*="border"] { border-color: transparent !important; }
-html.dark :not(input, select, textarea, button, svg, path)[class*="border-slate-"] { border-color: rgba(255,255,255,.05) !important; }
+html.dark :not(input, select, textarea, button, svg, path)[class*="border-slate-"] { border-color: rgba(48,52,61,.85) !important; }
 html.light :not(input, select, textarea, button, svg, path)[class*="border-slate-"] { border-color: rgba(30,41,100,.07) !important; }
-html.dark [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) { border-color: rgba(255,255,255,.04) !important; }
+html.dark [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) { border-color: rgba(48,52,61,.55) !important; }
 html.light [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) { border-color: rgba(30,41,100,.06) !important; }
 
 /* Landing surfaces follow the same soft-depth language */
@@ -1175,9 +1188,10 @@ html.light [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) { border-co
 }
 html.dark .surface {
   background:
-    radial-gradient(130% 100% at 100% 0%, rgba(var(--rim-accent), .17), transparent 55%),
-    linear-gradient(155deg, rgba(34,44,102,.74), rgba(12,17,44,.84));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 30px 60px -30px rgba(0,0,0,.85), 0 16px 50px -26px rgba(var(--rim-accent), .42);
+    linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,0) 30%),
+    radial-gradient(130% 100% at 100% 0%, rgba(var(--rim-accent), .15), transparent 55%),
+    linear-gradient(155deg, #1b1e25, #15171c 58%, #111317);
+  box-shadow: inset 0 0 0 1px rgba(48,52,61,.65), inset 0 1px 0 rgba(255,255,255,.08), 0 30px 60px -30px rgba(0,0,0,.95), 0 16px 50px -26px rgba(var(--rim-accent), .4);
 }
 .surface::before, html.dark .surface::before, .edge-gradient::after { content: none; display: none; }
 .edge-gradient { box-shadow: 0 30px 80px -34px rgba(244,63,94,.55), 0 0 70px -24px rgba(139,92,246,.45) !important; }
@@ -1185,12 +1199,12 @@ html.dark .surface {
 
 /* Animated aurora: the dashboard welcome banner */
 @keyframes aurora { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-/* Dark edition: deep midnight → royal → violet → crimson, edge-lit with glow and a metallic top rim. */
+/* Dark edition: black → royal → violet → crimson, edge-lit with glow and a metallic top rim. */
 .aurora {
   background-image:
     radial-gradient(60% 80% at 92% 100%, rgba(var(--c-cyan), .26), transparent 62%),
     radial-gradient(50% 70% at 70% 0%, rgba(var(--c-magenta), .28), transparent 65%),
-    linear-gradient(120deg, #07104a, #1746d2 30%, #5d2ad8 62%, #b5122c 92%, #07104a);
+    linear-gradient(120deg, #050505, #1746d2 30%, #5d2ad8 62%, #b5122c 92%, #08090c);
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.28),
     inset 0 0 0 1px rgba(255,255,255,.06),
@@ -1242,3 +1256,77 @@ html.theme-switching, html.theme-switching *, html.theme-switching *::before, ht
 html:is(.dark, .light) .on-aurora, html:is(.dark, .light) .on-aurora * { color: #ffffff !important; }
 html:is(.dark, .light) .on-aurora .on-aurora-soft { color: rgba(255,255,255,.82) !important; }
 html:is(.dark, .light) .on-aurora .keep-ink, html:is(.dark, .light) .on-aurora .keep-ink * { color: #0f172a !important; }
+
+
+/* ========================================================
+   v4: BLACK LUXURY (dark only): light, glow and gloss.
+   Static gradients and box-shadows only: no blur filters, no backdrop-filter and nothing animated,
+   so the page stays fast. The light theme is not touched.
+   ======================================================== */
+
+/* Primary action: electric blue to violet, with a soft neon halo and a glossy top edge */
+html.dark .btn-primary {
+  box-shadow: 0 0 0 1px rgba(var(--c-violet), .45), 0 12px 34px -12px rgba(var(--c-electric), .8), 0 0 28px -10px rgba(var(--c-violet), .6), inset 0 1px 0 rgba(255,255,255,.4);
+}
+html.dark .btn-primary:hover {
+  box-shadow: 0 0 0 1px rgba(var(--c-violet), .6), 0 18px 44px -12px rgba(var(--c-electric), .9), 0 0 38px -8px rgba(var(--c-violet), .75), inset 0 1px 0 rgba(255,255,255,.45);
+}
+html.dark .btn-ruby {
+  box-shadow: 0 0 0 1px rgba(var(--c-crimson), .5), 0 12px 34px -12px rgba(var(--c-crimson), .8), 0 0 28px -10px rgba(var(--c-crimson), .55), inset 0 1px 0 rgba(255,255,255,.38);
+}
+html.dark .btn-ruby:hover {
+  box-shadow: 0 0 0 1px rgba(var(--c-crimson), .65), 0 18px 44px -12px rgba(var(--c-crimson), .9), 0 0 38px -8px rgba(var(--c-crimson), .7), inset 0 1px 0 rgba(255,255,255,.45);
+}
+/* the app's other primary buttons (green classes remapped to the brand gradient above) */
+html.dark button[class*="from-emerald-5"],
+html.dark button[class~="bg-emerald-500"][class*="text-slate-950"],
+html.dark button[class~="bg-emerald-600"][class*="text-white"] {
+  box-shadow: 0 0 0 1px rgba(var(--c-violet), .4), 0 12px 30px -12px rgba(var(--c-electric), .75), 0 0 24px -10px rgba(var(--c-violet), .5), inset 0 1px 0 rgba(255,255,255,.32);
+}
+
+/* Quiet buttons and chips: graphite with a thin reflection along the top edge */
+html.dark button[class~="bg-slate-800"] {
+  background-image: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07);
+}
+
+/* Fields light up in sky blue when focused */
+html.dark :is(input, select, textarea):focus,
+html.dark :is(input, select, textarea):focus-visible {
+  outline: none;
+  border-color: rgba(var(--c-sky), .8);
+  box-shadow: 0 0 0 3px rgba(var(--c-electric), .22), 0 0 24px -6px rgba(var(--c-sky), .5);
+}
+
+/* Status pills glow softly in their own colour */
+html.dark .rounded-full[class*="bg-rose-500/1"],
+html.dark .rounded-full[class*="bg-rose-500/2"] { box-shadow: 0 0 0 1px rgba(var(--c-crimson), .22), 0 0 16px -4px rgba(var(--c-crimson), .4); }
+html.dark .rounded-full[class*="bg-amber-500/1"],
+html.dark .rounded-full[class*="bg-amber-500/2"] { box-shadow: 0 0 0 1px rgba(var(--c-gold), .25), 0 0 16px -4px rgba(var(--c-gold), .4); }
+html.dark .rounded-full[class*="bg-sky-500/1"],
+html.dark .rounded-full[class*="bg-sky-500/2"],
+html.dark .rounded-full[class*="bg-blue-500/1"],
+html.dark .rounded-full[class*="bg-blue-500/2"] { box-shadow: 0 0 0 1px rgba(var(--c-sky), .25), 0 0 16px -4px rgba(var(--c-electric), .45); }
+html.dark .rounded-full[class*="bg-violet-500/1"],
+html.dark .rounded-full[class*="bg-violet-500/2"],
+html.dark .rounded-full[class*="bg-purple-500/1"],
+html.dark .rounded-full[class*="bg-purple-500/2"] { box-shadow: 0 0 0 1px rgba(var(--c-violet), .28), 0 0 16px -4px rgba(var(--c-violet), .45); }
+
+/* Welcome banner: a fine champagne keyline around the glow */
+html.dark .aurora {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.3),
+    inset 0 0 0 1px rgba(var(--c-gold), .22),
+    0 40px 80px -36px rgba(var(--c-electric), .7),
+    0 20px 60px -28px rgba(var(--c-crimson), .5);
+}
+html.dark .badge-gold { box-shadow: 0 0 20px -4px rgba(var(--c-gold), .6), inset 0 1px 0 rgba(255,255,255,.55); }
+
+/* chart tile keeps its class (the light theme matches on it) and takes the charcoal here */
+html.dark [class*="bg-[#090D16]"] { background-color: #101114; border-color: rgba(48,52,61,.7); }
+
+/* pop-up backdrops are near-black, so the page behind stays black rather than going grey */
+html.dark .fixed.inset-0[class*="bg-slate-950/"] { background-color: rgba(5,5,5,.88); }
+
+html.dark ::selection { background: rgba(var(--c-violet), .5); color: #ffffff; }
+

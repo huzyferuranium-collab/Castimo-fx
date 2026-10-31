@@ -334,7 +334,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
         <Reveal>
           <div className="relative overflow-hidden rounded-3xl surface px-6 py-10 sm:px-12 sm:py-12" style={{ ['--rim-accent' as string]: '168,85,247' }}>
             <SilkBand className="absolute inset-0 w-full h-full opacity-70 dark:opacity-90" />
-            <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-white via-white/80 to-transparent dark:from-[#060a12] dark:via-[#060a12]/70 dark:to-transparent" />
+            <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-white via-white/80 to-transparent dark:from-[#050505] dark:via-[#050505]/70 dark:to-transparent" />
             <Orb size={70} from="#ffd0d8" mid="#f43f5e" to="#7f1034" className="absolute right-8 top-6 animate-float-a hidden sm:block drop-shadow-[0_14px_22px_rgba(225,29,72,.45)]" />
             <div className="relative max-w-xl space-y-4">
               <h2 className={`${heading} text-2xl sm:text-3xl leading-tight`}>
