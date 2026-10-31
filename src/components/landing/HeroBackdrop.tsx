@@ -13,10 +13,10 @@ export default function HeroBackdrop({ variant = 'landing' }: { variant?: Backdr
   const [a, b, c, d] = MOODS[variant];
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-      <div className="absolute -left-32 -top-40 size-[620px] rounded-full blur-[80px] animate-blob-a opacity-60 dark:opacity-100" style={{ background: `radial-gradient(closest-side, ${a}, transparent)` }} />
-      <div className="absolute -right-40 top-40 size-[700px] rounded-full blur-[80px] animate-blob-b opacity-60 dark:opacity-100" style={{ background: `radial-gradient(closest-side, ${b}, transparent)` }} />
-      <div className="absolute -bottom-56 left-1/4 size-[620px] rounded-full blur-[80px] animate-blob-a opacity-60 dark:opacity-100 [animation-delay:-16s]" style={{ background: `radial-gradient(closest-side, ${c}, transparent)` }} />
-      <div className="absolute right-1/4 -bottom-40 size-[480px] rounded-full blur-[80px] animate-blob-b opacity-50 dark:opacity-100 [animation-delay:-8s]" style={{ background: `radial-gradient(closest-side, ${d}, transparent)` }} />
+      <div className="absolute -left-32 -top-40 size-[620px] rounded-full animate-blob-a opacity-60 dark:opacity-100" style={{ background: `radial-gradient(closest-side, ${a}, transparent)` }} />
+      <div className="absolute -right-40 top-40 size-[700px] rounded-full animate-blob-b opacity-60 dark:opacity-100" style={{ background: `radial-gradient(closest-side, ${b}, transparent)` }} />
+      <div className="absolute -bottom-56 left-1/4 size-[620px] rounded-full animate-blob-a opacity-60 dark:opacity-100 [animation-delay:-16s]" style={{ background: `radial-gradient(closest-side, ${c}, transparent)` }} />
+      <div className="absolute right-1/4 -bottom-40 size-[480px] rounded-full animate-blob-b opacity-50 dark:opacity-100 [animation-delay:-8s]" style={{ background: `radial-gradient(closest-side, ${d}, transparent)` }} />
     </div>
   );
 }

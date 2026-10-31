@@ -26,7 +26,7 @@ export const TermsModal: React.FC<TermsModalProps> = ({ isOpen, onAccept, onClos
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-950/90">
       <div className="w-full max-w-lg max-h-[92vh] flex flex-col bg-slate-900 border border-slate-800 rounded-2xl text-slate-100 shadow-2xl overflow-hidden">
         <div className="p-5 border-b border-slate-800 flex items-start gap-3">
           <ShieldAlert className="w-6 h-6 text-amber-400 shrink-0 mt-0.5" />

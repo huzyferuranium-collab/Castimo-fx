@@ -626,7 +626,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6 border border-transparent"
                 style={{ ['--rim-accent' as string]: '168,85,247' }}
               >
-                <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-fuchsia-400 via-violet-500 to-indigo-500 opacity-20 blur-2xl" />
+                <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-fuchsia-400 via-violet-500 to-indigo-500 opacity-35 bloom" />
                 {planView === undefined ? (
                   <div className="relative flex items-center gap-4">
                     <div className="w-24 h-24 rounded-full shimmer" />
@@ -694,7 +694,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                   className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6 border border-transparent"
                   style={{ ['--rim-accent' as string]: '34,211,238' }}
                 >
-                  <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-cyan-300 via-sky-400 to-blue-600 opacity-20 blur-2xl" />
+                  <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-cyan-300 via-sky-400 to-blue-600 opacity-35 bloom" />
                   <div className="relative flex items-center gap-5">
                     <ART.robot size={96} className="shrink-0 animate-float-b" />
                     <div className="min-w-0 flex-1">

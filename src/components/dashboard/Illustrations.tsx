@@ -160,7 +160,7 @@ export const RadarArt: React.FC<ArtProps> = ({ size = 120, className = '' }) => 
       <circle cx="60" cy="60" r="48" fill="none" stroke={`url(#${u}r)`} strokeWidth="3.5" />
       <circle cx="60" cy="60" r="32" fill="none" stroke={`url(#${u}r)`} strokeWidth="2" strokeOpacity=".6" />
       <circle cx="60" cy="60" r="16" fill="none" stroke={`url(#${u}r)`} strokeWidth="2" strokeOpacity=".45" />
-      <g className="animate-spin-slow" style={{ transformOrigin: '60px 60px', animationDuration: '7s' }}>
+      <g className="group-hover:animate-spin-slow" style={{ transformOrigin: '60px 60px', animationDuration: '6s' }}>
         <path d="M60 60 L60 12 A48 48 0 0 1 100 34 Z" fill={`url(#${u}w)`} />
         <line x1="60" y1="60" x2="60" y2="12" stroke="#d8fbff" strokeWidth="2.4" strokeLinecap="round" />
       </g>

@@ -68,7 +68,7 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, t
     <div
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`rounded-3xl bg-white dark:bg-slate-900 border border-transparent p-4 sm:p-5 shadow-sm backdrop-blur-md relative overflow-hidden flex flex-col sm:flex-row items-center gap-4 select-none transition-all duration-300 hover:scale-[1.015] hover:border-cyan-500/50 hover:shadow-xl hover:shadow-cyan-950/20 ${className}`}
+      className={`rounded-3xl bg-white dark:bg-slate-900 border border-transparent p-4 sm:p-5 shadow-sm relative overflow-hidden flex flex-col sm:flex-row items-center gap-4 select-none transition-all duration-300 hover:scale-[1.015] hover:border-cyan-500/50 hover:shadow-xl hover:shadow-cyan-950/20 ${className}`}
       role="region"
       aria-label="Castimo AI Trading Assistant"
     >
@@ -88,7 +88,7 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, t
         {/* 'Live Analysis' Tooltip Overlay near the robot's head */}
         {showTooltip && (
           <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 pointer-events-none animate-in fade-in zoom-in-95 duration-200">
-            <div className="px-2 py-0.5 rounded-full bg-white dark:bg-slate-900 border border-cyan-500 shadow-lg text-[9px] font-mono font-bold text-cyan-800 dark:text-cyan-300 flex items-center gap-1 whitespace-nowrap backdrop-blur-md">
+            <div className="px-2 py-0.5 rounded-full bg-white dark:bg-slate-900 border border-cyan-500 shadow-lg text-[9px] font-mono font-bold text-cyan-800 dark:text-cyan-300 flex items-center gap-1 whitespace-nowrap">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
               <span>Live Analysis</span>
             </div>

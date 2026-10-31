@@ -447,7 +447,7 @@ export const MasterAccountPanel: React.FC<MasterAccountPanelProps> = ({
 
       {/* Modal: Broadcast Master Signal */}
       {showTradeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 animate-in fade-in">
           <div className="w-full max-w-md bg-slate-900 border border-purple-800/60 rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">
@@ -564,7 +564,7 @@ export const MasterAccountPanel: React.FC<MasterAccountPanelProps> = ({
 
       {/* Modal: Connect or Switch Master MT5 Account */}
       {showConnectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 animate-in fade-in">
           <div className="w-full max-w-md bg-slate-900 border border-purple-800/60 rounded-2xl p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2">

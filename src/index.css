@@ -64,9 +64,7 @@
 }
 
 @utility glass {
-  background: linear-gradient(160deg, rgba(255,255,255,.075), rgba(255,255,255,.025) 60%);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  background: linear-gradient(160deg, rgba(30,40,95,.78), rgba(14,19,50,.84) 60%);
   border: 1px solid rgba(255,255,255,.08);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 24px 48px -24px rgba(0,0,0,.7), var(--glow, 0 0 #0000);
 }
@@ -607,7 +605,6 @@ html.light .fixed.bg-black\/60,
 html.light .fixed.bg-slate-950\/80,
 html.light .fixed.bg-slate-950\/90 {
   background-color: rgba(15, 23, 42, 0.45) !important;
-  backdrop-filter: blur(8px) !important;
 }
 
 /* Custom Scrollbar */
@@ -906,22 +903,12 @@ html.light .fixed.bg-slate-950\/90 {
    Light: clean white cards with layered soft shadows.
    ======================================================== */
 
-html.dark body {
-  background-color: #060a12;
-  background-image:
-    radial-gradient(900px 520px at 6% -8%, rgba(225,29,72,.10), transparent 60%),
-    radial-gradient(800px 520px at 100% 0%, rgba(79,70,229,.16), transparent 60%),
-    radial-gradient(900px 600px at 50% 118%, rgba(56,189,248,.10), transparent 60%);
-  background-attachment: fixed;
-}
 /* let the canvas show through the page shell */
 html.dark .min-h-screen.bg-slate-950 { background-color: transparent; }
 
 /* Header: translucent with a hairline of teal light */
 html.dark header.sticky {
-  background-color: rgba(6,10,18,.72);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-  backdrop-filter: blur(18px) saturate(150%);
+  background-color: rgba(6,10,18,.92);
   border-bottom-color: rgba(255,255,255,.07);
   box-shadow: 0 1px 0 rgba(var(--rim-accent), .18);
 }
@@ -936,14 +923,6 @@ html.dark .rounded-full[class*="bg-emerald-500/2"] {
 html.dark { scrollbar-color: rgba(148,163,184,.28) transparent; }
 
 /* Light theme: soft layered depth instead of flat white boxes */
-html.light body {
-  background-color: #f7f8fc !important;
-  background-image:
-    radial-gradient(900px 480px at 0% -10%, rgba(244,63,94,.07), transparent 60%),
-    radial-gradient(800px 480px at 100% 0%, rgba(99,102,241,.10), transparent 60%),
-    radial-gradient(900px 520px at 50% 115%, rgba(56,189,248,.10), transparent 60%);
-  background-attachment: fixed;
-}
 html.light .min-h-screen.bg-slate-950 { background-color: transparent !important; }
 
 html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody) {
@@ -975,9 +954,7 @@ html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class
   box-shadow: 0 1px 2px rgba(15,23,42,.05), 0 18px 40px -20px rgba(15,23,42,.18);
 }
 html.dark .surface {
-  background: linear-gradient(160deg, rgba(255,255,255,.075), rgba(255,255,255,.022) 60%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  backdrop-filter: blur(16px) saturate(140%);
+  background: linear-gradient(160deg, rgba(30,40,95,.80), rgba(14,19,50,.86) 60%);
   border-color: rgba(255,255,255,.08);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.09), 0 24px 48px -26px rgba(0,0,0,.75);
 }
@@ -1051,10 +1028,10 @@ html.dark .text-electric-soft { background-image: linear-gradient(100deg, #bbf7d
 
 /* Flow line between the three nodes in the hero diagram */
 @keyframes flow-dash { to { stroke-dashoffset: -40; } }
-.flow-dash { stroke-dasharray: 3 9; animation: flow-dash 2.4s linear infinite; }
+.flow-dash { stroke-dasharray: 3 9; }
 @keyframes node-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(45,212,191,.35); } 50% { box-shadow: 0 0 0 10px rgba(45,212,191,0); } }
-.node-pulse { animation: node-pulse 3.2s ease-out infinite; }
-@media (prefers-reduced-motion: reduce) { .flow-dash, .node-pulse { animation: none; } }
+.node-pulse { box-shadow: 0 0 0 5px rgba(45,212,191,.14); }
+
 
 /* Smooth page transition when switching between Client / Referral / Admin */
 @keyframes page-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -1135,36 +1112,44 @@ html button[class~="bg-emerald-500"][class*="text-slate-950"]:disabled { filter:
    v3: FLOWING SURFACES — no grid, no outlines, depth from colour + light
    Dark = midnight navy with luminous accents. Light = pearl with coloured washes.
    ======================================================== */
-/* Dark: a midnight-navy night sky, lit from the corners by crimson, electric blue, violet and cyan. */
-html.dark body {
-  background-color: #050816;
+/* Dark: a midnight-navy night sky, lit from the corners by crimson, electric blue, violet and cyan.
+   The glow sits on its own fixed layer (not background-attachment: fixed) so scrolling never repaints it. */
+html.dark body { background-color: #050816; background-image: none; }
+html.dark::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background-image:
     radial-gradient(1000px 620px at 2% -8%, rgba(var(--c-crimson), .20), transparent 60%),
     radial-gradient(900px 620px at 100% 0%, rgba(var(--c-electric), .26), transparent 62%),
     radial-gradient(760px 520px at 78% 112%, rgba(var(--c-violet), .22), transparent 60%),
     radial-gradient(680px 480px at 0% 100%, rgba(var(--c-cyan), .12), transparent 60%),
     radial-gradient(520px 380px at 46% 40%, rgba(var(--c-magenta), .05), transparent 70%);
-  background-attachment: fixed;
 }
 /* Light: pearl white with luminous washes of sky, cyan, magenta and a touch of champagne. */
-html.light body {
-  background-color: #F8FAFF !important;
+html.light body { background-color: #F8FAFF !important; background-image: none !important; }
+html.light::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
   background-image:
     radial-gradient(1000px 560px at 0% -8%, rgba(var(--c-magenta), .16), transparent 60%),
     radial-gradient(900px 560px at 100% 0%, rgba(var(--c-sky), .30), transparent 62%),
     radial-gradient(900px 560px at 50% 112%, rgba(var(--c-cyan), .20), transparent 60%),
     radial-gradient(620px 420px at 100% 100%, rgba(var(--c-crimson), .08), transparent 60%),
     radial-gradient(560px 380px at 8% 62%, rgba(var(--c-gold), .12), transparent 65%);
-  background-attachment: fixed;
 }
+
+/* Soft glow blobs behind cards: a masked gradient disc, so there is no blur filter to re-run */
+.bloom {
+  -webkit-mask-image: radial-gradient(closest-side, #000 15%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 15%, transparent 100%);
+}
+
+/* Artwork keeps its drop shadow while still; pieces that float all the time drop it (a filter on a moving layer is re-run every frame) */
+.art.animate-float-a, .art.animate-float-b, .art.animate-float-c { filter: none !important; }
 
 /* Cards: soft rounded surfaces. No outlines; separation comes from colour, light and shadow. */
 html.dark :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) {
   background:
     radial-gradient(130% 100% at 100% 0%, rgba(var(--rim-accent), .15), transparent 55%),
-    linear-gradient(155deg, rgba(34,44,102,.55), rgba(14,19,50,.62) 60%, rgba(10,14,38,.72));
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-  backdrop-filter: blur(18px) saturate(150%);
+    linear-gradient(155deg, rgba(34,44,102,.74), rgba(14,19,50,.80) 60%, rgba(10,14,38,.86));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 28px 60px -30px rgba(0,0,0,.85), 0 14px 44px -26px rgba(var(--rim-accent), .38);
 }
 html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) {
@@ -1191,7 +1176,7 @@ html.light [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) { border-co
 html.dark .surface {
   background:
     radial-gradient(130% 100% at 100% 0%, rgba(var(--rim-accent), .17), transparent 55%),
-    linear-gradient(155deg, rgba(34,44,102,.55), rgba(12,17,44,.72));
+    linear-gradient(155deg, rgba(34,44,102,.74), rgba(12,17,44,.84));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 30px 60px -30px rgba(0,0,0,.85), 0 16px 50px -26px rgba(var(--rim-accent), .42);
 }
 .surface::before, html.dark .surface::before, .edge-gradient::after { content: none; display: none; }
@@ -1206,8 +1191,6 @@ html.dark .surface {
     radial-gradient(60% 80% at 92% 100%, rgba(var(--c-cyan), .26), transparent 62%),
     radial-gradient(50% 70% at 70% 0%, rgba(var(--c-magenta), .28), transparent 65%),
     linear-gradient(120deg, #07104a, #1746d2 30%, #5d2ad8 62%, #b5122c 92%, #07104a);
-  background-size: 100% 100%, 100% 100%, 280% 280%;
-  animation: aurora 18s ease-in-out infinite;
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.28),
     inset 0 0 0 1px rgba(255,255,255,.06),
@@ -1230,7 +1213,7 @@ html.light .aurora {
   background: radial-gradient(60% 90% at 85% 0%, rgba(255,255,255,.22), transparent 60%);
 }
 html.light .aurora::after { background: linear-gradient(180deg, rgba(255,255,255,.22), transparent 38%), radial-gradient(60% 90% at 85% 0%, rgba(255,255,255,.26), transparent 60%); }
-@media (prefers-reduced-motion: reduce) { .aurora { animation: none; } }
+
 
 /* Active sidebar item: full gradient pill */
 .nav-active { background-image: var(--g-primary); box-shadow: 0 12px 26px -12px rgba(var(--c-electric), .75), inset 0 1px 0 rgba(255,255,255,.3); }

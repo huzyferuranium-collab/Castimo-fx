@@ -150,7 +150,7 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       {/* Mobile Drawer Backdrop */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm lg:hidden animate-in fade-in"
+          className="fixed inset-0 z-50 bg-slate-950/80 lg:hidden animate-in fade-in"
           onClick={() => setMobileOpen(false)}
         />
       )}

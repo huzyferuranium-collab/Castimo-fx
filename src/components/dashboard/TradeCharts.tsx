@@ -115,7 +115,7 @@ export const TradePerformance: React.FC<{ trades: CopiedTrade[] }> = ({ trades }
 
   return (
     <div className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6" style={{ ['--rim-accent' as string]: '23,107,255' }}>
-      <div aria-hidden className="absolute -left-10 -bottom-16 w-56 h-56 rounded-full bg-gradient-to-tr from-brand-electric via-brand-violet to-brand-magenta opacity-[0.16] blur-3xl" />
+      <div aria-hidden className="absolute -left-10 -bottom-16 w-56 h-56 rounded-full bg-gradient-to-tr from-brand-electric via-brand-violet to-brand-magenta opacity-[0.28] bloom" />
       <div className="relative flex items-center justify-between gap-3 mb-4">
         <h3 className="font-display font-extrabold text-base text-slate-900 dark:text-white">Trade performance</h3>
         <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">From your mirrored trades</span>

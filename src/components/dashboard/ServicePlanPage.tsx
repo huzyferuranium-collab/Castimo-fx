@@ -60,7 +60,7 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
         }`}
         style={{ ['--rim-accent' as string]: isSub ? '23,107,255' : '133,59,255' }}
       >
-        <div aria-hidden className={`absolute -right-12 -top-14 w-52 h-52 rounded-full blur-3xl opacity-25 bg-gradient-to-br ${isSub ? 'from-brand-sky via-brand-electric to-brand-royal' : 'from-brand-magenta via-brand-violet to-brand-royal'}`} />
+        <div aria-hidden className={`absolute -right-12 -top-14 w-52 h-52 rounded-full bloom opacity-40 bg-gradient-to-br ${isSub ? 'from-brand-sky via-brand-electric to-brand-royal' : 'from-brand-magenta via-brand-violet to-brand-royal'}`} />
         <div className="relative flex items-start gap-4">
           {(() => {
             const PlanArt = isSub ? ART.shield : ART.coins;

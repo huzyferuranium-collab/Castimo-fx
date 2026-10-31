@@ -90,7 +90,7 @@ const MainContent: React.FC = () => {
       <TickerBar />
 
       {/* Top Navbar */}
-      <header className="sticky top-0 z-40 bg-slate-950/85 backdrop-blur-md border-b border-slate-800">
+      <header className="sticky top-0 z-40 bg-slate-950/85 border-b border-slate-800">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-0 sm:h-16 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center justify-between w-full sm:w-auto">
             {/* Logo & Brand */}

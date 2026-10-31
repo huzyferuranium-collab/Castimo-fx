@@ -106,7 +106,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
             <h1 className={`${heading} text-[2.6rem] leading-[1.05] sm:text-6xl lg:text-7xl`}>
               Institutional MT5 copying,
               <br />
-              <span className="text-grad-flame animate-gradient-pan">priced your way.</span>
+              <span className="text-grad-flame">priced your way.</span>
             </h1>
           </Reveal>
 

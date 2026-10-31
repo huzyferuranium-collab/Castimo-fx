@@ -51,7 +51,7 @@ export const LedgerAuditModal: React.FC<LedgerAuditModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 animate-in fade-in duration-200">
       <div className="relative w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden text-slate-100 flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="p-5 border-b border-slate-800 bg-gradient-to-r from-slate-800 via-slate-900 to-slate-900 flex items-center justify-between">

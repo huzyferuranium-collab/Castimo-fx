@@ -52,10 +52,10 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail
   <section className="aurora on-aurora relative overflow-hidden rounded-[28px] sm:rounded-[34px] p-6 sm:p-9">
     {/* floating 3D-style shapes: a full scene from sm up, a small cluster beside the bell on phones */}
     <div aria-hidden className="pointer-events-none absolute inset-0 hidden sm:block">
-      <Orb size={118} from="#ffe1e7" mid="#ff5a6b" to="#a00a1f" className="absolute right-[34%] -top-5 animate-float-a drop-shadow-[0_20px_30px_rgba(0,0,0,.35)]" />
-      <Cube size={112} top="#f5d0fe" left="#853bff" right="#3a1590" className="absolute right-[19%] top-[72px] animate-float-b drop-shadow-[0_22px_32px_rgba(0,0,0,.4)]" />
+      <Orb size={118} from="#ffe1e7" mid="#ff5a6b" to="#a00a1f" className="absolute right-[34%] -top-5 animate-float-a" />
+      <Cube size={112} top="#f5d0fe" left="#853bff" right="#3a1590" className="absolute right-[19%] top-[72px] animate-float-b" />
       <Ring size={176} a="#06d6e9" b="#e83eff" className="absolute right-[3%] bottom-0 animate-float-c opacity-95" />
-      <Coin size={60} className="absolute right-[44%] bottom-5 animate-float-a drop-shadow-[0_14px_20px_rgba(0,0,0,.35)]" />
+      <Coin size={60} className="absolute right-[44%] bottom-5 animate-float-a" />
       <Orb size={42} from="#e0f2fe" mid="#38bdf8" to="#1746d2" className="absolute right-[2%] top-[42%] animate-float-c" />
     </div>
     <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-24 sm:hidden">
@@ -68,7 +68,7 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail
       <p className="text-xs sm:text-sm font-semibold tracking-wide on-aurora-soft inline-flex items-center gap-1.5">
         <Sparkles className="w-4 h-4" /> Welcome back
       </p>
-      {topRight && <div className="shrink-0 rounded-2xl bg-white/15 backdrop-blur-md px-1 py-0.5 [&_button]:!bg-white/15 [&_button]:!shadow-none">{topRight}</div>}
+      {topRight && <div className="shrink-0 rounded-2xl bg-white/15 px-1 py-0.5 [&_button]:!bg-white/15 [&_button]:!shadow-none">{topRight}</div>}
     </div>
 
     <div className="relative mt-2 max-w-xl sm:max-w-[56%] lg:max-w-xl">
@@ -78,7 +78,7 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail
 
       <div className="mt-4 flex flex-wrap gap-2">
         {chips.map((c) => (
-          <span key={c.label} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-xs font-bold">
+          <span key={c.label} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 text-xs font-bold">
             {c.pulse && (
               <span className="relative flex w-2 h-2">
                 <span className="absolute inline-flex h-full w-full rounded-full bg-white opacity-70 animate-ping" />
@@ -109,7 +109,7 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail
             <button
               type="button"
               onClick={secondary.onClick}
-              className="px-6 py-3 rounded-2xl bg-white/15 backdrop-blur-md hover:bg-white/25 font-bold text-sm transition flex items-center justify-center gap-2 cursor-pointer"
+              className="px-6 py-3 rounded-2xl bg-white/15 hover:bg-white/25 font-bold text-sm transition flex items-center justify-center gap-2 cursor-pointer"
             >
               {secondary.label}
             </button>
@@ -139,12 +139,12 @@ export const StatCard: React.FC<{
   const Art = art ? ART[art] : null;
   return (
   <div
-    className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 border border-transparent surface-hover"
+    className="group relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 border border-transparent surface-hover"
     style={{ ['--rim-accent' as string]: GLOW[tone] }}
   >
-    <div aria-hidden className={`absolute -right-8 -top-8 w-32 h-32 rounded-full bg-gradient-to-br ${TONES[tone]} opacity-25 blur-2xl`} />
+    <div aria-hidden className={`absolute -right-8 -top-8 w-32 h-32 rounded-full bg-gradient-to-br ${TONES[tone]} opacity-40 bloom`} />
     <div className="relative flex items-center gap-3">
-      {Art ? <Art size={60} className="shrink-0 -ml-1.5 -my-0.5 animate-float-c" /> : <IconTile tone={tone} size="w-10 h-10">{icon}</IconTile>}
+      {Art ? <Art size={60} className="shrink-0 -ml-1.5 -my-0.5 group-hover:animate-float-c" /> : <IconTile tone={tone} size="w-10 h-10">{icon}</IconTile>}
       <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{label}</span>
     </div>
     <div className={`relative mt-4 font-display font-extrabold tracking-tight text-2xl sm:text-3xl text-slate-900 dark:text-white ${valueClass}`}>
@@ -192,8 +192,8 @@ export const ActionCard: React.FC<{ tone: Tone; icon: React.ReactNode; title: st
       className={`group relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-4 sm:p-5 min-h-[96px] text-left cursor-pointer surface-hover border border-transparent ${className}`}
       style={{ ['--rim-accent' as string]: GLOW[tone] }}
     >
-      <div aria-hidden className={`absolute -right-6 -bottom-8 w-32 h-32 rounded-full bg-gradient-to-br ${TONES[tone]} opacity-20 blur-2xl group-hover:opacity-40 transition-opacity`} />
-      {Art && <Art size={84} className="absolute -right-2 -bottom-3 animate-float-c pointer-events-none transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3" />}
+      <div aria-hidden className={`absolute -right-6 -bottom-8 w-32 h-32 rounded-full bg-gradient-to-br ${TONES[tone]} opacity-35 bloom group-hover:opacity-60 transition-opacity`} />
+      {Art && <Art size={84} className="absolute -right-2 -bottom-3 group-hover:animate-float-c pointer-events-none transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3" />}
       <div className="relative flex items-center gap-3 pr-16 sm:pr-20">
         <IconTile tone={tone}>{icon}</IconTile>
         <div className="min-w-0 flex-1">
@@ -221,8 +221,8 @@ export const SectionBanner: React.FC<{
       className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6 flex items-center justify-between gap-4"
       style={{ ['--rim-accent' as string]: GLOW[tone] }}
     >
-      <div aria-hidden className={`absolute -right-12 -top-16 w-64 h-64 rounded-full bg-gradient-to-br ${TONES[tone]} opacity-[0.22] blur-3xl`} />
-      <div aria-hidden className={`absolute -left-10 -bottom-20 w-52 h-52 rounded-full bg-gradient-to-tr ${TONES[tone]} opacity-[0.10] blur-3xl`} />
+      <div aria-hidden className={`absolute -right-12 -top-16 w-64 h-64 rounded-full bg-gradient-to-br ${TONES[tone]} opacity-[0.38] bloom`} />
+      <div aria-hidden className={`absolute -left-10 -bottom-20 w-52 h-52 rounded-full bg-gradient-to-tr ${TONES[tone]} opacity-[0.20] bloom`} />
       <div className="relative min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <h1 className="font-display font-extrabold tracking-tight text-xl sm:text-2xl text-slate-900 dark:text-white">{title}</h1>
