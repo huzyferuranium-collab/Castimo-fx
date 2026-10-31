@@ -64,8 +64,8 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
 
   const activeItemStyle =
     accentColor === 'purple'
-      ? 'bg-purple-100 dark:bg-purple-600/15 text-purple-900 dark:text-purple-200 border-purple-300 dark:border-purple-500/40 shadow-xs font-semibold'
-      : 'bg-blue-100 dark:bg-blue-600/20 text-blue-900 dark:text-blue-200 border-blue-300 dark:border-blue-500/40 shadow-xs font-semibold';
+      ? 'nav-active font-semibold border-transparent'
+      : 'nav-active font-semibold border-transparent';
 
   const hoverItemStyle =
     accentColor === 'purple'

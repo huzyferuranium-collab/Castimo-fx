@@ -44,11 +44,20 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, [theme]);
 
+  // Briefly enable colour transitions so switching between light and dark fades instead of flashing.
+  const animateSwitch = () => {
+    const root = document.documentElement;
+    root.classList.add('theme-switching');
+    window.setTimeout(() => root.classList.remove('theme-switching'), 600);
+  };
+
   const toggleTheme = () => {
+    animateSwitch();
     setThemeState((prev) => (prev === 'dark' ? 'light' : 'dark'));
   };
 
   const setTheme = (newTheme: Theme) => {
+    animateSwitch();
     setThemeState(newTheme);
   };
 

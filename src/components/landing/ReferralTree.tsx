@@ -24,9 +24,6 @@ export const ReferralTree: React.FC<{ className?: string }> = ({ className = '' 
         <radialGradient id={`${id}v`} cx="35%" cy="30%" r="80%"><stop offset="0" stopColor="#ecd5ff" /><stop offset=".5" stopColor="#a855f7" /><stop offset="1" stopColor="#4c1d95" /></radialGradient>
         <radialGradient id={`${id}b`} cx="35%" cy="30%" r="80%"><stop offset="0" stopColor="#cfe0ff" /><stop offset=".5" stopColor="#4d6bff" /><stop offset="1" stopColor="#1b2a8a" /></radialGradient>
       </defs>
-      {rows.map((r) => (
-        <line key={r.label} x1="0" x2="460" y1={r.y} y2={r.y} stroke="currentColor" strokeOpacity=".07" strokeDasharray="2 6" />
-      ))}
       {L1.map((x) => link(rootX, Y.root + 14, x, Y.l1 - 14, '#f43f5e', 2))}
       {L1.flatMap((x, i) => [L2[i * 2], L2[i * 2 + 1]].map((x2) => link(x, Y.l1 + 14, x2, Y.l2 - 10, '#a855f7')))}
       {L2.flatMap((x, i) => [L3[i * 2], L3[i * 2 + 1]].map((x2) => link(x, Y.l2 + 10, x2, Y.l3 - 7, '#4d6bff', 1.2)))}

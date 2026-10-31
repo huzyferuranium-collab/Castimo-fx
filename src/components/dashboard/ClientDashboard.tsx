@@ -24,6 +24,10 @@ import { RobotConsole } from './RobotConsole';
 import { AuthModal } from '../auth/AuthModal';
 import { ServicePlanPage } from './ServicePlanPage';
 import { getPlanView, PlanView } from '../../services/servicePlanApi';
+import { WelcomeHero, StatCard, ProgressRing, ActionCard, IconTile, SectionBanner, Tone } from './DashboardVisuals';
+import { ART, ArtName } from './Illustrations';
+import { TradePerformance } from './TradeCharts';
+import { AnimatedNumber } from '../common/AnimatedNumber';
 
 import {
   Wallet,
@@ -417,33 +421,34 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
 
       {/* Main Content Area */}
       <div className="flex-1 w-full space-y-6 min-w-0">
-        {/* Top Header Strip with Notification Center */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between gap-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-black text-slate-900 dark:text-white truncate">
-                {navGroups.flatMap((g) => g.items).find((i) => i.id === activeSection)?.label ||
-                  'Castimo FX Terminal'}
-              </h1>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 shrink-0 font-bold">
-                {isConnected ? `#${account.accountNumber}` : 'NOT CONNECTED'}
-              </span>
-            </div>
-            {isConnected && (
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 truncate">
-                MT5 trade mirroring active
-              </p>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <NotificationCenter
-              onOpenSettlements={() => setShowSettlementModal(true)}
-              onOpenReferrals={onNavigateToReferrals}
-              onOpenPayment={() => setShowPaymentModal(true)}
+        {/* Section banner with its own illustration + Notification Center (the overview shows the welcome banner instead) */}
+        {activeSection !== 'overview' && (() => {
+          const label = navGroups.flatMap((g) => g.items).find((i) => i.id === activeSection)?.label || 'Castimo FX Terminal';
+          const looks: Record<string, { tone: Tone; art: ArtName; subtitle: string }> = {
+            plan: { tone: 'violet', art: 'medal', subtitle: 'Choose or manage how you pay for Castimo.' },
+            positions: { tone: 'aqua', art: 'radar', subtitle: 'The trades being mirrored to your account right now.' },
+            history: { tone: 'royal', art: 'clock', subtitle: 'Your closed trades, newest first.' },
+            profile: { tone: 'magenta', art: 'badge', subtitle: 'Your account details.' },
+            settlement_due: { tone: 'gold', art: 'coins', subtitle: 'Your profit-share invoice.' },
+          };
+          const look = looks[activeSection] || { tone: 'royal' as Tone, art: undefined, subtitle: isConnected ? 'MT5 trade mirroring active' : '' };
+          return (
+            <SectionBanner
+              tone={look.tone}
+              art={look.art}
+              title={label}
+              subtitle={look.subtitle}
+              chip={isConnected ? `#${account.accountNumber}` : 'NOT CONNECTED'}
+              right={
+                <NotificationCenter
+                  onOpenSettlements={() => setShowSettlementModal(true)}
+                  onOpenReferrals={onNavigateToReferrals}
+                  onOpenPayment={() => setShowPaymentModal(true)}
+                />
+              }
             />
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Monthly subscribers: only their own plan's notice is ever shown */}
         {isSubscriber && !subscriptionRunning && activeSection !== 'plan' && (
@@ -502,159 +507,212 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
 
         {activeSection === 'overview' && (
           <div className="space-y-4 animate-in fade-in duration-150">
-            {/* 1. HIGH-PRECISION EQUITY & ACCOUNT SUMMARY BAR */}
-            <div className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3.5 sm:p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono select-none">
-              {/* Left: MT5 Connection Badge & Quick Control (Keep green Connect MT5 button visible to clients) */}
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 shadow-2xs">
-                  <span
-                    className={`w-2.5 h-2.5 rounded-full ${
-                      isConnected
-                        ? 'bg-emerald-500 animate-pulse'
-                        : pending?.kind === 'working'
-                          ? 'bg-blue-400 animate-pulse'
-                          : 'bg-slate-400 dark:bg-slate-600'
-                    }`}
-                  />
-                  <span className="font-extrabold text-slate-900 dark:text-white text-xs">
-                    {isConnected
-                      ? `MT5 #${account.accountNumber}`
-                      : pending?.kind === 'working'
-                        ? 'MT5 Account: Connecting…'
-                        : 'MT5 Account: Not Connected'}
-                  </span>
-                  {isConnected ? (
-                    <>
-                      <span className="text-slate-600 dark:text-slate-300 text-[11px] font-medium hidden sm:inline">
-                        • {account.brokerName || account.brokerServer}
-                      </span>
-                      {account.isBrokerVerified && (
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-[9px] font-bold">
-                          ✓ Real Broker Verified
-                        </span>
-                      )}
-                      {account.connectionState === 'RECONNECTING' && (
-                        <span className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-[9px] font-bold">
-                          Reconnecting…
-                        </span>
-                      )}
-                      {account.connectionState === 'ERROR' && (
-                        <span className="px-1.5 py-0.5 rounded bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-[9px] font-bold">
-                          Link problem
-                        </span>
-                      )}
-                      <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-500 text-[9px] font-mono hidden md:inline">
-                        1:{account.leverage || 500}
-                      </span>
-                    </>
-                  ) : isUserAdmin ? (
-                    <span className="text-slate-600 dark:text-slate-300 text-[11px] font-medium hidden sm:inline">
-                      • {account.brokerServer || 'Awaiting MT5 Bridge'}
-                    </span>
-                  ) : null}
-                </div>
+            {/* 1. WELCOME BANNER: who you are, where things stand, what to do next (all real status) */}
+            <WelcomeHero
+              name={(userProfile?.displayName || 'Trader').split(' ')[0]}
+              state={isConnected ? 'connected' : pending?.kind === 'working' ? 'connecting' : pending?.kind === 'failed' ? 'failed' : 'disconnected'}
+              headline={
+                isConnected
+                  ? 'Your account is mirroring trades'
+                  : pending?.kind === 'working'
+                    ? 'Your MT5 terminal is connecting'
+                    : pending?.kind === 'failed'
+                      ? 'We could not finish connecting'
+                      : 'Ready to start copying'
+              }
+              detail={
+                isConnected
+                  ? `MT5 #${account.accountNumber}${account.brokerName || account.brokerServer ? ` · ${account.brokerName || account.brokerServer}` : ''} is linked and copying.`
+                  : pending?.kind === 'working'
+                    ? 'This updates by itself as soon as your account is ready. You do not need to keep this page open.'
+                    : pending?.kind === 'failed'
+                      ? 'You can try again whenever you are ready.'
+                      : 'Connect your MT5 login and broker server to mirror institutional signals with balance-scaled lots.'
+              }
+              chips={[
+                isConnected
+                  ? { label: `MT5 #${account.accountNumber}`, pulse: true }
+                  : pending?.kind === 'working'
+                    ? { label: 'Connecting…', pulse: true }
+                    : { label: 'Not connected' },
+                ...(isConnected && account.isBrokerVerified ? [{ label: 'Broker verified' }] : []),
+                ...(isConnected && account.connectionState === 'RECONNECTING' ? [{ label: 'Reconnecting…' }] : []),
+                ...(isConnected && account.connectionState === 'ERROR' ? [{ label: 'Link problem' }] : []),
+                ...(planView
+                  ? [
+                      planView.model === 'subscription'
+                        ? { label: subscriptionRunning ? `Monthly plan · ${planView.subscription?.daysLeft ?? 0}d left` : 'Monthly plan · not active' }
+                        : planView.model === 'profit_share'
+                          ? { label: '50% Profit Share' }
+                          : planView.available
+                            ? { label: 'No plan chosen yet' }
+                            : null,
+                    ].filter(Boolean) as Array<{ label: string }>
+                  : []),
+              ]}
+              primary={
+                isConnected
+                  ? { label: 'Manage account', onClick: () => setShowDisconnectModal(true), icon: <Power className="w-4 h-4" /> }
+                  : pending?.kind === 'working'
+                    ? undefined
+                    : { label: pending?.kind === 'failed' ? 'Try again' : 'Connect MT5', onClick: openConnect, icon: <Server className="w-4 h-4" /> }
+              }
+              secondary={planView?.available ? { label: 'Service plan', onClick: () => setActiveSection('plan') } : undefined}
+              topRight={
+                <NotificationCenter
+                  onOpenSettlements={() => setShowSettlementModal(true)}
+                  onOpenReferrals={onNavigateToReferrals}
+                  onOpenPayment={() => setShowPaymentModal(true)}
+                />
+              }
+            />
 
-                {isConnected ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowDisconnectModal(true)}
-                    className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700 text-[10px] font-semibold transition cursor-pointer flex items-center gap-1"
-                  >
-                    <Power className="w-3 h-3 text-rose-500" />
-                    <span>Manage</span>
-                  </button>
-                ) : null}
-              </div>
-
-              {/* Center / Summary Financial Metrics: HIDE FROM CLIENT IF NO ACCOUNT IS LINKED */}
-              {(isConnected || isUserAdmin) && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-6 border-y md:border-y-0 md:border-x border-slate-200 dark:border-slate-800/80 py-2.5 md:py-0 md:px-5">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">Balance</span>
-                    <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-slate-100">
-                      ${account.balance.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">Equity</span>
-                      {isConnected && (
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setIsSavingEquity(true);
-                            try {
-                              await tradingEngine.refreshAccountFromBroker();
-                            } finally {
-                              setIsSavingEquity(false);
-                            }
-                          }}
-                          className="text-[10px] text-blue-500 hover:text-blue-400 font-bold underline cursor-pointer"
-                          title="Re-read balance and equity from your broker"
-                        >
-                          {isSavingEquity ? 'Refreshing...' : 'Refresh from broker'}
-                        </button>
-                      )}
-                    </div>
-                    <span className="text-xs sm:text-sm font-black text-slate-950 dark:text-white">
-                      ${account.equity.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">Free Margin</span>
-                    <span className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-slate-200">
-                      ${account.freeMargin.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-slate-600 dark:text-slate-400 block">Floating P/L</span>
-                    <span
-                      className={`text-xs sm:text-sm font-black ${
-                        floatingPnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                      }`}
-                    >
-                      {floatingPnl >= 0 ? '+' : ''}${floatingPnl.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Right: 50% Profit Share Due Status & Positions Link - Only when connected or admin */}
-              {(isConnected || isUserAdmin) && (
-                <div className="flex items-center gap-2 flex-wrap justify-between md:justify-end">
-                  {hasPendingShare ? (
-                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-500/30 text-amber-900 dark:text-amber-300 text-[10px]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                      <span className="font-bold">
-                        ${(account.unpaidProfitShareUsdt || 0).toFixed(0)} USDT Due
-                      </span>
+            {/* 2. LIVE ACCOUNT FIGURES (real broker data; hidden until an account is linked) */}
+            {(isConnected || isUserAdmin) && (
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+                <StatCard tone="royal" art="coins" icon={<Wallet className="w-5 h-5" />} label="Balance" value={account.balance} />
+                <StatCard
+                  tone="violet"
+                  art="gem"
+                  icon={<TrendingUp className="w-5 h-5" />}
+                  label="Equity"
+                  value={account.equity}
+                  footer={
+                    isConnected ? (
                       <button
                         type="button"
-                        onClick={() => setShowPaymentModal(true)}
-                        className="ml-1 px-1.5 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition cursor-pointer"
+                        onClick={async () => {
+                          setIsSavingEquity(true);
+                          try {
+                            await tradingEngine.refreshAccountFromBroker();
+                          } finally {
+                            setIsSavingEquity(false);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 font-bold text-violet-600 dark:text-violet-300 hover:underline cursor-pointer"
+                        title="Re-read balance and equity from your broker"
                       >
-                        Pay
+                        <RefreshCw className={`w-3 h-3 ${isSavingEquity ? 'animate-spin' : ''}`} />
+                        {isSavingEquity ? 'Refreshing…' : 'Refresh from broker'}
+                      </button>
+                    ) : undefined
+                  }
+                />
+                <StatCard
+                  tone="aqua"
+                  art="shield"
+                  icon={<Shield className="w-5 h-5" />}
+                  label="Free margin"
+                  value={account.freeMargin}
+                  share={account.equity > 0 ? account.freeMargin / account.equity : null}
+                  footer={account.equity > 0 ? 'Share of your equity that is free' : undefined}
+                />
+                <StatCard
+                  tone={floatingPnl >= 0 ? 'mint' : 'ruby'}
+                  art="orbit"
+                  icon={<Activity className="w-5 h-5" />}
+                  label="Floating P/L"
+                  value={floatingPnl}
+                  signed
+                  valueClass={floatingPnl >= 0 ? '!text-emerald-600 dark:!text-emerald-300' : '!text-rose-600 dark:!text-rose-300'}
+                  footer={`${openTradesCount} open trade${openTradesCount === 1 ? '' : 's'}`}
+                />
+              </div>
+            )}
+
+            {/* 3. PLAN AND TRADES AT A GLANCE */}
+            <div className={`grid gap-3 sm:gap-4 ${isConnected || isUserAdmin ? 'md:grid-cols-2' : ''}`}>
+              <div
+                className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6 border border-transparent"
+                style={{ ['--rim-accent' as string]: '168,85,247' }}
+              >
+                <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-fuchsia-400 via-violet-500 to-indigo-500 opacity-20 blur-2xl" />
+                {planView === undefined ? (
+                  <div className="relative flex items-center gap-4">
+                    <div className="w-24 h-24 rounded-full shimmer" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-1/2 rounded-full shimmer" />
+                      <div className="h-3 w-2/3 rounded-full shimmer" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative flex items-center gap-5">
+                    {isSubscriber ? (
+                      <ProgressRing value={(planView?.subscription?.daysLeft ?? 0) / (planView?.price.periodDays || 30)} size={104}>
+                        <AnimatedNumber value={planView?.subscription?.daysLeft ?? 0} decimals={0} prefix="" className="font-display font-extrabold text-2xl text-slate-900 dark:text-white" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">days left</span>
+                      </ProgressRing>
+                    ) : (
+                      (() => {
+                        const PlanArt = hasPendingShare ? ART.clock : ART.medal;
+                        return <PlanArt size={96} className="shrink-0 animate-float-a" />;
+                      })()
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Your plan</div>
+                      <div className="font-display font-extrabold text-lg sm:text-xl text-slate-900 dark:text-white mt-0.5">
+                        {isSubscriber ? 'Monthly Subscription' : planView?.model === 'profit_share' ? '50% Profit Share' : planView?.available ? 'No plan chosen yet' : 'Service plan'}
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                        {isSubscriber
+                          ? subscriptionRunning
+                            ? 'Active. Nothing is owed on your profits while it runs.'
+                            : 'Not active. Pay for the plan to resume copying.'
+                          : planView?.model === 'profit_share'
+                            ? hasPendingShare
+                              ? `$${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT is due on your latest invoice.`
+                              : 'All settled. You pay 50% of new profit only.'
+                            : planView?.available
+                              ? 'Choose Monthly or 50% Profit Share to get started.'
+                              : 'Open the plan page to see how you pay.'}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {hasPendingShare && (
+                          <button
+                            type="button"
+                            onClick={() => setShowPaymentModal(true)}
+                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-amber-500/30 hover:-translate-y-0.5 transition cursor-pointer"
+                          >
+                            Pay ${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setActiveSection('plan')}
+                          className="px-4 py-2 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 text-violet-700 dark:text-violet-200 font-bold text-xs transition cursor-pointer"
+                        >
+                          {planView?.model ? 'Manage plan' : planView?.available ? 'Choose plan' : 'Open plan page'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {(isConnected || isUserAdmin) && (
+                <div
+                  className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6 border border-transparent"
+                  style={{ ['--rim-accent' as string]: '34,211,238' }}
+                >
+                  <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-cyan-300 via-sky-400 to-blue-600 opacity-20 blur-2xl" />
+                  <div className="relative flex items-center gap-5">
+                    <ART.robot size={96} className="shrink-0 animate-float-b" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Mirrored trades</div>
+                      <div className="font-display font-extrabold text-4xl text-slate-900 dark:text-white mt-0.5">
+                        <AnimatedNumber value={openTradesCount} decimals={0} prefix="" />
+                        <span className="ml-2 text-sm font-bold text-slate-500 dark:text-slate-400">open now</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setActiveSection('positions')}
+                        className="mt-3 px-4 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-700 dark:text-cyan-200 font-bold text-xs transition cursor-pointer inline-flex items-center gap-1.5"
+                        title="View active mirrored trades"
+                      >
+                        <Activity className="w-3.5 h-3.5" /> View positions
                       </button>
                     </div>
-                  ) : (
-                    <div className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-400 text-[10px] flex items-center gap-1 font-medium">
-                      <Award className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
-                      <span>{isSubscriber ? (subscriptionRunning ? `Monthly plan active (${planView?.subscription?.daysLeft ?? 0}d left)` : 'Monthly plan not active') : '50% Model Settled'}</span>
-                    </div>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => setActiveSection('positions')}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-950 hover:bg-slate-200 dark:hover:bg-slate-800 text-cyan-700 dark:text-cyan-300 border border-cyan-400/30 text-[10px] font-semibold transition cursor-pointer flex items-center gap-1 shrink-0"
-                    title="View active mirrored trades"
-                  >
-                    <Activity className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
-                    <span>{openTradesCount} Active</span>
-                  </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -726,32 +784,66 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
               </div>
             )}
 
-            {/* Prompt for clients when MT5 is not yet connected (the only Connect button on this page) */}
-            {!isConnected && !pending && (
-              <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-500/30 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-md animate-in fade-in">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">
-                    <Server className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-white">Link Your MT5 Terminal to Start Copying</h4>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Connect using your MT5 Login & Broker Server to automatically mirror institutional signals with balance-scaled lots.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={openConnect}
-                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer shrink-0"
-                >
-                  <Server className="w-4 h-4" />
-                  <span>Connect MT5</span>
-                </button>
-              </div>
-            )}
+            {/* Performance charts: drawn only from your real trades, absent until there are some */}
+            <TradePerformance trades={trades} />
 
             <RobotConsole />
+
+            {/* 4. QUICK ACTIONS: each with its own illustration; spans are arranged so the last row is never left with a hole */}
+            {(() => {
+              const actions: Array<{ tone: Tone; art: ArtName; icon: React.ReactNode; title: string; hint: string; onClick: () => void }> = [
+                { tone: 'violet', art: 'medal', icon: <Wallet className="w-5 h-5" />, title: 'Service plan', hint: 'Choose or manage how you pay', onClick: () => setActiveSection('plan') },
+                { tone: 'aqua', art: 'radar', icon: <Activity className="w-5 h-5" />, title: 'Active trades', hint: 'See what is being mirrored now', onClick: () => setActiveSection('positions') },
+                { tone: 'royal', art: 'clock', icon: <History className="w-5 h-5" />, title: 'Trade history', hint: 'Review your closed trades', onClick: () => setActiveSection('history') },
+                ...(onNavigateToReferrals
+                  ? [{ tone: 'ruby' as Tone, art: 'network' as ArtName, icon: <Share2 className="w-5 h-5" />, title: 'Referral Hub', hint: 'Earn across three levels', onClick: onNavigateToReferrals }]
+                  : []),
+                { tone: 'magenta', art: 'badge', icon: <ShieldCheck className="w-5 h-5" />, title: 'Profile', hint: 'Your account details', onClick: () => setActiveSection('profile') },
+              ];
+              const n = actions.length;
+              const xlSpan = (i: number) => (n === 5 ? (i < 3 ? 'xl:col-span-2' : 'xl:col-span-3') : n === 4 ? 'xl:col-span-3' : 'xl:col-span-2');
+              const smSpan = (i: number) => (n % 2 === 1 && i === n - 1 ? 'sm:col-span-2' : '');
+              return (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3 sm:gap-4">
+                  {actions.map((a, i) => (
+                    <ActionCard key={a.title} {...a} className={`${smSpan(i)} ${xlSpan(i)}`} />
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* 5. RECENT ACTIVITY (your real mirrored trades; nothing is shown until there are some) */}
+            {trades.length > 0 && (
+              <div className="rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6 border border-transparent" style={{ ['--rim-accent' as string]: '79,125,255' }}>
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h3 className="font-display font-extrabold text-base text-slate-900 dark:text-white">Recent activity</h3>
+                  <button type="button" onClick={() => setActiveSection('history')} className="text-xs font-bold text-blue-600 dark:text-sky-300 hover:underline cursor-pointer">
+                    View all
+                  </button>
+                </div>
+                <ul className="space-y-1.5">
+                  {[...trades]
+                    .sort((a, b) => Date.parse(b.openTime) - Date.parse(a.openTime))
+                    .slice(0, 4)
+                    .map((t) => (
+                      <li key={t.id} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-indigo-500/[0.06] transition">
+                        <IconTile tone={t.direction === 'BUY' ? 'mint' : 'ruby'} size="w-9 h-9">
+                          {t.direction === 'BUY' ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+                        </IconTile>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-bold text-slate-900 dark:text-white">{t.symbol}</div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {t.direction} · {t.volume} lots · {t.status === 'OPEN' ? 'Open' : 'Closed'}
+                          </div>
+                        </div>
+                        <div className={`font-mono text-sm font-extrabold ${(t.pnl || 0) >= 0 ? '!text-emerald-600 dark:!text-emerald-300' : '!text-rose-600 dark:!text-rose-300'}`}>
+                          {(t.pnl || 0) >= 0 ? '+' : ''}${(t.pnl || 0).toFixed(2)}
+                        </div>
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 
@@ -760,8 +852,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             ======================================================== */}
         {activeSection === 'positions' && (
           <div className="space-y-4 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-              <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 pb-1 px-1">
+              <div className="flex flex-wrap items-center gap-2">
                 <Activity className="w-4 h-4 text-emerald-400" />
                 <h3 className="text-sm font-bold text-white">Live Mirrored Positions</h3>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
@@ -782,7 +874,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             ======================================================== */}
         {activeSection === 'history' && (
           <div className="space-y-4 animate-in fade-in duration-150">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 pb-1 px-1">
               <div className="flex items-center gap-2">
                 <History className="w-4 h-4 text-emerald-400" />
                 <h3 className="text-sm font-bold text-white">Executed Trade History Log</h3>

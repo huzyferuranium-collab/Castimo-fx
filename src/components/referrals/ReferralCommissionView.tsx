@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Check, Copy, Share2, Wallet } from 'lucide-react';
+import { Check, Copy, Share2, Wallet, Users } from 'lucide-react';
+import { SectionBanner, StatCard } from '../dashboard/DashboardVisuals';
 import { ReferralSummary, getReferralSummary, requestWithdrawal } from '../../services/referralApi';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -65,6 +66,12 @@ export const ReferralCommissionView: React.FC = () => {
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 pb-12">
+      <SectionBanner
+        tone="ruby"
+        art="network"
+        title="Referral Hub"
+        subtitle={`Earn ${s.ratesPct[0]}% / ${s.ratesPct[1]}% / ${s.ratesPct[2]}% of what the people you invite actually pay.`}
+      />
       <div className="flex gap-2">
         {(['overview', 'withdraw'] as const).map((t) => (
           <button
@@ -96,28 +103,22 @@ export const ReferralCommissionView: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-3 gap-3">
-            {[
-              ['Level 1', s.counts.level1],
-              ['Level 2', s.counts.level2],
-              ['Level 3', s.counts.level3],
-            ].map(([label, count]) => (
-              <div key={String(label)} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 text-center">
-                <div className="text-2xl font-black text-slate-900 dark:text-white">{count}</div>
-                <div className="text-[11px] text-slate-500">{label} sign-ups</div>
-              </div>
+            {([
+              ['Level 1', s.counts.level1, 'ruby'],
+              ['Level 2', s.counts.level2, 'magenta'],
+              ['Level 3', s.counts.level3, 'violet'],
+            ] as const).map(([label, count, tone]) => (
+              <StatCard key={label} tone={tone} icon={<Users className="w-5 h-5" />} label={label} value={Number(count)} prefix="" decimals={0} footer="sign-ups" />
             ))}
           </div>
 
           <div className="grid grid-cols-3 gap-3">
-            {[
-              ['Earned', s.earnedUsdt],
-              ['Held / paid out', s.heldUsdt],
-              ['Available', s.availableUsdt],
-            ].map(([label, v]) => (
-              <div key={String(label)} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-                <div className="text-[11px] text-slate-500">{label}</div>
-                <div className="text-lg font-black text-slate-900 dark:text-white">${Number(v).toFixed(2)}</div>
-              </div>
+            {([
+              ['Earned', s.earnedUsdt, 'gold', 'coins'],
+              ['Held / paid out', s.heldUsdt, 'royal', 'clock'],
+              ['Available', s.availableUsdt, 'mint', 'gem'],
+            ] as const).map(([label, v, tone, art]) => (
+              <StatCard key={label} tone={tone} art={art} icon={<Wallet className="w-5 h-5" />} label={label} value={Number(v)} />
             ))}
           </div>
 

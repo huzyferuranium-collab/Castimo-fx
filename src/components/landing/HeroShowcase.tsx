@@ -19,7 +19,6 @@ export const HeroShowcase: React.FC = () => {
 
       <div className="relative [perspective:1600px]">
         <div className="surface rounded-3xl p-3 sm:p-4 md:[transform:rotateX(5deg)] transition-transform duration-700 hover:[transform:rotateX(0deg)]">
-          <div className="hairline-silver absolute inset-x-8 top-0" />
 
           {/* window bar */}
           <div className="flex items-center gap-2 px-2 pb-3">
@@ -32,7 +31,7 @@ export const HeroShowcase: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-[1.7fr_1fr] gap-3 sm:gap-4">
             {/* chart panel */}
-            <div className="rounded-2xl p-4 sm:p-5 bg-slate-900/5 dark:bg-white/[0.04] border border-slate-900/5 dark:border-white/[0.06]">
+            <div className="rounded-2xl p-4 sm:p-5 bg-indigo-500/[0.06] dark:bg-white/[0.05]">
               <div className="flex items-center justify-between mb-3">
                 <span className="h-2.5 w-24 rounded-full bg-slate-400/30" />
                 <span className="flex gap-1.5">
@@ -46,9 +45,6 @@ export const HeroShowcase: React.FC = () => {
                   <linearGradient id={`${id}line`} x1="0" x2="1"><stop offset="0" stopColor="#38bdf8" /><stop offset=".55" stopColor="#4d6bff" /><stop offset="1" stopColor="#c084fc" /></linearGradient>
                   <linearGradient id={`${id}area`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#6366f1" stopOpacity=".35" /><stop offset="1" stopColor="#6366f1" stopOpacity="0" /></linearGradient>
                 </defs>
-                {[40, 80, 120, 160].map((y) => (
-                  <line key={y} x1="0" x2="480" y1={y} y2={y} stroke="currentColor" strokeOpacity=".08" />
-                ))}
                 <path d="M0 150 C40 140 70 104 112 112 S176 66 214 78 S284 26 334 40 S404 56 480 14 V190 H0 Z" fill={`url(#${id}area)`} />
                 <path d="M0 150 C40 140 70 104 112 112 S176 66 214 78 S284 26 334 40 S404 56 480 14" fill="none" stroke={`url(#${id}line)`} strokeWidth="3.5" strokeLinecap="round" pathLength={1} strokeDasharray="1" className="animate-draw" />
                 <circle cx="480" cy="14" r="5" fill="#c084fc" />
@@ -58,7 +54,7 @@ export const HeroShowcase: React.FC = () => {
 
             {/* gauge + bars */}
             <div className="grid grid-cols-2 md:grid-cols-1 gap-3 sm:gap-4">
-              <div className="rounded-2xl p-4 bg-slate-900/5 dark:bg-white/[0.04] border border-slate-900/5 dark:border-white/[0.06] flex items-center justify-center">
+              <div className="rounded-2xl p-4 bg-indigo-500/[0.06] dark:bg-white/[0.05] flex items-center justify-center">
                 <div className="relative w-24 h-24 sm:w-28 sm:h-28">
                   <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90" aria-hidden>
                     <defs>
@@ -70,7 +66,7 @@ export const HeroShowcase: React.FC = () => {
                   <div className="absolute inset-0 flex items-center justify-center text-violet-600 dark:text-violet-300"><Shield className="w-7 h-7" /></div>
                 </div>
               </div>
-              <div className="rounded-2xl p-4 bg-slate-900/5 dark:bg-white/[0.04] border border-slate-900/5 dark:border-white/[0.06] space-y-3 flex flex-col justify-center">
+              <div className="rounded-2xl p-4 bg-indigo-500/[0.06] dark:bg-white/[0.05] space-y-3 flex flex-col justify-center">
                 {[
                   { w: 'w-[82%]', c: 'from-rose-500 to-fuchsia-500' },
                   { w: 'w-[58%]', c: 'from-violet-500 to-indigo-500' },
@@ -87,7 +83,7 @@ export const HeroShowcase: React.FC = () => {
           {/* bottom strip */}
           <div className="grid grid-cols-3 gap-3 sm:gap-4 mt-3 sm:mt-4">
             {['from-sky-400 to-blue-600', 'from-violet-500 to-purple-700', 'from-rose-500 to-red-700'].map((g, i) => (
-              <div key={i} className="rounded-xl p-3 bg-slate-900/5 dark:bg-white/[0.04] border border-slate-900/5 dark:border-white/[0.06] flex items-center gap-2.5">
+              <div key={i} className="rounded-xl p-3 bg-indigo-500/[0.06] dark:bg-white/[0.05] flex items-center gap-2.5">
                 <span className={`w-7 h-7 rounded-lg bg-gradient-to-br ${g} shadow-md`} />
                 <span className="flex-1 space-y-1.5">
                   <span className="block h-2 rounded-full bg-slate-400/30" />

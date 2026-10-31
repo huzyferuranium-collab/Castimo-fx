@@ -156,7 +156,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
       <section>
         <Reveal>
           <div className="surface rounded-2xl px-5 py-5 grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-5">
-            <div className="hairline-silver absolute inset-x-10 top-0" />
             {[
               { tone: 'royal' as const, icon: <Wallet className="w-4 h-4" />, t: 'Your funds, your broker', d: 'We never hold client deposits' },
               { tone: 'violet' as const, icon: <Lock className="w-4 h-4" />, t: 'USDT on TRON (TRC20)', d: 'Pay from any wallet' },
@@ -217,7 +216,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
 
           <Reveal delay={120}>
             <div className="surface edge-gradient surface-hover rounded-3xl p-6 sm:p-8 h-full flex flex-col" style={{ ['--rim-accent' as string]: '244,63,94' }}>
-              <div className="hairline-gold absolute inset-x-10 top-0" />
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <Tile tone="ruby" size="w-9 h-9"><Sparkles className="w-4 h-4" /></Tile>
@@ -256,7 +254,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
           <SectionTitle eyebrow="How it works" title={<>Up and copying in <span className="text-grad-flame">four steps</span></>} />
         </Reveal>
         <div className="relative max-w-6xl mx-auto">
-          <div aria-hidden className="hidden lg:block dark:lg:hidden absolute left-[12%] right-[12%] top-[46px] h-px bg-gradient-to-r from-sky-400 via-violet-400 to-rose-400 opacity-50" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {[
               { n: '01', tone: 'royal' as const, icon: <UserPlus className="w-5 h-5" />, t: 'Create your account', d: 'Sign up and confirm your email address.' },
@@ -324,7 +321,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
 
         <Reveal delay={120}>
           <div className="surface rounded-3xl p-5 sm:p-7" style={{ ['--rim-accent' as string]: '244,63,94' }}>
-            <div className="hairline-gold absolute inset-x-10 top-0" />
             <ReferralTree className="w-full h-auto text-slate-500 dark:text-slate-300" />
             <p className={`${muted} text-[11px] text-center mt-2`}>You at the top. Each level is paid on verified payments only.</p>
           </div>
@@ -340,7 +336,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
           <div className="relative overflow-hidden rounded-3xl surface px-6 py-12 sm:px-12 sm:py-16" style={{ ['--rim-accent' as string]: '168,85,247' }}>
             <SilkBand className="absolute inset-0 w-full h-full opacity-70 dark:opacity-90" />
             <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-white via-white/80 to-transparent dark:from-[#060a12] dark:via-[#060a12]/70 dark:to-transparent" />
-            <div className="hairline-gold absolute inset-x-12 top-0" />
             <Orb size={70} from="#ffd0d8" mid="#f43f5e" to="#7f1034" className="absolute right-8 top-6 animate-float-a hidden sm:block drop-shadow-[0_14px_22px_rgba(225,29,72,.45)]" />
             <div className="relative max-w-xl space-y-4">
               <h2 className={`${heading} text-3xl sm:text-4xl leading-tight`}>

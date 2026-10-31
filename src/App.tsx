@@ -1,6 +1,7 @@
 import { captureReferralFromUrl } from './services/referralApi';
 import HeroBackdrop, { BackdropVariant } from './components/landing/HeroBackdrop';
 import { LandingPage } from './components/landing/LandingPage';
+import { BrandLoader } from './components/common/BrandLoader';
 import React, { useState } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { ThemeToggle, ThemeSegmentedControl } from './components/common/ThemeToggle';
@@ -80,12 +81,7 @@ const MainContent: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-300 gap-3">
-        <div className="w-10 h-10 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin"></div>
-        <p className="text-xs font-mono text-slate-400">Initializing Castimofx Security Engine...</p>
-      </div>
-    );
+    return <BrandLoader message="Starting up securely…" />;
   }
 
   return (

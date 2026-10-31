@@ -68,7 +68,7 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, t
     <div
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 shadow-sm backdrop-blur-md relative overflow-hidden flex flex-col sm:flex-row items-center gap-4 select-none transition-all duration-300 hover:scale-[1.015] hover:border-cyan-500/50 hover:shadow-xl hover:shadow-cyan-950/20 ${className}`}
+      className={`rounded-3xl bg-white dark:bg-slate-900 border border-transparent p-4 sm:p-5 shadow-sm backdrop-blur-md relative overflow-hidden flex flex-col sm:flex-row items-center gap-4 select-none transition-all duration-300 hover:scale-[1.015] hover:border-cyan-500/50 hover:shadow-xl hover:shadow-cyan-950/20 ${className}`}
       role="region"
       aria-label="Castimo AI Trading Assistant"
     >
@@ -84,7 +84,7 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, t
       />
 
       {/* 1. COMPACT ROBOT / AI CORE VISUAL (Left/Top) */}
-      <div className="relative shrink-0 flex items-center justify-center w-24 h-24 sm:w-28 sm:h-28 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 shadow-inner overflow-visible">
+      <div className="relative shrink-0 flex items-center justify-center w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-gradient-to-br from-brand-electric/20 via-brand-violet/15 to-brand-cyan/25 dark:from-brand-electric/30 dark:via-brand-violet/25 dark:to-brand-cyan/20 shadow-[inset_0_1px_0_rgba(255,255,255,.25)] overflow-visible">
         {/* 'Live Analysis' Tooltip Overlay near the robot's head */}
         {showTooltip && (
           <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 pointer-events-none animate-in fade-in zoom-in-95 duration-200">

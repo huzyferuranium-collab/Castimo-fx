@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CalendarClock, Check, Copy, Percent, RefreshCw } from 'lucide-react';
+import { Check, Copy, RefreshCw } from 'lucide-react';
+import { ART } from './Illustrations';
 import {
   PlanView,
   ServiceModel,
@@ -54,38 +55,44 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
     const isSelected = selected === model;
     return (
       <div
-        className={`flex flex-col rounded-2xl border p-5 space-y-3 bg-white dark:bg-slate-900 ${
-          isSelected ? 'border-emerald-500 ring-1 ring-emerald-500/40' : 'border-slate-200 dark:border-slate-800'
+        className={`relative overflow-hidden flex flex-col rounded-3xl p-5 sm:p-6 space-y-3 bg-white dark:bg-slate-900 border border-transparent ${
+          isSelected ? 'outline outline-2 outline-brand-electric/70' : ''
         }`}
+        style={{ ['--rim-accent' as string]: isSub ? '23,107,255' : '133,59,255' }}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-slate-900 dark:text-white font-black">
-            {isSub ? <CalendarClock className="w-4 h-4 text-cyan-500" /> : <Percent className="w-4 h-4 text-amber-500" />}
-            <span>{isSub ? 'Monthly Subscription' : '50% Profit Share'}</span>
+        <div aria-hidden className={`absolute -right-12 -top-14 w-52 h-52 rounded-full blur-3xl opacity-25 bg-gradient-to-br ${isSub ? 'from-brand-sky via-brand-electric to-brand-royal' : 'from-brand-magenta via-brand-violet to-brand-royal'}`} />
+        <div className="relative flex items-start gap-4">
+          {(() => {
+            const PlanArt = isSub ? ART.shield : ART.coins;
+            return <PlanArt size={76} className="shrink-0 -ml-1 animate-float-a" />;
+          })()}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-display font-extrabold text-slate-900 dark:text-white">{isSub ? 'Monthly Subscription' : '50% Profit Share'}</span>
+              {isSelected && (
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 shrink-0">
+                  SELECTED
+                </span>
+              )}
+            </div>
+            <div className="mt-1 font-display text-3xl font-extrabold text-slate-900 dark:text-white">
+              {isSub ? `$${view.price.subscriptionUsdt}` : `${view.price.feePct}%`}
+              <span className="text-sm font-medium text-slate-500">
+                {isSub ? ` USD / ${view.price.periodDays} days` : ' of new profit'}
+              </span>
+            </div>
           </div>
-          {isSelected && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
-              SELECTED
-            </span>
-          )}
-        </div>
-
-        <div className="text-3xl font-black text-slate-900 dark:text-white">
-          {isSub ? `$${view.price.subscriptionUsdt}` : `${view.price.feePct}%`}
-          <span className="text-sm font-medium text-slate-500">
-            {isSub ? ` USD / ${view.price.periodDays} days` : ' of new profit'}
-          </span>
         </div>
 
         {isSub ? (
-          <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 list-disc pl-4">
+          <ul className="relative text-xs text-slate-600 dark:text-slate-300 space-y-1.5 list-disc pl-4">
             <li>One flat price. Once you have paid, we take no share of your profit and there is no 50% invoice.</li>
             <li>Paid in USDT (TRC20). Copying starts only after the payment is verified on the network.</li>
             <li>No automatic charges. When the period ends, copying stops until you pay again.</li>
             <li>Paying early adds to the time you have left.</li>
           </ul>
         ) : (
-          <ul className="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 list-disc pl-4">
+          <ul className="relative text-xs text-slate-600 dark:text-slate-300 space-y-1.5 list-disc pl-4">
             <li>No upfront fee. We take {view.price.feePct}% of NEW profit only, measured on your broker equity.</li>
             <li>Deposits and withdrawals are never counted as profit. Losses are recovered before any new fee.</li>
             <li>At the end of each settlement period an invoice is created if there is new profit, payable in USDT (TRC20).</li>
@@ -93,9 +100,9 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
           </ul>
         )}
 
-        <div className="min-h-[16px]">{isSub ? stat(view.stats.activeSubscribers, 'active subscribers') : stat(view.stats.profitShareClients, 'clients on this plan')}</div>
+        <div className="relative min-h-[16px]">{isSub ? stat(view.stats.activeSubscribers, 'active subscribers') : stat(view.stats.profitShareClients, 'clients on this plan')}</div>
 
-        <div className="mt-auto">
+        <div className="relative mt-auto">
           {isSelected ? (
             <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-500">
               <Check className="w-4 h-4" /> Your current plan

@@ -11,8 +11,22 @@
   --color-royal-300: #93a8ff; --color-royal-400: #6b86ff; --color-royal-500: #3b5bdb; --color-royal-600: #2f4bdb; --color-royal-700: #1e3a9a; --color-royal-900: #0f1d5c;
   --color-electric-400: #4d8dff; --color-electric-500: #1d6bff;
   --color-gold-300: #f1dd9a; --color-gold-400: #e4c35e; --color-gold-500: #d4af37; --color-gold-600: #b8912a;
-  --color-pearl: #f7f8fc;
+  --color-magenta-400: #e879f9; --color-magenta-500: #d946ef; --color-magenta-600: #c026d3;
+  --color-pink-300: #f9a8d4; --color-pink-400: #f472b6;
+  --color-pearl: #F8FAFF;
   --color-silver: #c3c9d4;
+  /* Signature brand palette (exact brand values) */
+  --color-brand-crimson: #F52236;
+  --color-brand-crimson-ink: #D90F2B;
+  --color-brand-royal: #1746D2;
+  --color-brand-electric: #176BFF;
+  --color-brand-sky: #38BDF8;
+  --color-brand-cyan: #06D6E9;
+  --color-brand-violet: #853BFF;
+  --color-brand-magenta: #E83EFF;
+  --color-brand-turquoise: #08C9B5;
+  --color-brand-gold: #E9BE62;
+  --color-brand-pearl: #F8FAFF;
   --animate-float-a: float-a 9s ease-in-out infinite;
   --animate-float-b: float-b 12s ease-in-out infinite;
   --animate-float-c: float-c 15s ease-in-out infinite;
@@ -137,21 +151,39 @@ html.dark {
 }
 
 :root {
-  --g-flame: linear-gradient(110deg, #fb7185 0%, #c084fc 48%, #6b86ff 100%);
-  --g-flame-ink: linear-gradient(110deg, #be123c 0%, #7e22ce 50%, #1d4ed8 100%);
-  --g-aqua: linear-gradient(110deg, #7dd3fc 0%, #4d8dff 50%, #22d3ee 100%);
-  --g-aqua-ink: linear-gradient(110deg, #0369a1 0%, #1d4ed8 55%, #0e7490 100%);
-  --g-gold: linear-gradient(120deg, #f6e3a1, #d4af37 50%, #b8912a);
-  --g-gold-ink: linear-gradient(120deg, #92700f, #b8912a 50%, #7a5c0a);
-  --g-primary: linear-gradient(135deg, #2f6bff 0%, #4f46e5 55%, #7c3aed 100%);
-  --g-ruby: linear-gradient(135deg, #e11d48 0%, #be123c 45%, #7c3aed 100%);
-  --rim-accent: 129, 140, 248;
+  /* Brand colours as r,g,b triplets for rgba(var(--c-x), .3) */
+  --c-crimson: 245, 34, 54;
+  --c-royal: 23, 70, 210;
+  --c-electric: 23, 107, 255;
+  --c-sky: 56, 189, 248;
+  --c-cyan: 6, 214, 233;
+  --c-violet: 133, 59, 255;
+  --c-magenta: 232, 62, 255;
+  --c-turquoise: 8, 201, 181;
+  --c-gold: 233, 190, 98;
+
+  --g-flame: linear-gradient(110deg, #ff4d5e 0%, #f062ff 32%, #9b6bff 62%, #38bdf8 100%);
+  --g-flame-ink: linear-gradient(110deg, #d90f2b 0%, #b01fd0 38%, #6a2bd9 66%, #1746d2 100%);
+  --g-aqua: linear-gradient(110deg, #38bdf8 0%, #4d8dff 50%, #06d6e9 100%);
+  --g-aqua-ink: linear-gradient(110deg, #0a6fb8 0%, #1746d2 55%, #07909c 100%);
+  --g-gold: linear-gradient(120deg, #f6dfa6, #e9be62 50%, #b98e2c);
+  --g-gold-ink: linear-gradient(120deg, #8a6a12, #b98e2c 50%, #6f530a);
+  --g-primary: linear-gradient(135deg, #176bff 0%, #4e53ff 52%, #853bff 100%);
+  --g-ruby: linear-gradient(135deg, #e8192f 0%, #d90f2b 45%, #853bff 100%);
+  --rim-accent: 23, 107, 255;
+  /* Illustration lighting: soft blue-violet shadow in light mode, coloured glow in dark mode */
+  --art-shadow: 0 22px 26px rgba(40, 60, 160, .28);
+  --art-lift: .0;
   --grid-line: rgba(100, 116, 139, .09);
 }
-html.dark { --grid-line: rgba(148, 163, 184, .10); }
-html[data-page="client"] { --rim-accent: 56, 189, 248; }
-html[data-page="referrals"] { --rim-accent: 244, 63, 94; }
-html[data-page="admin"] { --rim-accent: 168, 85, 247; }
+html.dark { --grid-line: rgba(148, 163, 184, .10); --art-shadow: 0 0 34px rgba(23, 107, 255, .45); }
+html[data-page="client"] { --rim-accent: 23, 107, 255; }
+html[data-page="referrals"] { --rim-accent: 245, 34, 54; }
+html[data-page="admin"] { --rim-accent: 133, 59, 255; }
+
+/* Illustrations: every piece of artwork floats with a theme-specific light source. */
+.art { filter: drop-shadow(var(--art-shadow)); }
+html.dark .art { filter: drop-shadow(0 0 22px rgba(var(--rim-accent), .5)) drop-shadow(0 14px 18px rgba(0, 0, 0, .55)); }
 
 html.light {
   color-scheme: light;
@@ -569,11 +601,11 @@ html.light textarea:focus {
 }
 
 /* 9. Modals & Backdrops in White Theme */
-html.light .bg-black\/80,
-html.light .bg-black\/75,
-html.light .bg-black\/60,
-html.light .bg-slate-950\/80,
-html.light .bg-slate-950\/90 {
+html.light .fixed.bg-black\/80,
+html.light .fixed.bg-black\/75,
+html.light .fixed.bg-black\/60,
+html.light .fixed.bg-slate-950\/80,
+html.light .fixed.bg-slate-950\/90 {
   background-color: rgba(15, 23, 42, 0.45) !important;
   backdrop-filter: blur(8px) !important;
 }
@@ -885,30 +917,6 @@ html.dark body {
 /* let the canvas show through the page shell */
 html.dark .min-h-screen.bg-slate-950 { background-color: transparent; }
 
-/* Cards: any rounded panel built on slate-900 becomes frosted glass with a rim light */
-html.dark :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) {
-  position: relative;
-  background:
-    radial-gradient(120% 90% at 100% 0%, rgba(var(--rim-accent), .09), transparent 60%),
-    linear-gradient(160deg, rgba(255,255,255,.07), rgba(255,255,255,.022) 60%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
-  backdrop-filter: blur(16px) saturate(140%);
-  border-color: rgba(255,255,255,.08);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.09), 0 22px 44px -26px rgba(0,0,0,.75);
-}
-html.dark :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass)::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  background: linear-gradient(145deg, rgba(255,255,255,.30) 0%, rgba(255,255,255,.07) 22%, rgba(255,255,255,0) 48%, rgba(var(--rim-accent),0) 66%, rgba(var(--rim-accent),.34) 100%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
-
 /* Header: translucent with a hairline of teal light */
 html.dark header.sticky {
   background-color: rgba(6,10,18,.72);
@@ -937,20 +945,7 @@ html.light body {
   background-attachment: fixed;
 }
 html.light .min-h-screen.bg-slate-950 { background-color: transparent !important; }
-/* light cards get a hairline gradient edge in the page accent colour */
-html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) { position: relative; }
-html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass)::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  background: linear-gradient(145deg, rgba(var(--rim-accent), .38) 0%, rgba(var(--rim-accent), 0) 38%, rgba(var(--rim-accent), 0) 64%, rgba(var(--rim-accent), .22) 100%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-}
+
 html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody) {
   box-shadow: 0 1px 2px rgba(15,23,42,.05), 0 14px 34px -16px rgba(15,23,42,.14);
   border-color: rgba(15,23,42,.08) !important;
@@ -1134,3 +1129,133 @@ html button[class~="bg-emerald-500"][class*="text-slate-950"]:hover,
 html button[class~="bg-emerald-600"][class*="text-white"]:hover { filter: brightness(1.1) saturate(1.1); }
 html button[class*="from-emerald-5"]:disabled,
 html button[class~="bg-emerald-500"][class*="text-slate-950"]:disabled { filter: grayscale(.4); opacity: .6; }
+
+
+/* ========================================================
+   v3: FLOWING SURFACES — no grid, no outlines, depth from colour + light
+   Dark = midnight navy with luminous accents. Light = pearl with coloured washes.
+   ======================================================== */
+/* Dark: a midnight-navy night sky, lit from the corners by crimson, electric blue, violet and cyan. */
+html.dark body {
+  background-color: #050816;
+  background-image:
+    radial-gradient(1000px 620px at 2% -8%, rgba(var(--c-crimson), .20), transparent 60%),
+    radial-gradient(900px 620px at 100% 0%, rgba(var(--c-electric), .26), transparent 62%),
+    radial-gradient(760px 520px at 78% 112%, rgba(var(--c-violet), .22), transparent 60%),
+    radial-gradient(680px 480px at 0% 100%, rgba(var(--c-cyan), .12), transparent 60%),
+    radial-gradient(520px 380px at 46% 40%, rgba(var(--c-magenta), .05), transparent 70%);
+  background-attachment: fixed;
+}
+/* Light: pearl white with luminous washes of sky, cyan, magenta and a touch of champagne. */
+html.light body {
+  background-color: #F8FAFF !important;
+  background-image:
+    radial-gradient(1000px 560px at 0% -8%, rgba(var(--c-magenta), .16), transparent 60%),
+    radial-gradient(900px 560px at 100% 0%, rgba(var(--c-sky), .30), transparent 62%),
+    radial-gradient(900px 560px at 50% 112%, rgba(var(--c-cyan), .20), transparent 60%),
+    radial-gradient(620px 420px at 100% 100%, rgba(var(--c-crimson), .08), transparent 60%),
+    radial-gradient(560px 380px at 8% 62%, rgba(var(--c-gold), .12), transparent 65%);
+  background-attachment: fixed;
+}
+
+/* Cards: soft rounded surfaces. No outlines; separation comes from colour, light and shadow. */
+html.dark :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) {
+  background:
+    radial-gradient(130% 100% at 100% 0%, rgba(var(--rim-accent), .15), transparent 55%),
+    linear-gradient(155deg, rgba(34,44,102,.55), rgba(14,19,50,.62) 60%, rgba(10,14,38,.72));
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 28px 60px -30px rgba(0,0,0,.85), 0 14px 44px -26px rgba(var(--rim-accent), .38);
+}
+html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) {
+  background:
+    radial-gradient(130% 100% at 100% 0%, rgba(var(--rim-accent), .11), transparent 55%),
+    linear-gradient(160deg, #ffffff, #f6f7ff);
+  box-shadow: 0 1px 2px rgba(30,41,100,.05), 0 22px 46px -24px rgba(var(--rim-accent), .40);
+}
+html.dark :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass)::before, html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass)::before { content: none; }
+
+/* Quiet every outline: panels lose their borders, dividers become barely-there tints */
+html:is(.dark, .light) :is(.rounded-xl, .rounded-2xl, .rounded-3xl):not(button, input, select, textarea, .keep-border)[class*="border"] { border-color: transparent !important; }
+html.dark :not(input, select, textarea, button, svg, path)[class*="border-slate-"] { border-color: rgba(255,255,255,.05) !important; }
+html.light :not(input, select, textarea, button, svg, path)[class*="border-slate-"] { border-color: rgba(30,41,100,.07) !important; }
+html.dark [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) { border-color: rgba(255,255,255,.04) !important; }
+html.light [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) { border-color: rgba(30,41,100,.06) !important; }
+
+/* Landing surfaces follow the same soft-depth language */
+.surface {
+  background: linear-gradient(160deg, #ffffff, #f6f7ff);
+  border: 0;
+  box-shadow: 0 1px 2px rgba(30,41,100,.05), 0 24px 50px -26px rgba(var(--rim-accent), .42);
+}
+html.dark .surface {
+  background:
+    radial-gradient(130% 100% at 100% 0%, rgba(var(--rim-accent), .17), transparent 55%),
+    linear-gradient(155deg, rgba(34,44,102,.55), rgba(12,17,44,.72));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 30px 60px -30px rgba(0,0,0,.85), 0 16px 50px -26px rgba(var(--rim-accent), .42);
+}
+.surface::before, html.dark .surface::before, .edge-gradient::after { content: none; display: none; }
+.edge-gradient { box-shadow: 0 30px 80px -34px rgba(244,63,94,.55), 0 0 70px -24px rgba(139,92,246,.45) !important; }
+.hairline-gold, .hairline-silver { display: none; }
+
+/* Animated aurora: the dashboard welcome banner */
+@keyframes aurora { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+/* Dark edition: deep midnight → royal → violet → crimson, edge-lit with glow and a metallic top rim. */
+.aurora {
+  background-image:
+    radial-gradient(60% 80% at 92% 100%, rgba(var(--c-cyan), .26), transparent 62%),
+    radial-gradient(50% 70% at 70% 0%, rgba(var(--c-magenta), .28), transparent 65%),
+    linear-gradient(120deg, #07104a, #1746d2 30%, #5d2ad8 62%, #b5122c 92%, #07104a);
+  background-size: 100% 100%, 100% 100%, 280% 280%;
+  animation: aurora 18s ease-in-out infinite;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.28),
+    inset 0 0 0 1px rgba(255,255,255,.06),
+    0 40px 80px -36px rgba(var(--c-electric), .75),
+    0 20px 60px -28px rgba(var(--c-crimson), .55);
+}
+/* Light edition: luminous electric blue → violet → crimson, brightened by a sky/cyan bloom and a glossy top sheen. */
+html.light .aurora {
+  background-image:
+    radial-gradient(55% 75% at 96% 100%, rgba(var(--c-cyan), .34), transparent 62%),
+    radial-gradient(45% 65% at 72% -6%, rgba(var(--c-sky), .36), transparent 65%),
+    linear-gradient(120deg, #1746d2, #176bff 30%, #853bff 62%, #d90f2b 96%, #1746d2);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.55),
+    0 36px 70px -34px rgba(var(--c-electric), .6),
+    0 18px 50px -28px rgba(var(--c-crimson), .42);
+}
+.aurora::after { /* soft light sweep */
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(60% 90% at 85% 0%, rgba(255,255,255,.22), transparent 60%);
+}
+html.light .aurora::after { background: linear-gradient(180deg, rgba(255,255,255,.22), transparent 38%), radial-gradient(60% 90% at 85% 0%, rgba(255,255,255,.26), transparent 60%); }
+@media (prefers-reduced-motion: reduce) { .aurora { animation: none; } }
+
+/* Active sidebar item: full gradient pill */
+.nav-active { background-image: var(--g-primary); box-shadow: 0 12px 26px -12px rgba(var(--c-electric), .75), inset 0 1px 0 rgba(255,255,255,.3); }
+html:is(.dark, .light) .nav-active, html:is(.dark, .light) .nav-active * { color: #ffffff !important; }
+/* count/plan badges inside the active pill become frosted glass so their white text stays readable in both themes */
+html:is(.dark, .light) .nav-active [class*="bg-"] { background-color: rgba(255,255,255,.22) !important; border-color: transparent !important; }
+
+/* Branded loader + shimmer */
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.shimmer { background-image: linear-gradient(110deg, rgba(148,163,184,.10) 30%, rgba(148,163,184,.30) 50%, rgba(148,163,184,.10) 70%); background-size: 200% 100%; animation: shimmer 1.6s linear infinite; }
+.loader-ring {
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, #F52236, #E83EFF, #853BFF, #176BFF, #06D6E9, #F52236);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  animation: spin 1.2s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Smooth light/dark switch (class is added for a moment by the theme toggle) */
+html.theme-switching, html.theme-switching *, html.theme-switching *::before, html.theme-switching *::after {
+  transition: background-color .45s ease, color .35s ease, border-color .45s ease, box-shadow .45s ease, fill .35s ease, stroke .35s ease !important;
+}
+
+/* White text on the gradient welcome banner (beats the light theme's text remapping) */
+html:is(.dark, .light) .on-aurora, html:is(.dark, .light) .on-aurora * { color: #ffffff !important; }
+html:is(.dark, .light) .on-aurora .on-aurora-soft { color: rgba(255,255,255,.82) !important; }
+html:is(.dark, .light) .on-aurora .keep-ink, html:is(.dark, .light) .on-aurora .keep-ink * { color: #0f172a !important; }
