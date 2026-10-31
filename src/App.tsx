@@ -1,4 +1,5 @@
 import { captureReferralFromUrl } from './services/referralApi';
+import HeroBackdrop from './components/landing/HeroBackdrop';
 import React, { useState } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { ThemeToggle, ThemeSegmentedControl } from './components/common/ThemeToggle';
@@ -174,16 +175,17 @@ const MainContent: React.FC = () => {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {!userProfile ? (
           /* Unauthenticated Landing / Onboarding View */
-          <div className="py-8 space-y-12 animate-in fade-in duration-300">
+          <div className="relative py-8 space-y-12 animate-in fade-in duration-300">
+            <HeroBackdrop />
             {/* Hero Section */}
             <div className="text-center max-w-3xl mx-auto space-y-4">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium dark:glass dark:glow-green">
                 <Shield className="w-3.5 h-3.5" />
                 <span>Monthly Plan or 50% Profit Share • 3-Level Referral Program</span>
               </div>
               <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight">
                 Institutional MT5 Copying with{' '}
-                <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+                <span className="text-electric">
                   Your Choice of Plan & 3-Level Commissions
                 </span>
               </h2>
@@ -213,27 +215,27 @@ const MainContent: React.FC = () => {
 
             {/* Architecture Highlights */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
+              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3 dark:glass dark:glass-rim dark:glow-teal">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                   <TrendingUp className="w-5 h-5" />
                 </div>
-                <h3 className="font-bold text-base text-white">Two Ways to Pay</h3>
+                <h3 className="font-bold text-base text-white"><span className="text-electric">50% Profit Share</span> or Monthly</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
                   Pick a flat $100 monthly plan, or the 50% Profit Share where we earn only when your account makes new profit. You can see both side by side after you sign up.
                 </p>
               </div>
 
-              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
+              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3 dark:glass dark:glass-rim dark:glow-teal">
                 <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
                   <Share2 className="w-5 h-5" />
                 </div>
-                <h3 className="font-bold text-base text-white">3-Level Referral Program</h3>
+                <h3 className="font-bold text-base text-white"><span className="text-electric">3-Tier</span> Commissions</h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
                   Earn USDT from what your network actually pays: 5% on level 1 (direct), 3% on level 2 and 2% on level 3.
                 </p>
               </div>
 
-              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
+              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3 dark:glass dark:glass-rim">
                 <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
                   <Shield className="w-5 h-5" />
                 </div>
