@@ -21,8 +21,6 @@ import { LedgerAuditModal } from '../ledger/LedgerAuditModal';
 import { SidebarNav, NavGroup } from '../common/SidebarNav';
 
 import { RobotConsole } from './RobotConsole';
-import { MarketWatchPanel } from './MarketWatchPanel';
-import { ActivityPanel } from './ActivityPanel';
 import { AuthModal } from '../auth/AuthModal';
 import { ServicePlanPage } from './ServicePlanPage';
 import { getPlanView, PlanView } from '../../services/servicePlanApi';
@@ -754,8 +752,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             )}
 
             <RobotConsole />
-            <MarketWatchPanel />
-            <ActivityPanel />
           </div>
         )}
 

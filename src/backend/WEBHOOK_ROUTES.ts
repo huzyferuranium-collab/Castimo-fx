@@ -10,7 +10,6 @@
  * - GET  /api/trade/metrics: Returns execution statistics and replication telemetry.
  */
 
-import { parseSymbols, readMarkets } from './marketWatch';
 import { clientIpFrom } from './clientIp';
 import { Router, Request, Response } from 'express';
 import { Mt5ConnectionManager } from './MT5_CONNECTION_MANAGER';
@@ -582,46 +581,6 @@ tradeRouter.get('/robot-state', requireUser, (_req: Request, res: Response) => {
 /** GET /api/trade/my-ip: the address this request came from, so the person's own audit entries can show it. */
 tradeRouter.get('/my-ip', requireUser, (req: Request, res: Response) => {
   return res.status(200).json({ success: true, ip: clientIpFrom(req.headers as any, req.socket?.remoteAddress) });
-});
-
-/**
- * GET /api/trade/activity
- * What the master really did since the server last started: opened, changed or closed trades and how many clients got
- * a copy. Nothing is generated; an empty list just means nothing has happened yet.
- */
-tradeRouter.get('/activity', requireUser, (_req: Request, res: Response) => {
-  return res.status(200).json({
-    success: true,
-    live: connectionManager.isConnected(),
-    events: replicationEngine.activity.recent(50),
-    signals: replicationEngine.activity.signals(20),
-    since: 'the server last started',
-    updatedAt: new Date().toISOString(),
-  });
-});
-
-/**
- * GET /api/trade/market-watch
- * Bid, ask and spread for a few symbols, read from the master's real broker feed. A symbol the feed has no price for
- * is returned as unavailable. Set MARKET_WATCH_SYMBOLS (comma separated) to match your broker's symbol names.
- */
-const subscribedSymbols = new Set<string>();
-tradeRouter.get('/market-watch', requireUser, (_req: Request, res: Response) => {
-  const symbols = parseSymbols(process.env.MARKET_WATCH_SYMBOLS);
-  const conn: any = connectionManager.isConnected() ? connectionManager.getMasterStreamingConnection() : null;
-  // Ask the broker feed for these prices once; they then stay up to date on the connection.
-  for (const s of symbols) {
-    if (conn && !subscribedSymbols.has(s) && typeof conn.subscribeToMarketData === 'function') {
-      subscribedSymbols.add(s);
-      Promise.resolve(conn.subscribeToMarketData(s)).catch(() => subscribedSymbols.delete(s));
-    }
-  }
-  return res.status(200).json({
-    success: true,
-    live: Boolean(conn),
-    markets: readMarkets(conn?.terminalState ?? null, symbols),
-    updatedAt: new Date().toISOString(),
-  });
 });
 
 /**

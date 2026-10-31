@@ -514,26 +514,6 @@ await scenario('Q. if the start-up look is impossible, the engine goes live afte
   return e;
 });
 
-await scenario('R. the activity log holds only what really happened (and starts empty)', async (set) => {
-  const w = makeWorld(['A', 'B']);
-  const e = boot(w);
-  set(e);
-  assert.equal(e.activity.size(), 0, 'nothing is made up at start');
-  await e.pollMaster();
-  const t = masterTrade(w, 7001);
-  await w.stream.emit('onPositionUpdated', t);
-  const kinds = e.activity.recent().map((x) => x.kind).sort();
-  assert.deepEqual(kinds, ['copied', 'master_opened']);
-  const sig = e.activity.signals();
-  assert.equal(sig.length, 1);
-  assert.equal(sig[0].symbol, t.symbol);
-  assert.match(e.activity.recent().find((x) => x.kind === 'copied').text, /copied to 2 clients/);
-  masterCloses(w, 7001);
-  await w.stream.emit('onPositionRemoved', '7001');
-  assert.equal(e.activity.recent()[0].kind, 'master_closed');
-  return e;
-});
-
 const failed = results.filter(([, ok]) => !ok);
 console.log(`\n${results.length - failed.length}/${results.length} scenarios passed`);
 process.exit(failed.length ? 1 : 0);

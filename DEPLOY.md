@@ -58,12 +58,6 @@ Log lines to look for: `[COPY_MEMORY] Start-up look done`, `Found client … cop
 Two copies of the server run side by side for about two minutes during every Render deploy. If the master opens a trade in that window both can copy
 it; the double is closed within about a minute by the check above, but it is still best to deploy while the master has no new trade about to open.
 
-## Dashboard panels (real data only)
-- **Live Market Watch** shows bid, ask and spread read from the master's broker feed. Set `MARKET_WATCH_SYMBOLS` (comma separated, default
-  `XAUUSD,EURUSD,GBPUSD,USDJPY`) to your broker's exact symbol names (for example `XAUUSD.m`). A symbol the feed has no price for shows "no price from the feed".
-- **Recent Signals / Activity Log** list what the master really did since the server last started (opened, changed, closed, and how many clients got a copy).
-  They start empty after every restart and are never filled with sample entries.
-- **Robot** graphic shows only the master's real state (searching / trade found / no active trade / data unavailable).
 - **Audit-log addresses** are the address the server saw for that person's own session.
 
 ## Email confirmation codes (optional)

@@ -15,7 +15,6 @@ import {
   type RpcMetaApiConnectionInstance,
 } from './metaapiClient';
 import { Mt5ConnectionManager, type ClientConnectionRecord } from './MT5_CONNECTION_MANAGER';
-import { ActivityLog } from './activityLog';
 import {
   copyComment,
   parseCopyComment,
@@ -237,9 +236,6 @@ export class ReplicationEngine {
   private copyStats = { lastCheckAt: 0, remembered: 0, leftoversClosed: 0, doublesClosed: 0 };
   private confirmMs = CONFIRM_MS;
 
-  /** What the master really did since the server started (shown on the dashboard). Starts empty. */
-  public readonly activity = new ActivityLog(100);
-
   private constructor(host: EngineHost, options: { confirmMs?: number } = {}) {
     this.connectionManager = host;
     if (options.confirmMs !== undefined) this.confirmMs = options.confirmMs;
@@ -444,15 +440,6 @@ export class ReplicationEngine {
   public async onPositionOpened(position: MetatraderPosition): Promise<ReplicatedOrderResult[]> {
     const posId = String(position.id);
     this.masterPositions.set(posId, position);
-    const openedSide = String((position as any).type || '').toUpperCase().includes('SELL') ? 'SELL' : 'BUY';
-    this.activity.add({
-      kind: 'master_opened',
-      symbol: String(position.symbol || ''),
-      side: openedSide,
-      volume: Number((position as any).volume) || undefined,
-      price: Number((position as any).openPrice) || undefined,
-    });
-
     // Initialize mapping container
     if (!this.positionMap.has(posId)) {
       this.positionMap.set(posId, {
@@ -465,7 +452,6 @@ export class ReplicationEngine {
     const activeClients = this.connectionManager.getActiveClients();
     if (activeClients.length === 0) {
       console.log('ℹ️ [REPLICATION_ENGINE] No active client accounts to mirror this trade.');
-      this.activity.add({ kind: 'copied', symbol: String(position.symbol || ''), copied: 0, notCopied: 0 });
       return [];
     }
 
@@ -479,12 +465,6 @@ export class ReplicationEngine {
     this.totalCopiedTrades += results.length;
     this.successfulCopies += results.filter(r => r.status === 'EXECUTED').length;
     this.executionHistory.push(...results);
-    this.activity.add({
-      kind: 'copied',
-      symbol: String(position.symbol || ''),
-      copied: results.filter((r) => r.status === 'EXECUTED').length,
-      notCopied: results.filter((r) => r.status !== 'EXECUTED').length,
-    });
 
     return results;
   }
@@ -664,14 +644,6 @@ export class ReplicationEngine {
    */
   public async onPositionClosed(positionId: string): Promise<void> {
     const posId = String(positionId);
-    const closedPos = this.masterPositions.get(posId);
-    if (closedPos) {
-      this.activity.add({
-        kind: 'master_closed',
-        symbol: String(closedPos.symbol || ''),
-        side: String((closedPos as any).type || '').toUpperCase().includes('SELL') ? 'SELL' : 'BUY',
-      });
-    }
     this.masterPositions.delete(posId);
     const mapping = this.positionMap.get(posId);
 
