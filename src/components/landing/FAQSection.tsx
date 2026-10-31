@@ -90,9 +90,11 @@ const FAQ_ITEMS: FAQItem[] = [
 
 interface FAQSectionProps {
   onSelectTab?: (tab: 'client' | 'referrals' | 'admin') => void;
+  /** Hide the built-in call-to-action strip (the landing page has its own). */
+  hideCta?: boolean;
 }
 
-export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab }) => {
+export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab, hideCta }) => {
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<string | null>('ps-how-it-works');
   const [searchQuery, setSearchQuery] = useState('');
@@ -115,7 +117,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab }) => {
     <div className="space-y-8 max-w-4xl mx-auto pt-6 pb-12 animate-in fade-in duration-300">
       {/* Title Header */}
       <div className="text-center space-y-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-sky-500/10 border border-sky-500/30 text-sky-400 text-xs font-semibold">
           <HelpCircle className="w-3.5 h-3.5" />
           <span>Knowledge Base & Platform Mechanics</span>
         </div>
@@ -141,7 +143,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab }) => {
               onClick={() => setActiveCategory(cat.id)}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                 activeCategory === cat.id
-                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-md shadow-emerald-500/20'
+                  ? 'bg-sky-500 text-slate-950 font-bold shadow-md shadow-sky-500/20'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
               }`}
             >
@@ -156,7 +158,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab }) => {
             placeholder="Search questions..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500"
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-sky-500"
           />
           <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" />
         </div>
@@ -176,7 +178,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab }) => {
                 key={item.id}
                 className={`rounded-2xl transition border overflow-hidden ${
                   isExpanded
-                    ? 'bg-slate-900/90 border-emerald-500/40 shadow-lg shadow-emerald-950/20'
+                    ? 'bg-slate-900/90 border-sky-500/40 shadow-lg shadow-sky-950/20'
                     : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
                 }`}
               >
@@ -189,7 +191,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab }) => {
                     <div
                       className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
                         item.category === 'profit_share'
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
                           : item.category === 'referrals'
                           ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                           : 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
@@ -219,7 +221,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab }) => {
 
                   <div
                     className={`w-7 h-7 rounded-lg bg-slate-800 flex items-center justify-center text-slate-400 shrink-0 transition-transform duration-200 ${
-                      isExpanded ? 'rotate-180 text-emerald-400 bg-emerald-500/15' : ''
+                      isExpanded ? 'rotate-180 text-sky-400 bg-sky-500/15' : ''
                     }`}
                   >
                     <ChevronDown className="w-4 h-4" />
@@ -233,8 +235,8 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab }) => {
                     </div>
 
                     {item.highlight && (
-                      <div className="p-3 rounded-xl bg-slate-950 border border-emerald-500/20 text-emerald-300 text-[11px] font-medium flex items-start gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <div className="p-3 rounded-xl bg-slate-950 border border-sky-500/20 text-sky-300 text-[11px] font-medium flex items-start gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
                         <span>{item.highlight}</span>
                       </div>
                     )}
@@ -247,7 +249,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab }) => {
       </div>
 
       {/* Quick Launch CTA Strip */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900 border border-emerald-800/40 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+      {!hideCta && <div className="p-6 rounded-2xl bg-gradient-to-r from-sky-950/40 via-slate-900 to-slate-900 border border-sky-800/40 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
         <div>
           <h4 className="font-bold text-base text-white">Ready to start copying or referring?</h4>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -260,7 +262,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab }) => {
             <>
               <button
                 onClick={() => onSelectTab('client')}
-                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 font-bold text-xs text-slate-950 shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 font-bold text-xs text-slate-950 shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <span>Client Terminal</span>
                 <ArrowRight className="w-4 h-4" />
@@ -275,7 +277,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab }) => {
             </>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   );
 };

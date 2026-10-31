@@ -65,12 +65,12 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
   const activeItemStyle =
     accentColor === 'purple'
       ? 'bg-purple-100 dark:bg-purple-600/15 text-purple-900 dark:text-purple-200 border-purple-300 dark:border-purple-500/40 shadow-xs font-semibold'
-      : 'bg-emerald-100 dark:bg-emerald-600/15 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/40 shadow-xs font-semibold';
+      : 'bg-blue-100 dark:bg-blue-600/20 text-blue-900 dark:text-blue-200 border-blue-300 dark:border-blue-500/40 shadow-xs font-semibold';
 
   const hoverItemStyle =
     accentColor === 'purple'
       ? 'hover:bg-purple-50 dark:hover:bg-purple-950/30 hover:text-purple-900 dark:hover:text-purple-200'
-      : 'hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:text-emerald-900 dark:hover:text-emerald-200';
+      : 'hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:text-blue-900 dark:hover:text-blue-200';
 
   return (
     <>

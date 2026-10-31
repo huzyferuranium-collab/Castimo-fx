@@ -1,5 +1,5 @@
 import { captureReferralFromUrl } from './services/referralApi';
-import HeroBackdrop from './components/landing/HeroBackdrop';
+import HeroBackdrop, { BackdropVariant } from './components/landing/HeroBackdrop';
 import { LandingPage } from './components/landing/LandingPage';
 import React, { useState } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
@@ -59,6 +59,12 @@ const MainContent: React.FC = () => {
     setActiveTab(userProfile?.role === 'admin' ? 'admin' : 'client');
   }, [userProfile?.role]);
 
+  // Each page gets its own colour mood from the shared palette.
+  const pageMood: BackdropVariant = !userProfile ? 'landing' : activeTab === 'admin' && isAdmin ? 'admin' : activeTab === 'referrals' ? 'referrals' : 'client';
+  React.useEffect(() => {
+    document.documentElement.dataset.page = pageMood;
+  }, [pageMood]);
+
   const handleSelectTab = (tab: ActivePortalTab) => {
     if (tab === 'admin') {
       if (isAdmin) setActiveTab('admin');
@@ -84,6 +90,7 @@ const MainContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
+      <HeroBackdrop variant={pageMood} />
       <TickerBar />
 
       {/* Top Navbar */}
@@ -92,13 +99,13 @@ const MainContent: React.FC = () => {
           <div className="flex items-center justify-between w-full sm:w-auto">
             {/* Logo & Brand */}
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center text-slate-950 font-black shadow-md shadow-emerald-500/20 shrink-0">
-                <TrendingUp className="w-4 h-4 text-slate-950" />
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 via-violet-600 to-rose-500 flex items-center justify-center text-white font-black shadow-lg shadow-violet-500/30 ring-1 ring-white/30 shrink-0">
+                <TrendingUp className="w-4 h-4 text-white" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
                   <h1 className="text-sm sm:text-base font-black tracking-wider text-white">CASTIMOFx</h1>
-                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-700 dark:text-sky-200 border border-sky-500/40">
                     MT5
                   </span>
                 </div>
@@ -123,7 +130,7 @@ const MainContent: React.FC = () => {
               onClick={() => handleSelectTab('client')}
               className={`px-3 sm:px-3.5 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
                 activeTab === 'client'
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-sm'
+                  ? 'bg-blue-500/15 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200 border border-blue-500/30 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -134,13 +141,13 @@ const MainContent: React.FC = () => {
               onClick={() => handleSelectTab('referrals')}
               className={`px-3 sm:px-3.5 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
                 activeTab === 'referrals'
-                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30 shadow-sm'
+                  ? 'bg-rose-500/15 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200 border border-rose-500/30 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Share2 className="w-3.5 h-3.5 text-blue-400" />
+              <Share2 className="w-3.5 h-3.5 text-rose-400" />
               <span>Referral Hub</span>
-              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-gradient-to-r from-rose-500/20 via-violet-500/20 to-blue-500/20 text-rose-700 dark:text-rose-200 border border-rose-500/30">
                 5%•3%•2%
               </span>
             </button>
@@ -177,7 +184,6 @@ const MainContent: React.FC = () => {
         {!userProfile ? (
           /* Unauthenticated Landing / Onboarding View */
           <div className="relative py-4 animate-in fade-in duration-300">
-            <HeroBackdrop />
             <LandingPage onSelectTab={handleSelectTab} />
           </div>
         ) : (

@@ -16,6 +16,10 @@ import {
 } from 'lucide-react';
 import { Reveal, CountUp } from './Reveal';
 import { FAQSection } from './FAQSection';
+import { HeroShowcase } from './HeroShowcase';
+import { SilkBand } from './SilkBand';
+import { ReferralTree } from './ReferralTree';
+import { Orb } from './Shapes';
 
 type Tab = 'client' | 'referrals' | 'admin';
 
@@ -26,10 +30,26 @@ interface LandingPageProps {
 const heading = 'font-display font-extrabold tracking-tight text-slate-900 dark:text-white';
 const muted = 'text-slate-600 dark:text-slate-400';
 
+/** Brand colour tiles: each one gets a role in the palette, never a random colour. */
+const TILE = {
+  royal: 'from-sky-400 via-blue-500 to-blue-700 shadow-blue-500/30',
+  violet: 'from-fuchsia-400 via-violet-500 to-purple-700 shadow-violet-500/30',
+  ruby: 'from-rose-400 via-rose-500 to-red-700 shadow-rose-500/30',
+  aqua: 'from-cyan-300 via-teal-400 to-sky-600 shadow-teal-500/30',
+  gold: 'from-amber-200 via-yellow-400 to-amber-600 shadow-amber-500/30',
+};
+
+const Tile: React.FC<{ tone: keyof typeof TILE; children: React.ReactNode; size?: string }> = ({ tone, children, size = 'w-11 h-11' }) => (
+  <span className={`${size} shrink-0 rounded-xl bg-gradient-to-br ${TILE[tone]} text-white flex items-center justify-center shadow-lg ring-1 ring-white/30 relative overflow-hidden`}>
+    <span className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/30 to-transparent" />
+    <span className="relative">{children}</span>
+  </span>
+);
+
 const SectionTitle: React.FC<{ eyebrow: string; title: React.ReactNode; sub?: string }> = ({ eyebrow, title, sub }) => (
   <div className="text-center max-w-2xl mx-auto space-y-3">
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">
-      <Sparkles className="w-3.5 h-3.5" />
+    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-violet-700 dark:text-violet-300">
+      <Sparkles className="w-3.5 h-3.5 text-rose-500 dark:text-rose-300" />
       {eyebrow}
     </span>
     <h2 className={`${heading} text-3xl sm:text-4xl leading-tight`}>{title}</h2>
@@ -37,11 +57,11 @@ const SectionTitle: React.FC<{ eyebrow: string; title: React.ReactNode; sub?: st
   </div>
 );
 
-/* ---------- Hero diagram: how a trade travels (structure only, no figures) ---------- */
-const FlowNode: React.FC<{ icon: React.ReactNode; title: string; sub: string; pulse?: boolean }> = ({ icon, title, sub, pulse }) => (
+/* ---------- trade path ---------- */
+const FlowNode: React.FC<{ tone: keyof typeof TILE; icon: React.ReactNode; title: string; sub: string; pulse?: boolean }> = ({ tone, icon, title, sub, pulse }) => (
   <div className="surface rounded-2xl px-4 py-4 sm:px-5 text-center w-full sm:w-52">
-    <div className={`mx-auto mb-2.5 w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 text-slate-950 flex items-center justify-center ${pulse ? 'node-pulse' : ''}`}>
-      {icon}
+    <div className={`mx-auto mb-2.5 w-fit ${pulse ? 'node-pulse rounded-xl' : ''}`}>
+      <Tile tone={tone}>{icon}</Tile>
     </div>
     <div className="font-display font-bold text-sm text-slate-900 dark:text-white">{title}</div>
     <div className={`${muted} text-[11px] mt-0.5 leading-snug`}>{sub}</div>
@@ -50,82 +70,84 @@ const FlowNode: React.FC<{ icon: React.ReactNode; title: string; sub: string; pu
 
 const FlowLine: React.FC = () => (
   <>
-    {/* horizontal on wide screens */}
-    <svg aria-hidden className="hidden sm:block h-6 w-16 lg:w-24 shrink-0 text-teal-500 dark:text-teal-300" viewBox="0 0 100 24" preserveAspectRatio="none">
+    <svg aria-hidden className="hidden sm:block h-6 w-16 lg:w-24 shrink-0 text-violet-500 dark:text-violet-300" viewBox="0 0 100 24" preserveAspectRatio="none">
       <path d="M0 12H100" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="flow-dash" />
     </svg>
-    {/* vertical on phones */}
-    <svg aria-hidden className="sm:hidden h-9 w-6 text-teal-500 dark:text-teal-300" viewBox="0 0 24 36" preserveAspectRatio="none">
+    <svg aria-hidden className="sm:hidden h-9 w-6 text-violet-500 dark:text-violet-300" viewBox="0 0 24 36" preserveAspectRatio="none">
       <path d="M12 0V36" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="flow-dash" />
     </svg>
   </>
 );
 
-/* ---------- Plans ---------- */
-const Bullet: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+const Bullet: React.FC<{ children: React.ReactNode; tone?: 'blue' | 'rose' }> = ({ children, tone = 'blue' }) => (
   <li className="flex items-start gap-2.5 text-sm text-slate-700 dark:text-slate-300">
-    <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+    <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${tone === 'rose' ? 'text-rose-500 dark:text-rose-300' : 'text-blue-600 dark:text-sky-300'}`} />
     <span>{children}</span>
   </li>
 );
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
   return (
-    <div className="space-y-20 sm:space-y-28 pb-6">
+    <div className="space-y-20 sm:space-y-28 pb-6 overflow-x-clip">
       {/* ================= HERO ================= */}
-      <section className="pt-6 sm:pt-12 text-center max-w-4xl mx-auto space-y-6">
-        <Reveal>
-          <span className="surface inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold text-emerald-800 dark:text-emerald-300">
-            <span className="relative flex w-2 h-2">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60 animate-ping" />
-              <span className="relative inline-flex w-2 h-2 rounded-full bg-emerald-500" />
+      <section className="pt-6 sm:pt-12 space-y-8">
+        <div className="text-center max-w-4xl mx-auto space-y-6">
+          <Reveal>
+            <span className="surface inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-700 dark:text-slate-200">
+              <span className="relative flex w-2 h-2">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-60 animate-ping" />
+                <span className="relative inline-flex w-2 h-2 rounded-full bg-teal-500" />
+              </span>
+              Two ways to pay · 3-level referral program
             </span>
-            Two ways to pay · 3-level referral program
-          </span>
+          </Reveal>
+
+          <Reveal delay={80}>
+            <h1 className={`${heading} text-[2.6rem] leading-[1.05] sm:text-6xl lg:text-7xl`}>
+              Institutional MT5 copying,
+              <br />
+              <span className="text-grad-flame animate-gradient-pan">priced your way.</span>
+            </h1>
+          </Reveal>
+
+          <Reveal delay={160}>
+            <p className={`${muted} text-base sm:text-lg max-w-2xl mx-auto leading-relaxed`}>
+              Choose a flat $100 monthly plan, or pay nothing upfront and share 50% of new profit instead. Your money stays in your own broker account the whole time.
+            </p>
+          </Reveal>
+
+          <Reveal delay={240}>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => onSelectTab('client')}
+                className="btn-primary px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <TrendingUp className="w-4 h-4" />
+                <span>Access Client Terminal</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => onSelectTab('referrals')}
+                className="btn-ghost px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Share2 className="w-4 h-4 text-rose-500" />
+                <span>Referral Hub (5% · 3% · 2%)</span>
+              </button>
+            </div>
+          </Reveal>
+        </div>
+
+        <Reveal delay={300}>
+          <HeroShowcase />
         </Reveal>
 
-        <Reveal delay={80}>
-          <h1 className={`${heading} text-[2.6rem] leading-[1.05] sm:text-6xl lg:text-7xl`}>
-            Institutional MT5 copying,
-            <br />
-            <span className="text-electric-soft">priced your way.</span>
-          </h1>
-        </Reveal>
-
-        <Reveal delay={160}>
-          <p className={`${muted} text-base sm:text-lg max-w-2xl mx-auto leading-relaxed`}>
-            Choose a flat $100 monthly plan, or pay nothing upfront and share 50% of new profit instead. Your money stays in your own broker account the whole time.
-          </p>
-        </Reveal>
-
-        <Reveal delay={240}>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-2">
-            <button
-              onClick={() => onSelectTab('client')}
-              className="btn-primary px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <TrendingUp className="w-4 h-4" />
-              <span>Access Client Terminal</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => onSelectTab('referrals')}
-              className="btn-ghost px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Share2 className="w-4 h-4" />
-              <span>Referral Hub (5% · 3% · 2%)</span>
-            </button>
-          </div>
-        </Reveal>
-
-        {/* Trade path */}
-        <Reveal delay={320}>
-          <div className="pt-8 sm:pt-12 flex flex-col sm:flex-row items-center justify-center gap-0 sm:gap-1">
-            <FlowNode icon={<Server className="w-5 h-5" />} title="Master strategy" sub="Trades placed on the master account" />
+        <Reveal delay={120}>
+          <div className="pt-6 flex flex-col sm:flex-row items-center justify-center gap-0 sm:gap-1">
+            <FlowNode tone="royal" icon={<Server className="w-5 h-5" />} title="Master strategy" sub="Trades placed on the master account" />
             <FlowLine />
-            <FlowNode icon={<Zap className="w-5 h-5" />} title="CASTIMOFx copier" sub="Lots scaled to your balance" pulse />
+            <FlowNode tone="violet" icon={<Zap className="w-5 h-5" />} title="CASTIMOFx copier" sub="Lots scaled to your balance" pulse />
             <FlowLine />
-            <FlowNode icon={<Wallet className="w-5 h-5" />} title="Your MT5 account" sub="Funds stay with your broker" />
+            <FlowNode tone="aqua" icon={<Wallet className="w-5 h-5" />} title="Your MT5 account" sub="Funds stay with your broker" />
           </div>
         </Reveal>
       </section>
@@ -134,16 +156,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
       <section>
         <Reveal>
           <div className="surface rounded-2xl px-5 py-5 grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-5">
+            <div className="hairline-silver absolute inset-x-10 top-0" />
             {[
-              { icon: <Wallet className="w-4 h-4" />, t: 'Your funds, your broker', d: 'We never hold client deposits' },
-              { icon: <Lock className="w-4 h-4" />, t: 'USDT on TRON (TRC20)', d: 'Pay from any wallet' },
-              { icon: <Clock className="w-4 h-4" />, t: 'No automatic charges', d: 'You choose when to renew' },
-              { icon: <Shield className="w-4 h-4" />, t: '$200 minimum equity', d: 'Checked once, at connection' },
+              { tone: 'royal' as const, icon: <Wallet className="w-4 h-4" />, t: 'Your funds, your broker', d: 'We never hold client deposits' },
+              { tone: 'violet' as const, icon: <Lock className="w-4 h-4" />, t: 'USDT on TRON (TRC20)', d: 'Pay from any wallet' },
+              { tone: 'aqua' as const, icon: <Clock className="w-4 h-4" />, t: 'No automatic charges', d: 'You choose when to renew' },
+              { tone: 'gold' as const, icon: <Shield className="w-4 h-4" />, t: '$200 minimum equity', d: 'Checked once, at connection' },
             ].map((x) => (
               <div key={x.t} className="flex items-start gap-3">
-                <span className="mt-0.5 w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
-                  {x.icon}
-                </span>
+                <Tile tone={x.tone} size="w-9 h-9">{x.icon}</Tile>
                 <div>
                   <div className="text-[13px] font-bold text-slate-900 dark:text-white leading-tight">{x.t}</div>
                   <div className={`${muted} text-[11px] mt-0.5 leading-snug`}>{x.d}</div>
@@ -159,17 +180,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
         <Reveal>
           <SectionTitle
             eyebrow="Pricing"
-            title={<>Two plans. <span className="text-electric-soft">Pick what fits you.</span></>}
+            title={<>Two plans. <span className="text-grad-aqua">Pick what fits you.</span></>}
             sub="Whichever you choose, you will only ever be billed under that plan's terms. You can compare both side by side after you sign up."
           />
         </Reveal>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:gap-7 max-w-5xl mx-auto">
           <Reveal>
-            <div className="surface surface-hover rounded-3xl p-6 sm:p-8 h-full flex flex-col">
-              <div className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700 dark:text-blue-300">Monthly Subscription</div>
-              <div className="mt-4 flex items-end gap-2">
-                <span className={`${heading} text-5xl sm:text-6xl`}>
+            <div className="surface surface-hover rounded-3xl p-6 sm:p-8 h-full flex flex-col" style={{ ['--rim-accent' as string]: '56,189,248' }}>
+              <div className="flex items-center gap-3">
+                <Tile tone="royal" size="w-9 h-9"><Wallet className="w-4 h-4" /></Tile>
+                <div className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700 dark:text-sky-300">Monthly Subscription</div>
+              </div>
+              <div className="mt-5 flex items-end gap-2">
+                <span className={`${heading} text-5xl sm:text-6xl text-grad-aqua`}>
                   <CountUp to={100} prefix="$" />
                 </span>
                 <span className={`${muted} pb-2 text-sm`}>/ 30 days</span>
@@ -192,29 +216,31 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
           </Reveal>
 
           <Reveal delay={120}>
-            <div className="surface edge-gradient surface-hover rounded-3xl p-6 sm:p-8 h-full flex flex-col">
+            <div className="surface edge-gradient surface-hover rounded-3xl p-6 sm:p-8 h-full flex flex-col" style={{ ['--rim-accent' as string]: '244,63,94' }}>
+              <div className="hairline-gold absolute inset-x-10 top-0" />
               <div className="flex items-center justify-between gap-3">
-                <div className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700 dark:text-emerald-300">50% Profit Share</div>
-                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
-                  Nothing upfront
-                </span>
+                <div className="flex items-center gap-3">
+                  <Tile tone="ruby" size="w-9 h-9"><Sparkles className="w-4 h-4" /></Tile>
+                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-rose-700 dark:text-rose-300">50% Profit Share</div>
+                </div>
+                <span className="badge-gold px-2.5 py-1 rounded-full text-[10px] font-extrabold">Nothing upfront</span>
               </div>
-              <div className="mt-4 flex items-end gap-2">
-                <span className="font-display font-extrabold tracking-tight text-5xl sm:text-6xl text-electric-soft">
+              <div className="mt-5 flex items-end gap-2">
+                <span className="font-display font-extrabold tracking-tight text-5xl sm:text-6xl text-grad-flame">
                   <CountUp to={50} suffix="%" />
                 </span>
                 <span className={`${muted} pb-2 text-sm`}>of new profit only</span>
               </div>
               <p className={`${muted} text-sm mt-3`}>We earn only when your account makes new profit. No profit, no fee.</p>
               <ul className="mt-6 space-y-3 flex-1">
-                <Bullet>Fee applies only to profit above your previous high-water mark</Bullet>
-                <Bullet>Losses are recovered before any new fee is charged</Bullet>
-                <Bullet>Deposits and withdrawals never count as profit</Bullet>
-                <Bullet>Each invoice is payable within 24 hours in USDT (TRC20)</Bullet>
+                <Bullet tone="rose">Fee applies only to profit above your previous high-water mark</Bullet>
+                <Bullet tone="rose">Losses are recovered before any new fee is charged</Bullet>
+                <Bullet tone="rose">Deposits and withdrawals never count as profit</Bullet>
+                <Bullet tone="rose">Each invoice is payable within 24 hours in USDT (TRC20)</Bullet>
               </ul>
               <button
                 onClick={() => onSelectTab('client')}
-                className="btn-primary mt-7 w-full px-5 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+                className="btn-primary btn-ruby mt-7 w-full px-5 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Start with Profit Share</span>
                 <ArrowRight className="w-4 h-4" />
@@ -227,28 +253,29 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
       {/* ================= HOW IT WORKS ================= */}
       <section className="space-y-10">
         <Reveal>
-          <SectionTitle eyebrow="How it works" title={<>Up and copying in <span className="text-electric-soft">four steps</span></>} />
+          <SectionTitle eyebrow="How it works" title={<>Up and copying in <span className="text-grad-flame">four steps</span></>} />
         </Reveal>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 max-w-6xl mx-auto">
-          {[
-            { n: '01', icon: <UserPlus className="w-5 h-5" />, t: 'Create your account', d: 'Sign up and confirm your email address.' },
-            { n: '02', icon: <Wallet className="w-5 h-5" />, t: 'Choose your plan', d: 'Monthly subscription or 50% profit share.' },
-            { n: '03', icon: <Link2 className="w-5 h-5" />, t: 'Connect your MT5', d: 'Use your MT5 login and broker server.' },
-            { n: '04', icon: <Zap className="w-5 h-5" />, t: 'Copying runs for you', d: 'Trades are mirrored with lots scaled to your balance.' },
-          ].map((s, i) => (
-            <Reveal key={s.n} delay={i * 90}>
-              <div className="surface surface-hover rounded-2xl p-6 h-full">
-                <div className="flex items-center justify-between">
-                  <span className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-500 text-slate-950 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                    {s.icon}
-                  </span>
-                  <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500">{s.n}</span>
+        <div className="relative max-w-6xl mx-auto">
+          <div aria-hidden className="hidden lg:block dark:lg:hidden absolute left-[12%] right-[12%] top-[46px] h-px bg-gradient-to-r from-sky-400 via-violet-400 to-rose-400 opacity-50" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {[
+              { n: '01', tone: 'royal' as const, icon: <UserPlus className="w-5 h-5" />, t: 'Create your account', d: 'Sign up and confirm your email address.' },
+              { n: '02', tone: 'violet' as const, icon: <Wallet className="w-5 h-5" />, t: 'Choose your plan', d: 'Monthly subscription or 50% profit share.' },
+              { n: '03', tone: 'ruby' as const, icon: <Link2 className="w-5 h-5" />, t: 'Connect your MT5', d: 'Use your MT5 login and broker server.' },
+              { n: '04', tone: 'aqua' as const, icon: <Zap className="w-5 h-5" />, t: 'Copying runs for you', d: 'Trades are mirrored with lots scaled to your balance.' },
+            ].map((s, i) => (
+              <Reveal key={s.n} delay={i * 90}>
+                <div className="surface surface-hover rounded-2xl p-6 h-full">
+                  <div className="flex items-center justify-between">
+                    <Tile tone={s.tone} size="w-12 h-12">{s.icon}</Tile>
+                    <span className="font-mono text-xs font-bold text-slate-400 dark:text-slate-500">{s.n}</span>
+                  </div>
+                  <h3 className="font-display font-bold text-base mt-5 text-slate-900 dark:text-white">{s.t}</h3>
+                  <p className={`${muted} text-sm mt-1.5 leading-relaxed`}>{s.d}</p>
                 </div>
-                <h3 className="font-display font-bold text-base mt-5 text-slate-900 dark:text-white">{s.t}</h3>
-                <p className={`${muted} text-sm mt-1.5 leading-relaxed`}>{s.d}</p>
-              </div>
-            </Reveal>
-          ))}
+              </Reveal>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -256,23 +283,37 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
       <section className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
         <Reveal>
           <div className="space-y-5 text-center lg:text-left">
-            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-rose-700 dark:text-rose-300">
               <Share2 className="w-3.5 h-3.5" />
               Referral program
             </span>
             <h2 className={`${heading} text-3xl sm:text-5xl leading-tight`}>
-              <span className="text-electric-soft">3-Tier</span> Commissions
+              <span className="text-grad-flame">3-Tier</span> Commissions
             </h2>
             <p className={`${muted} text-sm sm:text-base leading-relaxed max-w-lg mx-auto lg:mx-0`}>
               Share your link and earn USDT from what your network actually pays us — across three levels. Commissions are credited only from verified payments.
             </p>
+            <div className="flex flex-wrap justify-center lg:justify-start gap-3 pt-1">
+              {[
+                { l: 'Level 1', p: 5, c: 'from-rose-500 to-red-600' },
+                { l: 'Level 2', p: 3, c: 'from-fuchsia-500 to-violet-600' },
+                { l: 'Level 3', p: 2, c: 'from-sky-500 to-blue-700' },
+              ].map((t) => (
+                <span key={t.l} className={`inline-flex items-center gap-2 pl-1 pr-3.5 py-1 rounded-full text-xs font-bold text-slate-800 dark:text-slate-100 surface`}>
+                  <span className={`px-2 py-0.5 rounded-full bg-gradient-to-r ${t.c} text-white font-mono`}>
+                    <CountUp to={t.p} suffix="%" duration={900} />
+                  </span>
+                  {t.l}
+                </span>
+              ))}
+            </div>
             <p className={`${muted} text-xs leading-relaxed max-w-lg mx-auto lg:mx-0`}>
               Withdrawals start at $50 with a 10% processing fee. Requests made before Thursday 23:59 GMT join that week's payout cycle.
             </p>
             <div className="pt-1">
               <button
                 onClick={() => onSelectTab('referrals')}
-                className="btn-primary px-6 py-3 rounded-xl font-bold text-sm inline-flex items-center gap-2 cursor-pointer"
+                className="btn-primary btn-ruby px-6 py-3 rounded-xl font-bold text-sm inline-flex items-center gap-2 cursor-pointer"
               >
                 <span>Open the Referral Hub</span>
                 <ArrowRight className="w-4 h-4" />
@@ -281,29 +322,48 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
           </div>
         </Reveal>
 
-        <div className="space-y-3.5">
-          {[
-            { lvl: 'Level 1', who: 'People you refer directly', pct: 5, w: 'w-full' },
-            { lvl: 'Level 2', who: 'People your referrals refer', pct: 3, w: 'w-[92%]' },
-            { lvl: 'Level 3', who: 'One level further out', pct: 2, w: 'w-[84%]' },
-          ].map((t, i) => (
-            <Reveal key={t.lvl} delay={i * 110} className={`${t.w} ${i ? 'ml-auto' : ''}`}>
-              <div className="surface surface-hover rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
-                <div>
-                  <div className="font-display font-bold text-sm text-slate-900 dark:text-white">{t.lvl}</div>
-                  <div className={`${muted} text-xs mt-0.5`}>{t.who}</div>
-                </div>
-                <div className="font-display font-extrabold text-4xl sm:text-5xl text-electric-soft tabular-nums">
-                  <CountUp to={t.pct} suffix="%" duration={900} />
-                </div>
-              </div>
-            </Reveal>
-          ))}
-        </div>
+        <Reveal delay={120}>
+          <div className="surface rounded-3xl p-5 sm:p-7" style={{ ['--rim-accent' as string]: '244,63,94' }}>
+            <div className="hairline-gold absolute inset-x-10 top-0" />
+            <ReferralTree className="w-full h-auto text-slate-500 dark:text-slate-300" />
+            <p className={`${muted} text-[11px] text-center mt-2`}>You at the top. Each level is paid on verified payments only.</p>
+          </div>
+        </Reveal>
       </section>
 
-      {/* ================= FAQ + closing CTA ================= */}
-      <FAQSection onSelectTab={onSelectTab} />
+      {/* ================= FAQ ================= */}
+      <FAQSection onSelectTab={onSelectTab} hideCta />
+
+      {/* ================= CLOSING CALL TO ACTION ================= */}
+      <section>
+        <Reveal>
+          <div className="relative overflow-hidden rounded-3xl surface px-6 py-12 sm:px-12 sm:py-16" style={{ ['--rim-accent' as string]: '168,85,247' }}>
+            <SilkBand className="absolute inset-0 w-full h-full opacity-70 dark:opacity-90" />
+            <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-white via-white/80 to-transparent dark:from-[#060a12] dark:via-[#060a12]/70 dark:to-transparent" />
+            <div className="hairline-gold absolute inset-x-12 top-0" />
+            <Orb size={70} from="#ffd0d8" mid="#f43f5e" to="#7f1034" className="absolute right-8 top-6 animate-float-a hidden sm:block drop-shadow-[0_14px_22px_rgba(225,29,72,.45)]" />
+            <div className="relative max-w-xl space-y-4">
+              <h2 className={`${heading} text-3xl sm:text-4xl leading-tight`}>
+                Ready when <span className="text-grad-flame">you are.</span>
+              </h2>
+              <p className={`${muted} text-sm sm:text-base leading-relaxed`}>
+                Connect your broker account to start copying, or share your referral link and earn across three levels.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <button onClick={() => onSelectTab('client')} className="btn-primary px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer">
+                  <TrendingUp className="w-4 h-4" />
+                  <span>Client Terminal</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                <button onClick={() => onSelectTab('referrals')} className="btn-ghost px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer">
+                  <Share2 className="w-4 h-4 text-rose-500" />
+                  <span>Referral Hub</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </Reveal>
+      </section>
     </div>
   );
 };
