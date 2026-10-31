@@ -31,6 +31,8 @@ interface CheckStep {
   name: string;
   ok: boolean;
   detail: string;
+  /** Lines to show under the detail, e.g. the accounts and templates the administrator can choose from. */
+  lines?: string[];
 }
 
 type Notice = { tone: 'ok' | 'error'; text: string };
@@ -187,8 +189,17 @@ export const AdminTerminalsPanel: React.FC = () => {
             {check.steps.map((s) => (
               <li key={s.name} className="flex items-start gap-2 text-xs">
                 {s.ok ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-px" /> : <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-px" />}
-                <span>
+                <span className="min-w-0">
                   <span className="font-semibold text-slate-200">{s.name}.</span> <span className="text-slate-400 break-words">{s.detail}</span>
+                  {s.lines && s.lines.length > 0 && (
+                    <span className="block mt-1.5 space-y-1">
+                      {s.lines.map((line, i) => (
+                        <span key={i} className="block font-mono text-[11px] text-slate-300 bg-slate-950 border border-slate-800 rounded-md px-2 py-1 break-all select-all">
+                          {line}
+                        </span>
+                      ))}
+                    </span>
+                  )}
                 </span>
               </li>
             ))}

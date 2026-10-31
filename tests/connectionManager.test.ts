@@ -712,3 +712,30 @@ test('capacity counts client accounts only', async () => {
   assert.equal(c.used, 1);
   assert.equal(c.perUserLimit, 1);
 });
+
+test('the connection check lists the accounts and templates to choose from, and still runs with the ids unset', async () => {
+  const { fake, m } = setup();
+  process.env.DUPLIKIUM_API_USER = 'u';
+  process.env.DUPLIKIUM_API_TOKEN = 'p';
+  fake.accounts.get('MASTER')!.groupId = 'TPL-7';
+  fake.accounts.set('CL1', { ...fake.accounts.get('MASTER')!, accountId: 'CL1', name: 'CastimoFX Client u1 #1234', type: 'slave', groupId: 'TPL-7', login: '1234' });
+  const r = await m.runConnectionCheck();
+  const pick = r.steps.find((s: any) => s.name === 'Accounts you can choose from')!;
+  assert.ok(pick.ok);
+  assert.ok(pick.lines!.some((l: string) => l.startsWith('MASTER |')), 'the master is offered with its id');
+  assert.ok(!pick.lines!.some((l: string) => l.includes('CastimoFX Client')), 'client accounts are not offered as a master');
+  const tpl = r.steps.find((s: any) => s.name === 'Templates in use')!;
+  assert.ok(tpl.lines!.some((l: string) => l.startsWith('TPL-7 |') && /1 client account/.test(l)));
+  assert.ok(!JSON.stringify(r).includes('"p"'));
+
+  // with no master or template id set, the check still lists choices and says what is missing
+  (m as any).masterId = '';
+  (m as any).templateId = '';
+  const r2 = await m.runConnectionCheck();
+  assert.ok(r2.steps.find((s: any) => s.name === 'Accounts you can choose from'));
+  assert.match(r2.steps.find((s: any) => s.name === 'Master account')!.detail, /DUPLIKIUM_MASTER_ID is not set/);
+  assert.match(r2.steps.find((s: any) => s.name === 'Client template')!.detail, /DUPLIKIUM_TEMPLATE_ID is not set/);
+  assert.equal(r2.ok, false);
+  delete process.env.DUPLIKIUM_API_USER;
+  delete process.env.DUPLIKIUM_API_TOKEN;
+});

@@ -37,6 +37,7 @@ import {
   countClientAccounts,
   DEFAULT_MIN_CONNECT_EQUITY,
   isOwnedBy,
+  isPlatformClientAccount,
   normalizeBrokerServer,
   parseClientAccountName,
   readLimit,
@@ -147,6 +148,8 @@ export interface CheckStep {
   name: string;
   ok: boolean;
   detail: string;
+  /** Optional lines to show under the detail, such as the accounts and templates the administrator can choose from. */
+  lines?: string[];
 }
 
 const DEFAULT_MASTER_LOGIN = '261089492';
@@ -1157,7 +1160,8 @@ export class Mt5ConnectionManager {
    */
   public async runConnectionCheck(): Promise<{ ok: boolean; steps: CheckStep[] }> {
     const steps: CheckStep[] = [];
-    const add = (name: string, ok: boolean, detail: string) => steps.push({ name, ok, detail });
+    const add = (name: string, ok: boolean, detail: string, lines?: string[]) =>
+      steps.push(lines && lines.length ? { name, ok, detail, lines } : { name, ok, detail });
 
     const user = Boolean((process.env.DUPLIKIUM_API_USER || '').trim());
     const token = Boolean((process.env.DUPLIKIUM_API_TOKEN || '').trim());
@@ -1191,9 +1195,48 @@ export class Mt5ConnectionManager {
       return { ok: false, steps };
     }
 
+    // What the administrator can choose from, so the master and template ids do not have to be hunted for.
+    // Only accounts that are not client accounts of ours are listed; ids are not secrets, passwords are never read.
+    const choices = accounts.filter((a) => !isPlatformClientAccount(a.name));
+    const CAP = 30;
+    add(
+      'Accounts you can choose from',
+      true,
+      choices.length
+        ? 'Use the id of your master account as DUPLIKIUM_MASTER_ID. Each line: id | login on server | type | name | template.'
+        : 'Nothing besides client accounts was found. Add your master account at Duplikium first.',
+      choices
+        .slice(0, CAP)
+        .map((a) => `${a.accountId} | #${a.login || '?'} on ${a.server || '?'} | ${a.type} | ${a.name || 'no name'} | ${a.groupId ? `template ${a.groupId}` : 'no template'}`)
+        .concat(choices.length > CAP ? [`...and ${choices.length - CAP} more not shown`] : [])
+    );
+    // Template ids come from the accounts that use them. A template no account uses yet cannot be seen this way.
+    const byTemplate = new Map<string, string[]>();
+    for (const a of accounts) {
+      if (!a.groupId) continue;
+      const label = isPlatformClientAccount(a.name) ? 'a client account' : `#${a.login || '?'} ${a.name || ''}`.trim();
+      byTemplate.set(a.groupId, [...(byTemplate.get(a.groupId) ?? []), label]);
+    }
+    add(
+      'Templates in use',
+      true,
+      byTemplate.size
+        ? 'Use the id of the template your clients should get as DUPLIKIUM_TEMPLATE_ID.'
+        : 'No account uses a template yet, so none can be listed here. Put one account on your default template in the Duplikium cockpit, run the check again, or ask Duplikium support for the template id.',
+      Array.from(byTemplate.entries())
+        .slice(0, CAP)
+        .map(([id, who]) => {
+          const clients = who.filter((w) => w === 'a client account').length;
+          const others = who.filter((w) => w !== 'a client account');
+          return `${id} | used by ${[...others.slice(0, 3), ...(clients ? [`${clients} client account(s)`] : [])].join(', ')}${others.length > 3 ? ' and others' : ''}`;
+        })
+    );
+
     const master = accounts.find((a) => a.accountId === this.masterId);
-    if (!master) {
-      add('Master account', false, 'No account with the id in DUPLIKIUM_MASTER_ID was found.');
+    if (!this.masterId) {
+      add('Master account', false, 'DUPLIKIUM_MASTER_ID is not set yet. Choose your master account from the list above.');
+    } else if (!master) {
+      add('Master account', false, 'No account with the id in DUPLIKIUM_MASTER_ID was found. Compare it with the list above.');
     } else {
       const kind = classifyState(master.state);
       add(
@@ -1210,7 +1253,9 @@ export class Mt5ConnectionManager {
       );
     }
 
-    try {
+    if (!this.templateId) {
+      add('Client template', false, 'DUPLIKIUM_TEMPLATE_ID is not set yet. Choose the template from the list above.');
+    } else try {
       const rows = await this.api.getSettings({ idGroup: this.templateId });
       if (!rows.length) {
         add('Client template', false, 'The template has no copy settings. Open it in the Duplikium cockpit and set the copy size you want clients to get.');

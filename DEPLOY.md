@@ -7,11 +7,15 @@ CASTIMOFx uses **Duplikium** (trade-copier.com) to copy trades. Duplikium logs i
 account's trades onto it. This server connects clients to Duplikium, switches copying on or off to match each client's plan and payments,
 and reads balances and trades back for the dashboards.
 
+Duplikium's API may need their Trade Copier API add-on (their documentation says it is free from 10 paid accounts). Confirm with Duplikium before relying on it.
+
 ## One-time setup at Duplikium
 1. Add your master HFM account (261089492, server HFMarketsGlobal-Live20) in the Duplikium dashboard as a **master**.
 2. Create one **default slave template** there with the copy size you want every client to get. The server reads the template's copy size and gives the same to
    each new client (or use `DUPLIKIUM_RISK_TYPE` / `DUPLIKIUM_RISK_VALUE` below to set it from Render instead).
-3. Note the master's account id and the template's id as Duplikium shows them. If you cannot find them, ask Duplikium support.
+3. You need the master's account id and the template's id. After setting `DUPLIKIUM_API_USER` and `DUPLIKIUM_API_TOKEN` on Render, open Admin console ->
+   **Duplikium Accounts** -> **Duplikium connection check**: it lists your accounts (with their ids) and the templates in use, so you can copy the right ids into
+   `DUPLIKIUM_MASTER_ID` and `DUPLIKIUM_TEMPLATE_ID`. A template that no account uses yet is not visible that way: put one account on it first, or ask Duplikium support.
 4. Ask Duplikium support, in writing: how many client accounts one cockpit may hold, whether there is an account limit or per-account price,
    and how they store and protect the MT5 passwords clients give.
 
@@ -25,7 +29,7 @@ and reads balances and trades back for the dashboards.
    - `DUPLIKIUM_TEMPLATE_ID` = the Duplikium id of the default slave template
    - `PORT` is set by Render automatically.
 4. Deploy, then open `https://<your-service>.onrender.com/api/health`. It should say `UP`.
-5. Sign in as the administrator -> Admin console -> **Duplikium Accounts** -> **Duplikium connection check**. It signs in to Duplikium, finds the master
+5. Run the **Duplikium connection check** again with all four settings in place. It signs in to Duplikium, finds the master
    and the template, and asks for the master's open trades. Every step says what it found. Do this before inviting any client.
 6. Firebase console -> Authentication -> Settings -> Authorized domains -> add the onrender.com domain.
 7. Publish `firestore.rules` from this repo in the Firebase console.
