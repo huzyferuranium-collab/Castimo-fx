@@ -27,8 +27,8 @@ const FAQ_ITEMS: FAQItem[] = [
     category: 'profit_share',
     question: 'How does the 50% profit share model work?',
     answer:
-      'Unlike traditional signal channels that charge expensive monthly packages or subscription fees upfront, Castimofx operates strictly on a 50/50 profit share. We only earn when your connected MT5 makes realized net profits above your previous High-Water Mark. If there are no profits, you owe zero.',
-    highlight: 'Zero upfront fees. 50% fee only applies to net profitable gains above High-Water Mark.',
+      'You can choose between a flat $100 monthly plan and the 50% Profit Share. On the 50% Profit Share there is nothing to pay upfront: we earn only when your connected MT5 account makes net profit above your previous High-Water Mark. If there is no new profit, you owe nothing. Deposits and withdrawals are never counted as profit.',
+    highlight: 'Profit Share: nothing upfront, and the 50% fee applies only to new profit above your High-Water Mark.',
   },
   {
     id: 'ps-24h-window',
@@ -67,8 +67,8 @@ const FAQ_ITEMS: FAQItem[] = [
     category: 'referrals',
     question: 'When and how are referral commissions paid out?',
     answer:
-      'Commissions are credited to your Referral Hub in real time the instant a referred client settles their 24h profit share invoice. There are no lockup periods or minimum holding terms. You can withdraw your available commission balance directly to your personal TRC20 USDT wallet at any time.',
-    highlight: 'Instant real-time crediting with direct on-chain TRC20 USDT withdrawals anytime.',
+      'Commissions are credited to your Referral Hub once a referred client\'s payment is verified, whether that is a monthly plan payment or a profit-share invoice. You can withdraw your available balance to your own TRC20 USDT wallet from $50, with a 10% processing fee. Requests made before Thursday 23:59 GMT join that week\'s cycle and are processed within 24 hours after it.',
+    highlight: 'Credited on verified payments. Withdraw from $50 (10% fee) to your TRC20 USDT wallet in weekly cycles.',
   },
   {
     id: 'sec-broker-custody',
@@ -123,7 +123,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab }) => {
           Frequently Asked Questions
         </h3>
         <p className="text-xs sm:text-sm text-slate-400 max-w-xl mx-auto leading-relaxed">
-          Everything you need to know about our pure 50% profit share model, 24-hour autonomous watcher, and 3-phase multi-tier referral program.
+          Everything you need to know about the monthly plan, the 50% profit share, billing, and the 3-level referral program.
         </p>
       </div>
 

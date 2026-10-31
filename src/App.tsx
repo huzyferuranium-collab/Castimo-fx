@@ -1,5 +1,6 @@
 import { captureReferralFromUrl } from './services/referralApi';
 import HeroBackdrop from './components/landing/HeroBackdrop';
+import { LandingPage } from './components/landing/LandingPage';
 import React, { useState } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { ThemeToggle, ThemeSegmentedControl } from './components/common/ThemeToggle';
@@ -101,7 +102,7 @@ const MainContent: React.FC = () => {
                     MT5
                   </span>
                 </div>
-                <p className="text-[10px] text-slate-400 hidden md:block">
+                <p className="text-[10px] text-slate-400 hidden lg:block">
                   50% Profit Share Copier & 3-Phase Referral Hub
                 </p>
               </div>
@@ -175,86 +176,20 @@ const MainContent: React.FC = () => {
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {!userProfile ? (
           /* Unauthenticated Landing / Onboarding View */
-          <div className="relative py-8 space-y-12 animate-in fade-in duration-300">
+          <div className="relative py-4 animate-in fade-in duration-300">
             <HeroBackdrop />
-            {/* Hero Section */}
-            <div className="text-center max-w-3xl mx-auto space-y-4">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium dark:glass dark:glow-green">
-                <Shield className="w-3.5 h-3.5" />
-                <span>Monthly Plan or 50% Profit Share • 3-Level Referral Program</span>
-              </div>
-              <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight">
-                Institutional MT5 Copying with{' '}
-                <span className="text-electric">
-                  Your Choice of Plan & 3-Level Commissions
-                </span>
-              </h2>
-              <p className="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto leading-relaxed">
-                Choose a flat $100 monthly plan, or pay nothing upfront and share 50% of new profit instead. Refer other traders and earn 5%, 3% and 2% across three levels of what they pay us.
-              </p>
-
-              {/* Public Client CTAs: NO PUBLIC ADMIN ACCESS */}
-              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                <button
-                  onClick={() => handleSelectTab('client')}
-                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 font-bold text-sm text-slate-950 shadow-lg shadow-emerald-500/25 transition flex items-center gap-2 cursor-pointer"
-                >
-                  <TrendingUp className="w-4 h-4" />
-                  <span>Access Client Terminal</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleSelectTab('referrals')}
-                  className="px-6 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-blue-300 border border-blue-800/60 font-bold text-sm shadow-lg transition flex items-center gap-2 cursor-pointer"
-                >
-                  <Share2 className="w-4 h-4 text-blue-400" />
-                  <span>Referral Hub (5%•3%•2%)</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Architecture Highlights */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3 dark:glass dark:glass-rim dark:glow-teal">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <TrendingUp className="w-5 h-5" />
-                </div>
-                <h3 className="font-bold text-base text-white"><span className="text-electric">50% Profit Share</span> or Monthly</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Pick a flat $100 monthly plan, or the 50% Profit Share where we earn only when your account makes new profit. You can see both side by side after you sign up.
-                </p>
-              </div>
-
-              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3 dark:glass dark:glass-rim dark:glow-teal">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
-                  <Share2 className="w-5 h-5" />
-                </div>
-                <h3 className="font-bold text-base text-white"><span className="text-electric">3-Tier</span> Commissions</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Earn USDT from what your network actually pays: 5% on level 1 (direct), 3% on level 2 and 2% on level 3.
-                </p>
-              </div>
-
-              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3 dark:glass dark:glass-rim">
-                <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                  <Shield className="w-5 h-5" />
-                </div>
-                <h3 className="font-bold text-base text-white">Automatic Billing Checks</h3>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  The server checks billing automatically. Copying pauses when a subscription has ended or a profit-share invoice is overdue, and resumes once you have paid.
-                </p>
-              </div>
-            </div>
-
-            {/* Platform Knowledge Base / FAQ Section */}
-            <FAQSection onSelectTab={handleSelectTab} />
+            <LandingPage onSelectTab={handleSelectTab} />
           </div>
-        ) : activeTab === 'admin' && isAdmin ? (
-          <AdminDashboard />
-        ) : activeTab === 'referrals' ? (
-          <ReferralCommissionView />
         ) : (
-          <ClientDashboard onNavigateToReferrals={() => setActiveTab('referrals')} />
+          <div key={activeTab} className="page-enter">
+            {activeTab === 'admin' && isAdmin ? (
+              <AdminDashboard />
+            ) : activeTab === 'referrals' ? (
+              <ReferralCommissionView />
+            ) : (
+              <ClientDashboard onNavigateToReferrals={() => setActiveTab('referrals')} />
+            )}
+          </div>
         )}
       </main>
 
