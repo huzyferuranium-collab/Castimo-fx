@@ -133,7 +133,6 @@ function makeWorld() {
 async function boot(world, store, { known = 'no' } = {}) {
   const mgr = new Mt5ConnectionManager(); // a new one each time = a server restart
   mgr.api = world.api;
-  mgr.isSimulatedMode = false;
   mgr.setConnectionStore(store);
   mgr.wasVerified = async () => known;
   mgr.hasBillingHistory = async () => false;

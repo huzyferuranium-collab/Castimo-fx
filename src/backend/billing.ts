@@ -83,7 +83,7 @@ function uniqueVerifiedClients(manager: Mt5ConnectionManager): ClientConnectionR
   const seen = new Set<string>();
   const out: ClientConnectionRecord[] = [];
   for (const rec of manager.getAllClientRecords()) {
-    if (seen.has(rec.accountId) || !rec.isBrokerVerified || rec.isSimulated) continue;
+    if (seen.has(rec.accountId) || !rec.isBrokerVerified) continue;
     seen.add(rec.accountId);
     out.push(rec);
   }
@@ -263,7 +263,7 @@ export class BillingService {
 
   private async isConnected(userId: string): Promise<boolean> {
     const c = this.manager.getClientConnection(userId) ?? (await this.manager.restoreClientForUser(userId));
-    return !!(c && c.isBrokerVerified && !c.isSimulated);
+    return !!(c && c.isBrokerVerified);
   }
 
   async selectModel(userId: string, modelRaw: unknown): Promise<PlanRecord> {

@@ -36,7 +36,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
 
   const fetchHistory = () => {
     setLoading(true);
-    // Simulating sub-50ms MT5 bridge query
+    // Reads the history already loaded from the server
     const data = tradingEngine.getTradeHistory(limit);
     setTrades(data);
     setLastRefreshed(new Date());

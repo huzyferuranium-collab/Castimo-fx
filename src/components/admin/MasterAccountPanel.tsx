@@ -83,7 +83,7 @@ export const MasterAccountPanel: React.FC<MasterAccountPanelProps> = ({
         setMetaApiCloud({
           connected: data.connected,
           status: data.status,
-          mode: data.mode || (data.isSimulated ? 'SIMULATED_BRIDGE' : 'LIVE_METAAPI'),
+          mode: data.mode || 'LIVE_METAAPI',
           masterId: data.master?.accountId,
           topUpRequired: data.topUpNotice?.required,
           message: data.topUpNotice?.message,

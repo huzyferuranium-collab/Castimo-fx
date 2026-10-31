@@ -208,7 +208,7 @@ export const LedgerAuditModal: React.FC<LedgerAuditModalProps> = ({
                         </td>
                         <td className="py-3 px-3">
                           <span className="font-semibold text-white block">{log.actor}</span>
-                          <span className="text-[10px] font-mono text-slate-500">{log.ip}</span>
+                          {log.ip ? <span className="text-[10px] font-mono text-slate-500">{log.ip}</span> : null}
                         </td>
                         <td className="py-3 px-3 font-mono font-semibold text-emerald-400 text-[11px]">
                           {log.action}

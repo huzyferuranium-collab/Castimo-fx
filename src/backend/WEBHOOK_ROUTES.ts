@@ -48,7 +48,6 @@ function toPublicClient(c: any) {
     freeMargin: c.freeMargin,
     leverage: c.leverage,
     currency: c.currency,
-    isSimulated: Boolean(c.isSimulated),
     brokerName: c.brokerName,
     accountHolderName: c.accountHolderName,
     isBrokerVerified: Boolean(c.isBrokerVerified),
@@ -96,7 +95,6 @@ tradeRouter.get('/account-status', async (req: Request, res: Response) => {
     const replicationStats = replicationEngine.getReplicationMetrics();
 
     const topUpNotice = connectionManager.getTopUpNotice();
-    const isSimulated = connectionManager.isSimulated();
 
     return res.status(200).json({
       success: true,
@@ -106,12 +104,11 @@ tradeRouter.get('/account-status', async (req: Request, res: Response) => {
       latencyMs: metrics.latencyMs,
       lastPing: metrics.lastHeartbeat,
       topUpNotice,
-      isSimulated,
-      mode: isSimulated ? 'SIMULATED_BRIDGE' : 'LIVE_METAAPI',
+      mode: 'LIVE_METAAPI',
       master: {
-        accountId: metrics.accountId || 'master-castimo-001',
-        login: metrics.login || '9827361',
-        server: metrics.server || 'MetaQuotes-Demo',
+        accountId: metrics.accountId || '',
+        login: metrics.login || '',
+        server: metrics.server || '',
         balance: metrics.balance,
         equity: metrics.equity,
         freeMargin: metrics.freeMargin,
@@ -159,7 +156,7 @@ tradeRouter.post('/toggle-mirror', requireUser, async (req: Request, res: Respon
 
     // Only a broker-verified account that THIS user connected can be switched on.
     const client = connectionManager.getClientConnection(user.uid);
-    if (!client || !client.isBrokerVerified || client.isSimulated) {
+    if (!client || !client.isBrokerVerified) {
       return res.status(409).json({
         success: false,
         code: 'NO_VERIFIED_ACCOUNT',
@@ -300,7 +297,7 @@ tradeRouter.get('/connect-status', requireUser, (req: Request, res: Response) =>
     job: connectJobs.get(user.uid),
     // The terminal the supervisor is still looking after for this client (null when there is none).
     pending: pendingFor(connectionManager.getSupervisor()?.view(user.uid), connectJobs.get(user.uid)),
-    connected: Boolean(live && live.isBrokerVerified && !live.isSimulated),
+    connected: Boolean(live && live.isBrokerVerified),
   });
 });
 
@@ -550,7 +547,7 @@ tradeRouter.get('/capacity', requireAdmin, async (_req: Request, res: Response) 
 tradeRouter.get('/my-account', requireUser, async (req: Request, res: Response) => {
   const user = getAuthUser(req);
   const c = connectionManager.getClientConnection(user.uid) ?? (await connectionManager.restoreClientForUser(user.uid));
-  if (!c || !c.isBrokerVerified || c.isSimulated) {
+  if (!c || !c.isBrokerVerified) {
     // Not in service yet: if a terminal is still connecting (or could not), say so, so the dashboard can show it.
     return res
       .status(200)
@@ -567,7 +564,7 @@ tradeRouter.get('/my-account', requireUser, async (req: Request, res: Response) 
  *  - TRADE: the feed is live and the master has at least one open position.
  */
 tradeRouter.get('/robot-state', requireUser, (_req: Request, res: Response) => {
-  const live = connectionManager.isConnected() && !connectionManager.isSimulated();
+  const live = connectionManager.isConnected();
   if (!live) {
     return res.status(200).json({ success: true, state: 'UNAVAILABLE', trades: [], updatedAt: new Date().toISOString() });
   }
@@ -622,23 +619,6 @@ tradeRouter.post('/retry-master', requireAdmin, async (req: Request, res: Respon
     return res.status(200).json(result);
   } catch (error: any) {
     return res.status(500).json({ success: false, error: 'Error retrying master connection' });
-  }
-});
-
-/**
- * POST /api/trade/simulate-trade  (administrators only, and OFF unless ALLOW_SIMULATED_TRADES=true)
- * A test trade on the master terminal. It must never be reachable on a production server.
- */
-tradeRouter.post('/simulate-trade', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    if (process.env.ALLOW_SIMULATED_TRADES !== 'true') {
-      return res.status(403).json({ success: false, error: 'Test trades are disabled on this server.' });
-    }
-    const { symbol = 'XAUUSD', type = 'BUY', volume = 1.0, openPrice = 2650.5 } = req.body || {};
-    const results = await replicationEngine.simulateMasterTrade(symbol, type, Number(volume), Number(openPrice));
-    return res.status(200).json({ success: true, replicatedOrders: results, count: results.length });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, error: 'Error simulating master trade' });
   }
 });
 

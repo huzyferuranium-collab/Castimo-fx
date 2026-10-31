@@ -10,7 +10,6 @@ This repo has a Dockerfile, so any Docker host works (Render, Railway, Google Cl
    - `METAAPI_TOKEN`  = your MetaApi token (app.metaapi.cloud)
    - `MASTER_ACCOUNT_ID` = MetaApi account id of YOUR master HFM account
    - `PORT` is set by Render automatically.
-   - Do NOT set `ALLOW_SIMULATED_TRADES`.
 4. Deploy, then open `https://<your-service>.onrender.com/api/health`. It should say `UP`.
 5. Firebase console -> Authentication -> Settings -> Authorized domains -> add the onrender.com domain.
 6. Publish `firestore.rules` from this repo in the Firebase console.

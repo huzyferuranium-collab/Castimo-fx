@@ -5,9 +5,8 @@
  * Handles Master Terminal streaming WebSocket connection, auto-reconnects,
  * health checks, latency monitoring, and provisioning new client terminals.
  * 
- * Includes robust billing & quota detection (e.g. MetaApi top-up requirements)
- * with automatic fallback to high-fidelity Simulation Bridge to prevent crashes
- * and maintain continuous copy trading functionality.
+ * Includes billing & quota detection (e.g. MetaApi top-up requirements). When the master cannot connect, it says so;
+ * nothing is simulated or invented.
  */
 
 import MetaApi, {
@@ -73,7 +72,6 @@ export interface ClientConnectionRecord {
   leverage: number;
   lastSync: string;
   errorMessage?: string;
-  isSimulated?: boolean;
   accountHolderName?: string;
   brokerName?: string;
   isBrokerVerified: boolean;
@@ -130,24 +128,24 @@ export class Mt5ConnectionManager {
   private masterStreamingConnection: StreamingMetaApiConnectionInstance | null = null;
   private masterRpcConnection: RpcMetaApiConnectionInstance | null = null;
   private masterState: ConnectionState = 'DISCONNECTED';
-  private isSimulatedMode: boolean = false;
   private topUpNotice: TopUpNotice | null = null;
 
   private masterMetrics: MasterAccountMetrics = {
     accountId: 'eac52c91-a258-4aed-97de-4d7cd83a405a',
     login: '261089492',
     server: 'HFMarketsGlobal-Live20',
-    balance: 100.97,
-    equity: 100.97,
-    freeMargin: 100.97,
+    // Nothing is shown as real until the broker has reported it.
+    balance: 0,
+    equity: 0,
+    freeMargin: 0,
     marginLevel: 0,
     currency: 'USD',
-    leverage: 500,
+    leverage: 0,
     openPositionsCount: 0,
-    latencyMs: 12,
-    lastHeartbeat: new Date().toISOString(),
-    state: 'CONNECTED',
-    connectionStatus: 'CONNECTED',
+    latencyMs: 0,
+    lastHeartbeat: '',
+    state: 'DISCONNECTED',
+    connectionStatus: 'DISCONNECTED',
   };
 
   // Client Connections Pool (keyed by userId or accountId)
@@ -254,25 +252,18 @@ export class Mt5ConnectionManager {
   }
 
   /**
-   * Activates Simulation Bridge ONLY when no live MetaApi token is configured at all
+   * The master terminal cannot be reached. Nothing is made up: the state says so and no figures are invented.
    */
-  private enableSimulatedBridge(accountId: string): void {
+  private markMasterUnavailable(accountId: string, reason: string): void {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    this.isSimulatedMode = true;
-    this.masterState = 'CONNECTED';
-    this.masterMetrics.state = 'CONNECTED';
-    this.masterMetrics.connectionStatus = 'SIMULATED_BRIDGE';
-    this.masterMetrics.accountId = accountId;
-    if (!this.masterMetrics.login || this.masterMetrics.login === '9827361') {
-      this.masterMetrics.login = this.masterAccount?.login || '261089492';
-      this.masterMetrics.server = this.masterAccount?.server || 'HFMarketsGlobal-Live20';
-    }
-    this.masterMetrics.lastHeartbeat = new Date().toISOString();
-
-    console.log(`⚡ [MT5_CONNECTION_MANAGER] CastimoFX Bridge active for Master #${this.masterMetrics.login} (Equity: $${this.masterMetrics.equity.toLocaleString()})`);
+    this.masterState = 'ERROR';
+    this.masterMetrics.state = 'ERROR';
+    this.masterMetrics.connectionStatus = 'DISCONNECTED';
+    if (accountId) this.masterMetrics.accountId = accountId;
+    console.error(`❌ [MT5_CONNECTION_MANAGER] The master terminal is not connected: ${reason}`);
   }
 
   /**
@@ -284,10 +275,9 @@ export class Mt5ConnectionManager {
       if (customMasterAccountId) this.masterAccountId = customMasterAccountId;
 
       if (!this.apiToken) {
-        console.warn('⚠️ [MT5_CONNECTION_MANAGER] No METAAPI_TOKEN provided. Operating in simulated cloud bridge mode.');
-        this.enableSimulatedBridge(this.masterAccountId || 'master-castimo-001');
+        this.markMasterUnavailable(this.masterAccountId, 'no METAAPI_TOKEN is set, so there is no live connection.');
         this.startHeartbeatMonitor();
-        return true;
+        return false;
       }
 
       console.log('🚀 [MT5_CONNECTION_MANAGER] Initializing MetaApi SDK...');
@@ -334,7 +324,7 @@ export class Mt5ConnectionManager {
   public async connectMasterTerminal(accountId: string): Promise<StreamingMetaApiConnectionInstance | null> {
     if (!this.api) {
       console.warn('⚠️ [MT5_CONNECTION_MANAGER] MetaApi client not initialized. Call initialize() first.');
-      this.enableSimulatedBridge(accountId);
+      this.markMasterUnavailable(accountId, 'the MetaApi client is not initialised.');
       return null;
     }
 
@@ -358,17 +348,17 @@ export class Mt5ConnectionManager {
         } catch (deployErr: any) {
           if (this.isTopUpRequiredError(deployErr)) {
             console.warn(
-              `⚠️ [MT5_CONNECTION_MANAGER] MetaApi cloud deployment requires account top-up (Account: ${accountId}, Name: ${this.masterAccount?.name || 'Castimo-fx'}). Activating Simulation Bridge.`
+              `⚠️ [MT5_CONNECTION_MANAGER] MetaApi cloud deployment requires account top-up (Account: ${accountId}, Name: ${this.masterAccount?.name || 'Castimo-fx'}). The master stays disconnected until it is topped up.`
             );
             this.topUpNotice = {
               required: true,
               accountId,
               accountName: this.masterAccount?.name || 'Castimo-fx',
               message:
-                'MetaApi Cloud requires an account top-up to deploy live cloud terminals. CastimoFX Simulation Bridge is active so copy trading, lot scaling, and risk controls operate without interruption.',
+                'MetaApi Cloud requires an account top-up to deploy live cloud terminals. Copying from the master is paused until then.',
               topUpUrl: 'https://app.metaapi.cloud',
             };
-            this.enableSimulatedBridge(accountId);
+            this.markMasterUnavailable(accountId, 'MetaApi needs a top-up to deploy the terminal.');
             return null;
           }
           throw deployErr;
@@ -410,7 +400,6 @@ export class Mt5ConnectionManager {
       this.masterState = 'CONNECTED';
       this.masterMetrics.state = 'CONNECTED';
       this.masterMetrics.connectionStatus = this.masterAccount.connectionStatus;
-      this.isSimulatedMode = false;
       this.topUpNotice = null;
       this.reconnectAttempts = 0;
 
@@ -438,10 +427,10 @@ export class Mt5ConnectionManager {
           accountId,
           accountName: this.masterAccount?.name || 'Castimo-fx',
           message:
-            'MetaApi Cloud requires an account top-up to deploy live cloud terminals. CastimoFX Simulation Bridge is active so copy trading, lot scaling, and risk controls operate without interruption.',
+            'MetaApi Cloud requires an account top-up to deploy live cloud terminals. Copying from the master is paused until then.',
           topUpUrl: 'https://app.metaapi.cloud',
         };
-        this.enableSimulatedBridge(accountId);
+        this.markMasterUnavailable(accountId, 'MetaApi needs a top-up to deploy the terminal.');
         return null;
       }
 
@@ -459,7 +448,7 @@ export class Mt5ConnectionManager {
   public async refreshMasterAccountMetrics(): Promise<MasterAccountMetrics> {
     const startTime = Date.now();
     try {
-      if (!this.isSimulatedMode && this.masterAccountId) {
+      if (this.masterAccountId) {
         // 1. Instant Zero-Latency Check: streaming connection terminalState
         const streamInfo = this.masterStreamingConnection?.terminalState?.accountInformation;
         const streamPositions = this.masterStreamingConnection?.terminalState?.positions;
@@ -554,10 +543,6 @@ export class Mt5ConnectionManager {
             console.warn('⚠️ [MT5_CONNECTION_MANAGER] REST fallback failed:', restErr?.message || restErr);
           }
         }
-      } else {
-        // Fallback simulated metrics when in offline mode
-        this.masterMetrics.lastHeartbeat = new Date().toISOString();
-        this.masterMetrics.latencyMs = 8;
       }
     } catch (err: any) {
       console.warn('⚠️ [MT5_CONNECTION_MANAGER] Error refreshing metrics:', err?.message || err);
@@ -583,7 +568,7 @@ export class Mt5ConnectionManager {
     if (!userId) throw new BrokerVerificationError('BAD_INPUT', 'You must be signed in to connect an account.');
 
     // FAIL CLOSED: without a live MetaApi connection we cannot ask the broker, so we accept nothing.
-    if (!this.api || this.isSimulatedMode) {
+    if (!this.api) {
       throw new BrokerVerificationError(
         'VERIFICATION_UNAVAILABLE',
         'Account verification is temporarily unavailable, so no account was connected. Please try again later.'
@@ -600,7 +585,6 @@ export class Mt5ConnectionManager {
     if (
       current &&
       current.isBrokerVerified &&
-      !current.isSimulated &&
       sameLogin(current.login, params.login) &&
       eq(current.server, normalizeBrokerServer(params.server))
     ) {
@@ -620,7 +604,7 @@ export class Mt5ConnectionManager {
         (sameLogin(this.masterMetrics.login, login) && eq(this.masterMetrics.server, server)),
       activeAccountOf: (uid) => {
         const rec = this.clientPool.get(uid);
-        return rec && rec.isBrokerVerified && !rec.isSimulated ? { login: rec.login, server: rec.server } : null;
+        return rec && rec.isBrokerVerified ? { login: rec.login, server: rec.server } : null;
       },
       hasBillingHistory: async (uid) => (this.hasBillingHistory ? this.hasBillingHistory(uid) : false),
       // A client verified on this very terminal before is being reconnected, not connecting for the first time.
@@ -723,7 +707,6 @@ export class Mt5ConnectionManager {
       currency: a.verified.currency,
       leverage: a.verified.leverage,
       lastSync: now,
-      isSimulated: false,
       accountHolderName: a.verified.accountHolderName,
       brokerName: a.verified.brokerName,
       isBrokerVerified: true,
@@ -771,7 +754,7 @@ export class Mt5ConnectionManager {
   private async adoptVerifiedClient(c: VerifiedClient): Promise<void> {
     const { rec, handle, rpc, verified } = c;
     const live = this.clientPool.get(rec.userId);
-    if (live && live.isBrokerVerified && !live.isSimulated) {
+    if (live && live.isBrokerVerified) {
       // Already in service (for example the browser's connection finished first): keep that one.
       try {
         await rpc.close?.();
@@ -806,7 +789,7 @@ export class Mt5ConnectionManager {
   public async removeClientTerminal(userId: string): Promise<{ removed: number }> {
     if (!userId) return { removed: 0 };
     let removed = 0;
-    if (this.api && !this.isSimulatedMode) {
+    if (this.api) {
       const all = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
       for (const a of all.filter((x) => isOwnedBy(x.name, userId))) {
         try {
@@ -838,7 +821,7 @@ export class Mt5ConnectionManager {
   public async getCapacity(): Promise<{ used: number; limit: number; perUserLimit: number }> {
     const limit = readLimit(process.env.MAX_CLIENT_ACCOUNTS, 5);
     const perUserLimit = readLimit(process.env.MAX_ACCOUNTS_PER_USER, 1);
-    if (!this.api || this.isSimulatedMode) return { used: 0, limit, perUserLimit };
+    if (!this.api) return { used: 0, limit, perUserLimit };
     const all = await this.api.metatraderAccountApi.getAccountsWithInfiniteScrollPagination();
     return { used: countClientAccounts(all), limit, perUserLimit };
   }
@@ -868,8 +851,8 @@ export class Mt5ConnectionManager {
       return {
         success: false,
         topUpRequired: true,
-        mode: 'SIMULATED_BRIDGE',
-        message: 'MetaApi Cloud account still requires top-up at app.metaapi.cloud to deploy live cloud terminals. Continuing in Simulation Bridge mode.',
+        mode: 'DISCONNECTED',
+        message: 'MetaApi Cloud account still requires top-up at app.metaapi.cloud to deploy live cloud terminals. The master stays disconnected until then.',
       };
     }
 
@@ -902,7 +885,7 @@ export class Mt5ConnectionManager {
    */
   public registerClient(record: ClientConnectionRecord): void {
     // Only accounts the broker itself has verified may ever enter the copy pool.
-    if (!record.isBrokerVerified || record.isSimulated) {
+    if (!record.isBrokerVerified) {
       throw new BrokerVerificationError('BAD_BROKER_RESPONSE', 'Refusing to register an account the broker has not verified.');
     }
     if (!record.health) record.health = newHealthState(Date.now());
@@ -923,7 +906,7 @@ export class Mt5ConnectionManager {
   public getActiveClients(): ClientConnectionRecord[] {
     const unique = new Map<string, ClientConnectionRecord>();
     for (const record of this.clientPool.values()) {
-      if (record.status === 'ACTIVE' && record.isBrokerVerified && !record.isSimulated && !record.billingBlocked) {
+      if (record.status === 'ACTIVE' && record.isBrokerVerified && !record.billingBlocked) {
         unique.set(record.userId, record);
       }
     }
@@ -1024,7 +1007,7 @@ export class Mt5ConnectionManager {
    * undeployed, reconnect, and wait for sync only as a best effort.
    */
   private async rebuildClientLink(rec: ClientConnectionRecord): Promise<void> {
-    if (!this.api || this.isSimulatedMode) throw new Error('MetaApi is not available');
+    if (!this.api) throw new Error('MetaApi is not available');
     const entity = await this.api.metatraderAccountApi.getAccount(rec.accountId);
     if (entity.state !== 'DEPLOYED') {
       if (entity.state === 'UNDEPLOYED' || entity.state === 'DRAFT') await entity.deploy();
@@ -1092,13 +1075,13 @@ export class Mt5ConnectionManager {
    * so deposits, withdrawals and floating profit show up on the dashboard and in lot sizing.
    */
   public async refreshAllClients(): Promise<void> {
-    if (this.refreshingClients || !this.api || this.isSimulatedMode) return;
+    if (this.refreshingClients || !this.api) return;
     this.refreshingClients = true;
     try {
       const seen = new Set<string>();
       const batch: ClientConnectionRecord[] = [];
       for (const rec of Array.from(this.clientPool.values())) {
-        if (seen.has(rec.accountId) || !rec.isBrokerVerified || rec.isSimulated) continue;
+        if (seen.has(rec.accountId) || !rec.isBrokerVerified) continue;
         seen.add(rec.accountId);
         batch.push(rec);
       }
@@ -1139,7 +1122,7 @@ export class Mt5ConnectionManager {
       limits: { minEquity: readLimit(process.env.MIN_CONNECT_EQUITY, DEFAULT_MIN_CONNECT_EQUITY) },
       isActive: (uid) => {
         const rec = this.clientPool.get(uid);
-        return Boolean(rec && rec.isBrokerVerified && !rec.isSimulated);
+        return Boolean(rec && rec.isBrokerVerified);
       },
       isConnecting: (uid) => this.connecting.has(uid),
       wasVerified: async (uid, accountId) => (this.wasVerified ? this.wasVerified(uid, accountId) : 'unknown'),
@@ -1149,7 +1132,7 @@ export class Mt5ConnectionManager {
         const seen = new Set<string>();
         const out: Array<{ userId: string; accountId: string; login: string; connectionState?: string }> = [];
         for (const rec of this.clientPool.values()) {
-          if (seen.has(rec.accountId) || !rec.isBrokerVerified || rec.isSimulated) continue;
+          if (seen.has(rec.accountId) || !rec.isBrokerVerified) continue;
           seen.add(rec.accountId);
           out.push({ userId: rec.userId, accountId: rec.accountId, login: rec.login, connectionState: rec.connectionState });
         }
@@ -1170,7 +1153,7 @@ export class Mt5ConnectionManager {
    * is not being looked after (this is how clients are brought back after a restart), and keeps going.
    */
   private async startSupervisor(): Promise<void> {
-    if (!this.api || this.isSimulatedMode) return;
+    if (!this.api) return;
     try {
       const sup = this.buildSupervisor();
       this.supervisor = sup;
@@ -1202,7 +1185,7 @@ export class Mt5ConnectionManager {
     const existing = this.clientPool.get(userId);
     if (existing) return existing;
     const sup = this.supervisor;
-    if (!sup || !this.api || this.isSimulatedMode) return undefined;
+    if (!sup || !this.api) return undefined;
     if (this.connecting.has(userId)) return undefined;
     const last = this.lastLazyRestore.get(userId) || 0;
     if (Date.now() - last < 30_000) return undefined;
@@ -1221,10 +1204,8 @@ export class Mt5ConnectionManager {
     this.clientRefreshTimer = setInterval(() => void this.refreshAllClients(), 10000);
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
     this.heartbeatInterval = setInterval(async () => {
-      if (this.masterState === 'CONNECTED' && !this.isSimulatedMode) {
+      if (this.masterState === 'CONNECTED') {
         await this.refreshMasterAccountMetrics();
-      } else if (this.isSimulatedMode) {
-        this.masterMetrics.lastHeartbeat = new Date().toISOString();
       }
     }, 4000);
   }
@@ -1244,10 +1225,6 @@ export class Mt5ConnectionManager {
 
   public isConnected(): boolean {
     return this.masterState === 'CONNECTED';
-  }
-
-  public isSimulated(): boolean {
-    return this.isSimulatedMode;
   }
 
   public getTopUpNotice(): TopUpNotice | null {

@@ -93,7 +93,7 @@ function makeWorld(names = ['A', 'B']) {
     getMasterStreamingConnection: () => w.stream,
     getMasterRpcConnection: () => w.master,
     isConnected: () => w.connected,
-    getActiveClients: () => unique().filter((c) => c.status === 'ACTIVE' && c.isBrokerVerified && !c.isSimulated && !c.billingBlocked),
+    getActiveClients: () => unique().filter((c) => c.status === 'ACTIVE' && c.isBrokerVerified && !c.billingBlocked),
     getAllClientRecords: () => Array.from(w.clients.values()), // like the real pool: each record appears under two keys
     getClientConnection: (id) => w.clients.get(id),
     getMasterMetrics: () => ({ balance: 1000 }),
@@ -106,7 +106,7 @@ function addClient(w, name, over = {}) {
   const rec = {
     userId: `user-${name}`, accountId: `acc-${name}`, login: `10${name}`, server: 'Demo', status: 'ACTIVE',
     balance: 500, equity: 520, freeMargin: 480, currency: 'USD', leverage: 500, lastSync: '',
-    isBrokerVerified: true, isSimulated: false, verificationTimestamp: '',
+    isBrokerVerified: true, verificationTimestamp: '',
     rpcConnection: new FakeTerminal(`client-${name}`),
     ...over,
   };

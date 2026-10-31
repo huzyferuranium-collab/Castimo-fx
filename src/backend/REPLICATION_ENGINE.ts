@@ -589,31 +589,18 @@ export class ReplicationEngine {
         };
       }
     } else {
-      // In simulated / test mode, record simulated instantaneous execution
-      const simPositionId = `sim-pos-${client.userId}-${Date.now()}`;
-      const mapping = this.positionMap.get(posId);
-      if (mapping) {
-        mapping.clientPositions.set(client.userId, {
-          clientAccountId: client.accountId,
-          clientPositionId: simPositionId,
-          symbol: position.symbol,
-          volume: clientLot,
-          openPrice: position.openPrice,
-          openTime: new Date().toISOString(),
-        });
-      }
-
+      // No live connection for this client: nothing was sent to their broker, so nothing is reported as done.
       return {
         clientUserId: client.userId,
         clientAccountId: client.accountId,
         masterPositionId: posId,
-        clientPositionId: simPositionId,
         symbol: position.symbol,
         type: isBuy ? 'BUY' : 'SELL',
         masterVolume: position.volume,
-        clientVolume: clientLot,
-        status: 'EXECUTED',
+        clientVolume: 0,
+        status: 'ERROR',
         executionLatencyMs: Date.now() - startMs,
+        error: 'The client\'s live broker connection is not ready, so this trade was not copied.',
       };
     }
   }
@@ -708,7 +695,7 @@ export class ReplicationEngine {
   private copyTargets(): ClientConnectionRecord[] {
     const byUser = new Map<string, ClientConnectionRecord>();
     for (const c of this.connectionManager.getAllClientRecords()) {
-      if (!c.isBrokerVerified || c.isSimulated || !c.rpcConnection) continue;
+      if (!c.isBrokerVerified || !c.rpcConnection) continue;
       byUser.set(c.userId, c);
     }
     return Array.from(byUser.values());
@@ -916,45 +903,6 @@ export class ReplicationEngine {
 
   public handleConnectionChange(connected: boolean): void {
     console.log(`📡 [REPLICATION_ENGINE] Master synchronization state changed: ${connected ? 'ONLINE' : 'OFFLINE'}`);
-  }
-
-  /**
-   * Programmatically simulate a Master position open event (e.g. for testing or UI simulation bridge)
-   */
-  public async simulateMasterTrade(
-    symbol: string = 'XAUUSD',
-    type: 'BUY' | 'SELL' = 'BUY',
-    volume: number = 1.0,
-    openPrice: number = 2650.50
-  ): Promise<ReplicatedOrderResult[]> {
-    const mockPos: MetatraderPosition = {
-      id: Math.floor(Date.now() % 1000000000),
-      type: type === 'BUY' ? 'POSITION_TYPE_BUY' : 'POSITION_TYPE_SELL',
-      symbol,
-      magic: 889900,
-      time: new Date(),
-      brokerTime: new Date().toISOString(),
-      updateTime: new Date(),
-      openPrice,
-      currentPrice: openPrice,
-      currentTickValue: 1,
-      volume,
-      swap: 0,
-      realizedSwap: 0,
-      unrealizedSwap: 0,
-      profit: 0,
-      realizedProfit: 0,
-      unrealizedProfit: 0,
-      commission: 0,
-      realizedCommission: 0,
-      unrealizedCommission: 0,
-      stopLoss: type === 'BUY' ? openPrice - 15 : openPrice + 15,
-      takeProfit: type === 'BUY' ? openPrice + 30 : openPrice - 30,
-      comment: 'Castimo Master Signal',
-      accountCurrencyExchangeRate: 1,
-      reason: 'POSITION_REASON_CLIENT',
-    } as unknown as MetatraderPosition;
-    return await this.onPositionOpened(mockPos);
   }
 
   public getReplicationMetrics() {

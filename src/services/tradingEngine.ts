@@ -1,6 +1,5 @@
 import {
   Subscription,
-  SubscriptionPlan,
   Mt5Account,
   MasterMt5Account,
   CopiedTrade,
@@ -27,35 +26,6 @@ export const TRC20_USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 const RAW_TREASURY = String((import.meta as any).env?.VITE_TREASURY_ADDRESS ?? '').trim();
 export const CASTIMO_TREASURY_ADDRESS = /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(RAW_TREASURY) ? RAW_TREASURY : '';
 export const PAYMENTS_ENABLED = CASTIMO_TREASURY_ADDRESS !== '';
-
-export const DEFAULT_PLANS: SubscriptionPlan[] = [
-  {
-    id: 'weekly',
-    name: 'Weekly Trader Pass',
-    priceUsdt: 15,
-    durationDays: 7,
-    description: 'Entry pass for active forex & commodities trade copying.',
-    features: [
-      'Institutional trade replication (EURUSD, XAUUSD, GBPUSD)',
-      'Real-time MT5 trade replication',
-      'Daily High-Water Mark profit settlement',
-      'Pay in USDT (TRC20)',
-    ],
-  },
-  {
-    id: 'monthly',
-    name: 'Monthly Pro Trader',
-    priceUsdt: 40,
-    durationDays: 30,
-    description: 'Most popular plan for full monthly automated copiers.',
-    features: [
-      'All major, minor & gold pairs',
-      'Lot size scaled to your account balance',
-      'Continuous margin & drawdown guard',
-      'Exportable financial ledger & tax reports',
-    ],
-  },
-];
 
 export const DEFAULT_RISK_SETTINGS: RiskSettings = {
   minEquityToTrade: 200,
@@ -142,7 +112,7 @@ const INITIAL_AUDIT_LOGS: AuditLog[] = [
     action: 'TERMINAL_INITIALIZED',
     category: 'MT5',
     details: 'Castimo FX Terminal initialized in initial standby state ($0.00 balance, awaiting MT5 bridge).',
-    ip: '127.0.0.1',
+    ip: '',
     timestamp: new Date().toISOString(),
     status: 'SUCCESS',
   },
@@ -195,10 +165,6 @@ class TradingEngine {
   private settlements: ProfitShareSettlement[] = INITIAL_SETTLEMENTS;
   private ledger: LedgerEntry[] = INITIAL_LEDGER;
   private auditLogs: AuditLog[] = INITIAL_AUDIT_LOGS;
-  private usedTxHashes: Set<string> = new Set([
-    '9a8d7e6f5c4b3a210987654321fedcba0123456789abcdef0123456789abcdef',
-    '4f2e1d0c9b8a7f6e5d4c3b2a10987654321fedcba0987654321abcdef0123456',
-  ]);
 
   private listeners: (() => void)[] = [];
 
@@ -332,24 +298,6 @@ class TradingEngine {
       'ADMIN',
       'Main Master MT5 Account disconnected from bridge. Trade broadcast suspended.',
       'WARNING'
-    );
-
-    this.notify();
-  }
-
-  public reconnectMasterAccount(): void {
-    this.masterAccount.status = 'broadcasting';
-    this.masterAccount.signalBroadcasting = true;
-    this.masterAccount.latencyMs = Math.floor(Math.random() * 8) + 12; // 12-20ms
-    this.masterAccount.lastPing = new Date().toISOString();
-
-    this.logAudit(
-      'admin-lead-master',
-      'Administrator',
-      'MASTER_ACCOUNT_RECONNECTED',
-      'ADMIN',
-      `Master MT5 bridge ping refreshed (${this.masterAccount.latencyMs}ms). Active signal broadcast online.`,
-      'SUCCESS'
     );
 
     this.notify();
@@ -994,71 +942,6 @@ class TradingEngine {
     return { checked: 0, disconnectedCount: 0, message: 'Overdue invoices are handled automatically by the server.' };
   }
 
-  public simulateNewProfits(grossProfit: number = 200.0): ProfitShareInvoice {
-    const fee = grossProfit * 0.5; // 50%
-    const dueAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
-
-    const inv: ProfitShareInvoice = {
-      id: `inv-share-${Date.now().toString().slice(-4)}`,
-      userId: this.mt5Account.userId,
-      accountNumber: this.mt5Account.accountNumber,
-      grossProfit,
-      profitSharePct: 50,
-      amountDueUsdt: fee,
-      recipientAddress: CASTIMO_TREASURY_ADDRESS,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      dueAt,
-    };
-
-    this.profitInvoices.unshift(inv);
-    this.mt5Account.balance += grossProfit;
-    this.mt5Account.equity += grossProfit;
-    this.mt5Account.freeMargin += grossProfit;
-    this.mt5Account.lastProfitGenerated = grossProfit;
-    this.mt5Account.unpaidProfitShareUsdt = (this.mt5Account.unpaidProfitShareUsdt || 0) + fee;
-    this.mt5Account.profitShareDueAt = dueAt;
-    this.mt5Account.profitShareStatus = 'payment_pending';
-
-    // Synchronize into supervised accounts
-    const sup = this.supervisedAccounts.find((a) => a.accountNumber === this.mt5Account.accountNumber);
-    if (sup) {
-      sup.balance = this.mt5Account.balance;
-      sup.equity = this.mt5Account.equity;
-      sup.unpaidProfitShareUsdt = this.mt5Account.unpaidProfitShareUsdt;
-      sup.profitShareDueAt = dueAt;
-      sup.profitShareStatus = 'payment_pending';
-    }
-
-    this.logAudit(
-      this.mt5Account.userId,
-      'MT5 Bridge Feed',
-      'PROFIT_CYCLE_CLOSED',
-      'MT5',
-      `Closed profitable cycle: +${grossProfit.toFixed(2)}. 50% profit share invoice (${fee.toFixed(2)} USDT) issued with 24-hour grace window.`,
-      'SUCCESS'
-    );
-
-    this.notify();
-    return inv;
-  }
-
-  public simulateFastForward24h(): void {
-    // Set dueAt to 10 minutes in the past
-    const pastDue = new Date(Date.now() - 600 * 1000).toISOString();
-    this.mt5Account.profitShareDueAt = pastDue;
-    const inv = this.getActiveProfitInvoice();
-    if (inv) {
-      inv.dueAt = pastDue;
-    }
-    const sup = this.supervisedAccounts.find((a) => a.accountNumber === this.mt5Account.accountNumber);
-    if (sup) {
-      sup.profitShareDueAt = pastDue;
-    }
-
-    this.trigger24hWatcherSweep();
-  }
-
   public reconnectAccount(accountNumber: string): void {
     if (this.mt5Account.accountNumber === accountNumber) {
       this.mt5Account.status = 'copying';
@@ -1081,125 +964,6 @@ class TradingEngine {
   }
 
   // --- TRC20 USDT SUBSCRIPTION & TRONGRID ENGINE (Section 5 & 6) ---
-  public createSubscriptionInvoice(userId: string, planId: 'weekly' | 'monthly'): Subscription {
-    const plan = DEFAULT_PLANS.find((p) => p.id === planId) || DEFAULT_PLANS[0];
-
-    const newSub: Subscription = {
-      id: `sub-cfx-${Date.now().toString().slice(-6)}`,
-      userId,
-      planId: plan.id,
-      planName: plan.name,
-      priceUsdt: plan.priceUsdt,
-      status: 'pending_payment',
-      confirmations: 0,
-      recipientAddress: CASTIMO_TREASURY_ADDRESS,
-      createdAt: new Date().toISOString(),
-    };
-
-    this.subscription = newSub;
-    this.logAudit(
-      userId,
-      'Client',
-      'INVOICE_GENERATED',
-      'PAYMENT',
-      `Generated invoice for ${plan.name} ($${plan.priceUsdt} USDT TRC20). Recipient: ${CASTIMO_TREASURY_ADDRESS}`,
-      'SUCCESS'
-    );
-
-    this.notify();
-    return newSub;
-  }
-
-  public verifyTronGridTxHash(
-    txHash: string,
-    onProgress?: (confirmations: number, status: string) => void
-  ): Promise<{ success: boolean; error?: string }> {
-    return new Promise((resolve) => {
-      // 1. Validation
-      const cleanHash = txHash.trim();
-      const hashRegex = /^[0-9a-fA-F]{64}$/;
-
-      if (!hashRegex.test(cleanHash)) {
-        resolve({
-          success: false,
-          error: 'Invalid TronGrid TX Hash format. Must be a 64-character hexadecimal transaction ID.',
-        });
-        return;
-      }
-
-      if (this.usedTxHashes.has(cleanHash)) {
-        resolve({
-          success: false,
-          error: 'Duplicate Transaction Hash! This payment hash has already been redeemed.',
-        });
-        return;
-      }
-
-      if (!this.subscription) {
-        resolve({
-          success: false,
-          error: 'No active subscription invoice waiting for payment.',
-        });
-        return;
-      }
-
-      this.subscription.status = 'payment_submitted';
-      this.subscription.txHash = cleanHash;
-      this.notify();
-
-      // Simulate TronGrid API confirmation stream (at least 20 confirmations)
-      let conf = 1;
-      const interval = setInterval(() => {
-        conf += Math.floor(Math.random() * 4) + 3;
-        if (this.subscription) {
-          this.subscription.confirmations = conf;
-          this.subscription.status = 'payment_confirming';
-        }
-        if (onProgress) {
-          onProgress(conf, `Querying TronGrid TRC20 USDT Contract... ${conf}/20 confirmations`);
-        }
-        this.notify();
-
-        if (conf >= 22) {
-          clearInterval(interval);
-          this.usedTxHashes.add(cleanHash);
-
-          const now = new Date();
-          const plan = DEFAULT_PLANS.find((p) => p.id === this.subscription?.planId) || DEFAULT_PLANS[0];
-          const expiresAt = new Date(now.getTime() + plan.durationDays * 24 * 3600 * 1000);
-
-          if (this.subscription) {
-            this.subscription.status = 'active';
-            this.subscription.confirmations = conf;
-            this.subscription.startDate = now.toISOString();
-            this.subscription.expiresAt = expiresAt.toISOString();
-          }
-
-          // Immutable ledger entry
-          this.addLedgerEntry(
-            'TRC20_SUBSCRIPTION_PAYMENT',
-            cleanHash,
-            `TronGrid verified TRC20 payment for ${plan.name} ($${plan.priceUsdt} USDT). Confirmed blocks: ${conf}`,
-            0,
-            plan.priceUsdt
-          );
-
-          this.logAudit(
-            this.subscription?.userId || 'client',
-            'TronGrid Validator',
-            'PAYMENT_CONFIRMED',
-            'PAYMENT',
-            `TRC20 payment verified: ${cleanHash.slice(0, 8)}... (${conf} confirmations). Subscription activated.`,
-            'SUCCESS'
-          );
-
-          this.notify();
-          resolve({ success: true });
-        }
-      }, 400);
-    });
-  }
-
   // --- MT5 CONNECTION & ONBOARDING (Section 7) ---
   /**
    * Safe onboarding: Credentials are sent via secure HTTPS to the private bridge.
@@ -1307,7 +1071,7 @@ class TradingEngine {
 
     const c = job.result;
     // Defence in depth: accept only an answer the broker verified.
-    if (!c || c.isBrokerVerified !== true || c.isSimulated === true) {
+    if (!c || c.isBrokerVerified !== true) {
       return fail('The broker could not verify this account. Nothing was connected.');
     }
     this.pendingConnection = null; // connected: there is nothing left to wait for
@@ -1403,7 +1167,7 @@ class TradingEngine {
       }
 
       for (const c of clients) {
-        if (c.isBrokerVerified !== true || c.isSimulated === true) continue;
+        if (c.isBrokerVerified !== true) continue;
         const mappedAcc: Mt5Account = {
           id: c.accountId || `mt5-acc-${c.userId}`,
           userId: c.userId,
@@ -1694,7 +1458,7 @@ class TradingEngine {
       action,
       category,
       details,
-      ip: '198.51.100.' + (Math.floor(Math.random() * 80) + 10),
+      ip: '', // no address is recorded here, so none is shown
       timestamp: new Date().toISOString(),
       status,
     };

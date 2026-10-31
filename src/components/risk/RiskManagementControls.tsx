@@ -253,7 +253,7 @@ export const RiskManagementControls: React.FC<RiskManagementControlsProps> = ({
             </div>
 
             <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-300 flex items-center justify-between">
-              <span className="text-slate-400">Replication Simulation:</span>
+              <span className="text-slate-400">Example of this setting:</span>
               <span className="font-mono text-emerald-400 font-bold">
                 1.00 Lot Master → {(1.0 * lotMultiplier).toFixed(2)} Lots Client
               </span>
