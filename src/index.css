@@ -813,3 +813,77 @@ html.light .bg-slate-950\/90 {
     animation: none !important;
   }
 }
+
+/* ========================================================
+   GLOBAL PREMIUM SURFACE LAYER (applies to the whole app)
+   Dark: frosted-glass cards over a deep canvas with soft teal/cyan light.
+   Light: clean white cards with layered soft shadows.
+   ======================================================== */
+
+html.dark body {
+  background-color: #060a12;
+  background-image:
+    radial-gradient(900px 520px at 8% -8%, rgba(45,212,191,.14), transparent 60%),
+    radial-gradient(800px 520px at 100% 0%, rgba(56,189,248,.10), transparent 60%),
+    radial-gradient(900px 600px at 50% 115%, rgba(74,222,128,.08), transparent 60%);
+  background-attachment: fixed;
+}
+/* let the canvas show through the page shell */
+html.dark .min-h-screen.bg-slate-950 { background-color: transparent; }
+
+/* Cards: any rounded panel built on slate-900 becomes frosted glass with a rim light */
+html.dark :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) {
+  position: relative;
+  background: linear-gradient(160deg, rgba(255,255,255,.07), rgba(255,255,255,.022) 60%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  backdrop-filter: blur(16px) saturate(140%);
+  border-color: rgba(255,255,255,.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.09), 0 22px 44px -26px rgba(0,0,0,.75);
+}
+html.dark :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass)::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(145deg, rgba(255,255,255,.30) 0%, rgba(255,255,255,.07) 22%, rgba(255,255,255,0) 48%, rgba(45,212,191,0) 70%, rgba(45,212,191,.20) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* Header: translucent with a hairline of teal light */
+html.dark header.sticky {
+  background-color: rgba(6,10,18,.72);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
+  border-bottom-color: rgba(255,255,255,.07);
+  box-shadow: 0 1px 0 rgba(45,212,191,.10);
+}
+
+/* Status pills (Active, Settled, TRC20 ACTIVE ...) get a soft, desaturated glow */
+html.dark .rounded-full[class*="bg-emerald-500/1"],
+html.dark .rounded-full[class*="bg-emerald-500/2"] {
+  box-shadow: 0 0 0 1px rgba(74,222,128,.18), 0 0 16px -4px rgba(74,222,128,.32);
+}
+
+/* Primary green buttons: gentle ambient glow */
+html.dark button[class*="from-emerald-500"] {
+  box-shadow: 0 10px 28px -10px rgba(45,212,191,.45), inset 0 1px 0 rgba(255,255,255,.25);
+}
+
+/* Slim, quiet scrollbars */
+html.dark { scrollbar-color: rgba(148,163,184,.28) transparent; }
+
+/* Light theme: soft layered depth instead of flat white boxes */
+html.light body {
+  background-image:
+    radial-gradient(900px 480px at 0% -10%, rgba(45,212,191,.10), transparent 60%),
+    radial-gradient(800px 480px at 100% 0%, rgba(56,189,248,.09), transparent 60%);
+  background-attachment: fixed;
+}
+html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody) {
+  box-shadow: 0 1px 2px rgba(15,23,42,.05), 0 14px 34px -16px rgba(15,23,42,.14);
+  border-color: rgba(15,23,42,.08) !important;
+}

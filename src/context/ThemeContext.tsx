@@ -9,7 +9,8 @@ interface ThemeContextType {
   setTheme: (theme: Theme) => void;
 }
 
-const THEME_STORAGE_KEY = 'castimo_theme';
+// v2: the premium dark look is the default for everyone; the toggle still switches to light.
+const THEME_STORAGE_KEY = 'castimo_theme_v2';
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
@@ -19,10 +20,6 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       const saved = localStorage.getItem(THEME_STORAGE_KEY);
       if (saved === 'light' || saved === 'dark') {
         return saved;
-      }
-      // Check system preference if available
-      if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches) {
-        return 'light';
       }
     } catch {
       // Fallback
