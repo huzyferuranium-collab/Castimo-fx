@@ -1,4 +1,5 @@
 import React, { useId } from 'react';
+import { REFERRAL_RATES_PCT } from '../../backend/referrals';
 
 /**
  * Original SVG artwork for the client dashboard: one distinct piece per section, drawn from the
@@ -192,36 +193,50 @@ export const ClockArt: React.FC<ArtProps> = ({ size = 120, className = '' }) => 
   );
 };
 
-/* ---------------------------------------------------------------- referrals: three-level network */
+/* ---------------------------------------------------------------- referrals: three-level glass stack (small version of the landing page's stack) */
 export const NetworkArt: React.FC<ArtProps> = ({ size = 120, className = '' }) => {
   const u = useUid();
-  const orb = (id: string, c: string[]) => (
-    <radialGradient id={`${u}${id}`} cx="35%" cy="30%" r="80%">
-      <stop offset="0" stopColor={c[0]} /><stop offset=".5" stopColor={c[1]} /><stop offset="1" stopColor={c[2]} />
-    </radialGradient>
-  );
-  const lines: Array<[number, number, number, number]> = [
-    [60, 22, 28, 62], [60, 22, 60, 66], [60, 22, 92, 62],
-    [28, 62, 14, 100], [28, 62, 40, 102], [60, 66, 50, 104], [60, 66, 72, 104], [92, 62, 82, 102], [92, 62, 106, 100],
+  const showRates = size >= 64; // below this the figures would be too small to read
+  // plane -> screen: the same turn (-34deg) and tilt (56deg) as the full glass stack
+  const plane = '0.829 -0.3125 0.559 0.4634';
+  const slabs = [
+    { k: 'c', c: '#22d3ee', rate: REFERRAL_RATES_PCT[2], e: 18, f: 80 }, // level 3, bottom
+    { k: 'v', c: '#a855f7', rate: REFERRAL_RATES_PCT[1], e: 11, f: 57 }, // level 2, middle
+    { k: 'r', c: '#ff5c50', rate: REFERRAL_RATES_PCT[0], e: 4, f: 34 }, // level 1, top
   ];
   return (
-    <svg aria-hidden width={size} height={size} viewBox="0 0 120 120" className={`art ${className}`}>
+    <svg aria-hidden width={size} height={size} viewBox="0 0 120 120" className={className}>
       <defs>
-        {orb('a', ['#ffd0d5', '#f52236', '#a00a1f'])}
-        {orb('b', ['#ffd3ff', '#e83eff', '#8a14b0'])}
-        {orb('c', ['#d9c7ff', '#853bff', '#4a1ab3'])}
-        {orb('d', ['#d4f1ff', '#38bdf8', '#176bff'])}
-        {orb('e', ['#d8fbff', '#06d6e9', '#0a7f8c'])}
+        <style>{`
+          .rgm-base { fill: rgba(12, 12, 18, .6); }
+          .rgm-ink { fill: #fff; }
+          html.light .rgm-base { fill: rgba(255, 255, 255, .78); }
+          html.light .rgm-ink { fill: #0f172a; }
+        `}</style>
+        {slabs.map((sl) => (
+          <linearGradient key={sl.k} id={`${u}${sl.k}`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor={sl.c} stopOpacity=".5" />
+            <stop offset="1" stopColor={sl.c} stopOpacity=".1" />
+          </linearGradient>
+        ))}
       </defs>
-      <g stroke="#9aa8ff" strokeOpacity=".55" strokeWidth="2.4" strokeLinecap="round">
-        {lines.map(([a, b, c, d]) => <line key={`${a}${b}${c}${d}`} x1={a} y1={b} x2={c} y2={d} />)}
-      </g>
-      <circle cx="60" cy="22" r="14" fill={`url(#${u}a)`} />
-      <ellipse cx="55" cy="17" rx="5" ry="3" fill="#fff" fillOpacity=".7" transform="rotate(-30 55 17)" />
-      <circle cx="28" cy="62" r="10" fill={`url(#${u}b)`} />
-      <circle cx="60" cy="66" r="10" fill={`url(#${u}c)`} />
-      <circle cx="92" cy="62" r="10" fill={`url(#${u}d)`} />
-      {[[14, 100], [40, 102], [50, 104], [72, 104], [82, 102], [106, 100]].map(([x, y], i) => <circle key={`${x}${y}`} cx={x} cy={y} r="6" fill={`url(#${u}${i % 2 ? 'e' : 'd'})`} />)}
+      {slabs.map((sl) => (
+        <g key={sl.k} transform={`matrix(${plane} ${sl.e} ${sl.f})`}>
+          {/* soft shadow and glow under the glass */}
+          <rect x="3" y="10" width="84" height="48" rx="9" fill="#000" opacity=".18" />
+          <rect x="0" y="0" width="84" height="48" rx="9" fill="none" stroke={sl.c} strokeWidth="6" strokeOpacity=".2" />
+          {/* the glass */}
+          <rect x="0" y="0" width="84" height="48" rx="9" className="rgm-base" />
+          <rect x="0" y="0" width="84" height="48" rx="9" fill={`url(#${u}${sl.k})`} />
+          <rect x="0.7" y="0.7" width="82.6" height="46.6" rx="8.4" fill="none" stroke={sl.c} strokeWidth="1.4" strokeOpacity=".95" />
+          <path d="M10 1.6 H74" stroke="#fff" strokeOpacity=".55" strokeWidth="1" strokeLinecap="round" />
+          {showRates && (
+            <text x="11" y="35" fontSize="27" fontWeight="800" className="rgm-ink">
+              {sl.rate}%
+            </text>
+          )}
+        </g>
+      ))}
     </svg>
   );
 };
