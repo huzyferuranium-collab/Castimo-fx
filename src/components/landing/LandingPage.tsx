@@ -80,10 +80,17 @@ const FlowLine: React.FC = () => (
   </>
 );
 
-const Bullet: React.FC<{ children: React.ReactNode; tone?: 'blue' | 'rose' }> = ({ children, tone = 'blue' }) => (
+const Bullet: React.FC<{ children: React.ReactNode; tone?: 'blue' | 'rose'; short?: string }> = ({ children, tone = 'blue', short }) => (
   <li className="flex items-start gap-1.5 sm:gap-2.5 text-[11px] leading-snug sm:text-sm sm:leading-normal text-slate-700 dark:text-slate-300">
     <CheckCircle2 className={`w-3.5 h-3.5 sm:w-4 sm:h-4 mt-px sm:mt-0.5 shrink-0 ${tone === 'rose' ? 'text-rose-500 dark:text-rose-300' : 'text-blue-600 dark:text-sky-300'}`} />
-    <span>{children}</span>
+    {short ? (
+      <>
+        <span className="sm:hidden">{short}</span>
+        <span className="hidden sm:inline">{children}</span>
+      </>
+    ) : (
+      <span>{children}</span>
+    )}
   </li>
 );
 
@@ -221,11 +228,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
                 </span>
                 <span className={`${muted} mt-1 sm:mt-0 sm:pb-2 text-xs sm:text-sm`}>/ 30 days</span>
               </div>
-              <p className={`${muted} text-[11.5px] leading-snug min-h-[2.1rem] sm:min-h-0 sm:text-sm mt-2 sm:mt-3`}>A flat price. No profit share on top.</p>
+              <p className={`${muted} text-[11.5px] leading-snug min-h-[2.1rem] sm:min-h-0 sm:text-sm mt-2 sm:mt-3`}>
+                <span className="sm:hidden">Flat price. No profit share.</span>
+                <span className="hidden sm:inline">A flat price. No profit share on top.</span>
+              </p>
               <ul className="mt-3 sm:mt-6 space-y-2 sm:space-y-3 flex-1">
-                <Bullet>Paid up front in USDT (TRC20)</Bullet>
-                <Bullet>Copying runs while your plan is active</Bullet>
-                <Bullet>No automatic renewals — you renew when you wish</Bullet>
+                <Bullet short="Paid up front in USDT (TRC20)">Paid up front in USDT (TRC20)</Bullet>
+                <Bullet short="Copies while your plan is active">Copying runs while your plan is active</Bullet>
+                <Bullet short="No auto-renewal. You choose when.">No automatic renewals — you renew when you wish</Bullet>
               </ul>
               <button
                 onClick={() => onSelectTab('client')}
@@ -258,10 +268,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
               </div>
               <p className={`${muted} text-[11.5px] leading-snug min-h-[2.1rem] sm:min-h-0 sm:text-sm mt-2 sm:mt-3`}>No new profit, no fee.</p>
               <ul className="mt-3 sm:mt-6 space-y-2 sm:space-y-3 flex-1">
-                <Bullet tone="rose">Fee applies only to profit above your previous high-water mark</Bullet>
-                <Bullet tone="rose">Losses are recovered before any new fee is charged</Bullet>
-                <Bullet tone="rose">Deposits and withdrawals never count as profit</Bullet>
-                <Bullet tone="rose">Each invoice is payable within 24 hours in USDT (TRC20)</Bullet>
+                <Bullet tone="rose" short="Fee only on profit above your previous high">Fee applies only to profit above your previous high-water mark</Bullet>
+                <Bullet tone="rose" short="Losses are made up before any new fee">Losses are recovered before any new fee is charged</Bullet>
+                <Bullet tone="rose" short="Deposits and withdrawals aren't profit">Deposits and withdrawals never count as profit</Bullet>
+                <Bullet tone="rose" short="Invoices due within 24 hours, in USDT">Each invoice is payable within 24 hours in USDT (TRC20)</Bullet>
               </ul>
               <button
                 onClick={() => onSelectTab('client')}
