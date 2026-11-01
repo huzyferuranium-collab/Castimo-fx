@@ -176,7 +176,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
           <div className="pt-6 flex flex-col sm:flex-row items-center justify-center gap-0 sm:gap-1">
             <FlowNode tone="royal" icon={<Server className="w-5 h-5" />} title="Master strategy" sub="Trades placed on the master account" />
             <FlowLine />
-            <FlowNode tone="violet" icon={<Zap className="w-5 h-5" />} title="CASTIMOFx copier" sub="Lots scaled to your balance" pulse />
+            <FlowNode tone="violet" icon={<Zap className="w-5 h-5" />} title="Castimofx copier" sub="Lots scaled to your balance" pulse />
             <FlowLine />
             <FlowNode tone="aqua" icon={<Wallet className="w-5 h-5" />} title="Your MT5 account" sub="Funds stay with your broker" />
           </div>

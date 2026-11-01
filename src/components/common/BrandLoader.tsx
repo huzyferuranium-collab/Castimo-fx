@@ -13,7 +13,7 @@ export const BrandLoader: React.FC<{ message?: string }> = ({ message = 'Loading
       </div>
     </div>
     <div className="text-center space-y-2">
-      <p className="font-display font-bold text-lg text-slate-900 dark:text-white">CASTIMOFx</p>
+      <p className="font-display font-bold text-lg text-slate-900 dark:text-white">Castimofx</p>
       <p className="text-xs font-mono text-slate-500 dark:text-slate-400">{message}</p>
     </div>
     <div className="w-40 h-1.5 rounded-full shimmer" />

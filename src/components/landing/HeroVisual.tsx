@@ -73,6 +73,7 @@ const CSS = `
 .hv-big { font-weight: 800; letter-spacing: -.02em; line-height: 1; }
 .hv-glow { background-image: linear-gradient(180deg, #fff 10%, #fbbf24 120%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; filter: drop-shadow(0 0 14px rgba(245,158,11,.45)); }
 .hv-sub { font-size: 11px; line-height: 1.3; color: rgba(248,250,252,.62); }
+.hv-pitch { font-size: 12.5px; line-height: 1.25; font-weight: 800; color: #fcd34d; }
 .hv-ring-track { stroke: rgba(248,250,252,.14); }
 .hv-chip { width: 26px; height: 26px; border-radius: 9999px; display: grid; place-items: center; border: 2px solid rgba(10,10,16,.9); color: #fff; }
 
@@ -98,6 +99,7 @@ html.light .hv-card:hover { border-color: rgba(217,119,6,.55); box-shadow: 0 26p
 html.light .hv-tag { color: #b45309; }
 html.light .hv-glow { background-image: linear-gradient(180deg, #6b21a8 0%, #d97706 130%); filter: none; }
 html.light .hv-sub { color: rgba(15,23,42,.62); }
+html.light .hv-pitch { color: #b45309; }
 html.light .hv-ring-track { stroke: rgba(15,23,42,.1); }
 html.light .hv-chip { border-color: rgba(255,255,255,.95); }
 
@@ -146,7 +148,8 @@ const ProfitCard: React.FC<{ className?: string }> = ({ className = '' }) => (
       <span className="hv-big hv-glow text-[1.9rem] sm:text-[2.2rem]">$0</span>
       <span className="hv-sub">upfront</span>
     </div>
-    <div className="hv-sub mt-1">You pay 50% of new profit only.</div>
+    <div className="hv-pitch mt-1.5">Earn first, pay later.</div>
+    <div className="hv-sub">You pay 50% of new profit only.</div>
   </div>
 );
 
@@ -193,7 +196,7 @@ export const HeroVisual: React.FC<{ className?: string }> = ({ className = '' })
   <div className={`hv ${className}`}>
     <style>{CSS}</style>
     <div className="hv-shell">
-      <div className="hv-canvas h-[360px] sm:h-[420px] lg:h-[440px]" role="group" aria-label="CASTIMOFx at a glance">
+      <div className="hv-canvas h-[360px] sm:h-[420px] lg:h-[440px]" role="group" aria-label="Castimofx at a glance">
         <div className="hv-bar" aria-hidden="true">
           <span className="hv-dot" style={{ background: '#8b5cf6' }} />
           <span className="hv-dot" style={{ background: '#f59e0b' }} />
@@ -217,10 +220,10 @@ export const HeroPhone: React.FC<{ children: React.ReactNode; actions: React.Rea
   <div className="hv">
     <style>{CSS}</style>
     <div className="hv-shell">
-      <div className="hv-canvas px-5 pt-6 pb-5" role="group" aria-label="CASTIMOFx at a glance">
+      <div className="hv-canvas px-5 pt-6 pb-5" role="group" aria-label="Castimofx at a glance">
         <div className="relative z-10 space-y-3">{children}</div>
 
-        <div className="relative z-10 mt-3 min-h-[292px] flex flex-col justify-between gap-2">
+        <div className="relative z-10 mt-3 min-h-[318px] max-[359px]:min-h-[334px] flex flex-col justify-between gap-2">
           <div className="hv-behind absolute -inset-x-5 -top-28 -bottom-14" aria-hidden="true">
             <HeroChart className="w-full h-full" shift={-20} />
           </div>

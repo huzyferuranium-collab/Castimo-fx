@@ -170,7 +170,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <Shield className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-sm font-bold tracking-tight text-white">CASTIMOFX</h2>
+              <h2 className="text-sm font-bold tracking-tight text-white">Castimofx</h2>
               <p className="text-xs text-slate-400">
                 {resetting
                   ? 'Reset your password'
@@ -452,7 +452,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
             <Collapsible title="Security" openLabel="Details" closeLabel="Hide" className="mt-1">
               <p>Your password is never logged. New accounts are client accounts; administrator rights can only be granted by the owner.</p>
-              <p>Your money stays in your own broker account. CASTIMOFX never holds your funds.</p>
+              <p>Your money stays in your own broker account. Castimofx never holds your funds.</p>
             </Collapsible>
           </form>
           )}

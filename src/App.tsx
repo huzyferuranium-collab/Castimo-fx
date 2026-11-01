@@ -99,7 +99,7 @@ const MainContent: React.FC = () => {
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h1 className="text-sm sm:text-base font-black tracking-wider text-white">CASTIMOFx</h1>
+                  <h1 className="text-sm sm:text-base font-black tracking-wider text-white">Castimofx</h1>
                   <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-700 dark:text-sky-200 border border-sky-500/40">
                     MT5
                   </span>
@@ -198,7 +198,7 @@ const MainContent: React.FC = () => {
       <footer className="border-t border-slate-900 bg-slate-950 py-6 mt-auto text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-400">CASTIMOFx TRADING PLATFORM</span>
+            <span className="font-bold text-slate-400">Castimofx Trading Platform</span>
             <span>•</span>
             <span>MT5 Trade Copier & 3-Level Referral Network</span>
           </div>
