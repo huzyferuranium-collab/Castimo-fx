@@ -18,7 +18,8 @@ import { Reveal, CountUp } from './Reveal';
 import { FAQSection } from './FAQSection';
 import { SilkBand } from './SilkBand';
 import { ReferralGlassStack } from './ReferralGlassStack';
-import { HeroVisual } from './HeroVisual';
+import { HeroVisual, HeroPhone } from './HeroVisual';
+import { useMedia } from './useMedia';
 import { Orb } from './Shapes';
 
 type Tab = 'client' | 'referrals' | 'admin';
@@ -87,10 +88,43 @@ const Bullet: React.FC<{ children: React.ReactNode; tone?: 'blue' | 'rose' }> = 
 );
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
+  // Phones get one glass panel (copy over the chart, cards floating on it); larger screens keep two columns.
+  const phone = useMedia('(max-width: 639px)');
+
+  const actions = (
+    <>
+      <button
+        onClick={() => onSelectTab('client')}
+        className="hero-cta btn-gold px-5 sm:px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+      >
+        <TrendingUp className="w-4 h-4" />
+        <span>Access Client Terminal</span>
+        <ArrowRight className="w-4 h-4" />
+      </button>
+      <button
+        onClick={() => onSelectTab('referrals')}
+        className="hero-cta btn-ghost px-5 sm:px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+      >
+        <Share2 className="w-4 h-4 text-rose-500" />
+        <span>Referral Hub (5% · 3% · 2%)</span>
+      </button>
+    </>
+  );
+
   return (
     <div className="space-y-16 sm:space-y-24 pb-6 overflow-x-clip">
       {/* ================= HERO ================= */}
       <section className="pt-6 sm:pt-12 space-y-8">
+        {phone ? (
+          <Reveal>
+            <HeroPhone actions={actions}>
+              <h1 className={`${heading} text-[1.85rem] min-[360px]:text-[2.05rem] leading-[1.1]`}>
+                Institutional MT5 copying, <span className="hero-accent">priced your way.</span>
+              </h1>
+              <p className={`${muted} text-sm leading-relaxed max-w-[19rem]`}>Copy our master trades on your own MT5 account.</p>
+            </HeroPhone>
+          </Reveal>
+        ) : (
         <div className="grid lg:grid-cols-2 gap-10 lg:gap-12 items-center max-w-6xl mx-auto">
           {/* left: copy and the two actions */}
           <div className="space-y-6 text-center lg:text-left">
@@ -118,23 +152,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
             </Reveal>
 
             <Reveal delay={240}>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center lg:justify-start gap-3 pt-2">
-                <button
-                  onClick={() => onSelectTab('client')}
-                  className="hero-cta btn-gold px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <TrendingUp className="w-4 h-4" />
-                  <span>Access Client Terminal</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => onSelectTab('referrals')}
-                  className="hero-cta btn-ghost px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Share2 className="w-4 h-4 text-rose-500" />
-                  <span>Referral Hub (5% · 3% · 2%)</span>
-                </button>
-              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center lg:justify-start gap-3 pt-2">{actions}</div>
             </Reveal>
           </div>
 
@@ -145,6 +163,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
             </div>
           </Reveal>
         </div>
+        )}
 
         <Reveal delay={120}>
           <div className="pt-6 flex flex-col sm:flex-row items-center justify-center gap-0 sm:gap-1">
