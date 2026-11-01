@@ -33,10 +33,10 @@ service cloud.firestore {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow write: if isAdmin();
     }
+    // Nothing in the app writes audit logs from the browser, so no client may create them (stops junk records).
     match /audit_logs/{id} {
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if false;
+      allow write: if false;
     }
 
     // Billing records are written ONLY by the server (service account bypasses these rules).
@@ -44,11 +44,11 @@ service cloud.firestore {
       allow read: if isSignedIn() && (id == request.auth.uid || isAdmin());
       allow write: if false;
     }
-    // Service plans and subscription payments are written only by the server. A user can read their own.
     // Email confirmation codes (salted hashes). Only the server can read or write them.
     match /email_codes/{id} {
       allow read, write: if false;
     }
+    // Service plans and subscription payments are written only by the server. A user can read their own.
     match /service_plans/{id} {
       allow read: if isSignedIn() && (id == request.auth.uid || isAdmin());
       allow write: if false;
@@ -83,6 +83,6 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    match /test/{id} { allow read: if true; }
+    // Everything not listed above is refused. (The app's start-up connection check treats a refusal as "connected".)
   }
 }
