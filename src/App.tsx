@@ -142,7 +142,7 @@ const MainContent: React.FC = () => {
             >
               <Share2 className="w-3.5 h-3.5 text-rose-400" />
               <span>Referral Hub</span>
-              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-gradient-to-r from-rose-500/20 via-violet-500/20 to-blue-500/20 text-rose-700 dark:text-rose-200 border border-rose-500/30">
+              <span className={`${isAdmin ? 'hidden sm:inline' : ''} text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-gradient-to-r from-rose-500/20 via-violet-500/20 to-blue-500/20 text-rose-700 dark:text-rose-200 border border-rose-500/30`}>
                 5%•3%•2%
               </span>
             </button>

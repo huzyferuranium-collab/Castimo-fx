@@ -65,7 +65,7 @@ export const ReferralCommissionView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-5 pb-12">
+    <div className="max-w-3xl mx-auto space-y-3 sm:space-y-5 pb-12">
       <SectionBanner
         tone="ruby"
         art="network"
@@ -87,12 +87,12 @@ export const ReferralCommissionView: React.FC = () => {
 
       {tab === 'overview' && (
         <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 space-y-3">
             <div className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white">
               <Share2 className="w-4 h-4 text-emerald-500" /> Your referral link
             </div>
             <div className="flex gap-2">
-              <div className="flex-1 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-950 text-xs font-mono break-all select-all text-slate-800 dark:text-emerald-300">{s.link}</div>
+              <div className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-950 text-[11px] sm:text-xs font-mono break-all select-all text-slate-800 dark:text-emerald-300">{s.link}</div>
               <button type="button" onClick={() => copy('link', s.link)} className="px-3 rounded-lg bg-emerald-600 text-white text-xs font-bold flex items-center gap-1 cursor-pointer">
                 {copied === 'link' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} {copied === 'link' ? 'Copied' : 'Copy'}
               </button>
@@ -102,7 +102,7 @@ export const ReferralCommissionView: React.FC = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {([
               ['Level 1', s.counts.level1, 'ruby'],
               ['Level 2', s.counts.level2, 'magenta'],
@@ -112,26 +112,26 @@ export const ReferralCommissionView: React.FC = () => {
             ))}
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
             {([
               ['Earned', s.earnedUsdt, 'gold', 'coins'],
               ['Held / paid out', s.heldUsdt, 'royal', 'clock'],
               ['Available', s.availableUsdt, 'mint', 'gem'],
             ] as const).map(([label, v, tone, art]) => (
-              <StatCard key={label} tone={tone} art={art} icon={<Wallet className="w-5 h-5" />} label={label} value={Number(v)} />
+              <StatCard key={label} tone={tone} art={art} icon={<Wallet className="w-5 h-5" />} label={label} value={Number(v)} rowOnPhone />
             ))}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5">
             <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Recent commissions</h4>
             {s.recentCommissions.length === 0 ? (
               <p className="text-xs text-slate-500">No commissions yet. They appear here after someone you invited pays.</p>
             ) : (
               <ul className="divide-y divide-slate-200 dark:divide-slate-800">
                 {s.recentCommissions.map((c) => (
-                  <li key={c.id} className="py-2 flex items-center justify-between text-xs">
+                  <li key={c.id} className="py-2 flex items-center justify-between gap-2 text-xs">
                     <span className="text-slate-600 dark:text-slate-300">Level {c.level} · {c.ratePct}%</span>
-                    <span className="text-slate-500">{fmt(c.createdAt)}</span>
+                    <span className="text-slate-500 text-[10px] sm:text-xs text-center">{fmt(c.createdAt)}</span>
                     <span className="font-bold text-emerald-500">+${Number(c.amountUsdt).toFixed(2)}</span>
                   </li>
                 ))}
@@ -143,7 +143,7 @@ export const ReferralCommissionView: React.FC = () => {
 
       {tab === 'withdraw' && (
         <div className="space-y-4">
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 space-y-3">
             <div className="flex items-center gap-2 text-sm font-black text-slate-900 dark:text-white">
               <Wallet className="w-4 h-4 text-amber-500" /> Withdraw referral earnings
             </div>
@@ -169,7 +169,7 @@ export const ReferralCommissionView: React.FC = () => {
                 <input
                   value={wallet}
                   onChange={(e) => setWallet(e.target.value)}
-                  placeholder="Your TRON (TRC20) USDT wallet address"
+                  placeholder="TRC20 USDT wallet address"
                   className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
                 />
                 {valid && (
@@ -191,7 +191,7 @@ export const ReferralCommissionView: React.FC = () => {
             {note && <div className={`p-3 rounded-xl text-xs border ${note.ok ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' : 'bg-rose-500/10 border-rose-500/30 text-rose-500'}`}>{note.text}</div>}
           </div>
 
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5">
             <h4 className="text-sm font-bold text-slate-900 dark:text-white mb-2">Your withdrawals</h4>
             {s.withdrawals.length === 0 ? (
               <p className="text-xs text-slate-500">No withdrawals yet.</p>

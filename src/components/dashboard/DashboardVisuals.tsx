@@ -49,7 +49,7 @@ export interface WelcomeHeroProps {
 }
 
 export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail, chips, primary, secondary, topRight }) => (
-  <section className="aurora on-aurora relative overflow-hidden rounded-[28px] sm:rounded-[34px] p-6 sm:p-9">
+  <section className="aurora on-aurora relative overflow-hidden rounded-[24px] sm:rounded-[34px] p-4 sm:p-9">
     {/* floating 3D-style shapes: a full scene from sm up, a small cluster beside the bell on phones */}
     <div aria-hidden className="pointer-events-none absolute inset-0 hidden sm:block">
       <Orb size={118} from="#ffe1e7" mid="#ff5a6b" to="#a00a1f" className="absolute right-[34%] -top-5 animate-float-a" />
@@ -61,7 +61,7 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail
     <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-24 sm:hidden">
       <Orb size={44} from="#ffe1e7" mid="#ff5a6b" to="#a00a1f" className="absolute right-[80px] top-3 animate-float-a" />
       <Cube size={38} top="#f5d0fe" left="#853bff" right="#3a1590" className="absolute right-[126px] top-9 animate-float-b" />
-      <Coin size={30} className="absolute right-[166px] top-4 animate-float-c" />
+      <Coin size={30} className="hidden min-[360px]:block absolute right-[166px] top-4 animate-float-c" />
     </div>
 
     <div className="relative flex items-start justify-between gap-4">
@@ -73,12 +73,12 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail
 
     <div className="relative mt-2 max-w-xl sm:max-w-[56%] lg:max-w-xl">
       <h1 className="font-display font-extrabold tracking-tight text-2xl sm:text-4xl leading-[1.1] break-words">{name}</h1>
-      <p className="mt-3 text-base sm:text-lg font-bold">{headline}</p>
-      <p className="mt-1.5 text-sm on-aurora-soft leading-relaxed">{detail}</p>
+      <p className="mt-2 sm:mt-3 text-[15px] sm:text-lg font-bold leading-snug">{headline}</p>
+      <p className="mt-1 sm:mt-1.5 text-[13px] sm:text-sm on-aurora-soft leading-relaxed">{detail}</p>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-3 sm:mt-4 flex flex-wrap gap-1.5 sm:gap-2">
         {chips.map((c) => (
-          <span key={c.label} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 text-xs font-bold">
+          <span key={c.label} className="inline-flex items-center gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-white/15 text-[11px] sm:text-xs font-bold">
             {c.pulse && (
               <span className="relative flex w-2 h-2">
                 <span className="absolute inline-flex h-full w-full rounded-full bg-white opacity-70 animate-ping" />
@@ -91,12 +91,12 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail
       </div>
 
       {(primary || secondary) && (
-        <div className="mt-6 flex flex-col sm:flex-row gap-3">
+        <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row gap-2 sm:gap-3">
           {primary && (
             <button
               type="button"
               onClick={primary.onClick}
-              className="keep-ink btn-gold group px-6 py-3 rounded-2xl font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer"
+              className="keep-ink btn-gold group px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer"
             >
               <span className="flex items-center gap-2">
                 {primary.icon}
@@ -109,7 +109,7 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail
             <button
               type="button"
               onClick={secondary.onClick}
-              className="px-6 py-3 rounded-2xl bg-white/15 hover:bg-white/25 font-bold text-sm transition flex items-center justify-center gap-2 cursor-pointer"
+              className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl bg-white/15 hover:bg-white/25 font-bold text-sm transition flex items-center justify-center gap-2 cursor-pointer"
             >
               {secondary.label}
             </button>
@@ -135,27 +135,43 @@ export const StatCard: React.FC<{
   /** Decorative illustration (no data), shown from the sm breakpoint up. */
   art?: ArtName;
   decimals?: number;
-}> = ({ tone, icon, label, value, prefix = '$', signed, valueClass = '', footer, share, art, decimals }) => {
+  /** On phones, lay the card out as one wide row (picture left, label over value). Use it when a card is full width. */
+  rowOnPhone?: boolean;
+}> = ({ tone, icon, label, value, prefix = '$', signed, valueClass = '', footer, share, art, decimals, rowOnPhone }) => {
   const Art = art ? ART[art] : null;
+  const row = !!rowOnPhone;
   return (
   <div
-    className="group relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 border border-transparent surface-hover"
+    className={`group relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-3.5 sm:p-5 border border-transparent surface-hover flex flex-col ${
+      row ? 'max-sm:grid max-sm:grid-cols-[2.75rem_minmax(0,1fr)] max-sm:items-center max-sm:gap-x-3 max-sm:py-3' : ''
+    }`}
     style={{ ['--rim-accent' as string]: GLOW[tone] }}
   >
-    <div aria-hidden className={`absolute -right-8 -top-8 w-32 h-32 rounded-full bg-gradient-to-br ${TONES[tone]} opacity-40 bloom`} />
-    <div className="relative flex items-center gap-3">
-      {Art ? <Art size={60} className="shrink-0 -ml-1.5 -my-0.5 group-hover:animate-float-c" /> : <IconTile tone={tone} size="w-10 h-10">{icon}</IconTile>}
-      <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{label}</span>
+    <div aria-hidden className={`absolute -right-8 -top-8 w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br ${TONES[tone]} opacity-40 bloom`} />
+    <div className={`relative flex flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-3 ${row ? 'max-sm:contents' : ''}`}>
+      {Art ? (
+        <Art
+          size={60}
+          className={`shrink-0 -ml-1 -my-0.5 w-10 h-10 sm:w-[60px] sm:h-[60px] sm:-ml-1.5 group-hover:animate-float-c ${row ? 'max-sm:w-11 max-sm:h-11 max-sm:col-start-1 max-sm:row-start-1 max-sm:row-span-3' : ''}`}
+        />
+      ) : (
+        <IconTile tone={tone} size={`w-8 h-8 sm:w-10 sm:h-10 ${row ? 'max-sm:col-start-1 max-sm:row-start-1 max-sm:row-span-3' : ''}`}>{icon}</IconTile>
+      )}
+      <span className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.1em] sm:tracking-[0.14em] text-slate-500 dark:text-slate-400 ${row ? 'max-sm:col-start-2 max-sm:row-start-1' : ''}`}>{label}</span>
     </div>
-    <div className={`relative mt-4 font-display font-extrabold tracking-tight text-2xl sm:text-3xl text-slate-900 dark:text-white ${valueClass}`}>
+    <div
+      className={`relative mt-auto pt-2 sm:pt-0 sm:mt-4 font-display font-extrabold tracking-tight text-xl sm:text-3xl text-slate-900 dark:text-white ${
+        row ? 'max-sm:col-start-2 max-sm:row-start-2 max-sm:mt-0 max-sm:pt-0' : ''
+      } ${valueClass}`}
+    >
       <AnimatedNumber value={value} prefix={prefix} signed={signed} decimals={decimals} />
     </div>
     {share != null && (
-      <div className="relative mt-3 h-1.5 rounded-full bg-slate-400/15 overflow-hidden">
+      <div className={`relative mt-2 sm:mt-3 h-1.5 rounded-full bg-slate-400/15 overflow-hidden ${row ? 'max-sm:col-start-2' : ''}`}>
         <div className={`h-full rounded-full bg-gradient-to-r ${TONES[tone]} transition-[width] duration-1000`} style={{ width: `${Math.max(2, Math.min(100, share * 100))}%` }} />
       </div>
     )}
-    {footer && <div className="relative mt-3 text-xs text-slate-500 dark:text-slate-400">{footer}</div>}
+    {footer && <div className={`relative mt-1.5 sm:mt-3 text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 ${row ? 'max-sm:col-start-2' : ''}`}>{footer}</div>}
   </div>
   );
 };
@@ -189,18 +205,20 @@ export const ActionCard: React.FC<{ tone: Tone; icon: React.ReactNode; title: st
     <button
       type="button"
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-4 sm:p-5 min-h-[96px] text-left cursor-pointer surface-hover border border-transparent ${className}`}
+      className={`group relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-3 sm:p-5 sm:min-h-[96px] text-left cursor-pointer surface-hover border border-transparent ${className}`}
       style={{ ['--rim-accent' as string]: GLOW[tone] }}
     >
-      <div aria-hidden className={`absolute -right-6 -bottom-8 w-32 h-32 rounded-full bg-gradient-to-br ${TONES[tone]} opacity-35 bloom group-hover:opacity-60 transition-opacity`} />
-      {Art && <Art size={84} className="absolute -right-2 -bottom-3 group-hover:animate-float-c pointer-events-none transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3" />}
-      <div className="relative flex items-center gap-3 pr-16 sm:pr-20">
-        <IconTile tone={tone}>{icon}</IconTile>
+      <div aria-hidden className={`absolute -right-6 -bottom-8 w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br ${TONES[tone]} opacity-35 bloom group-hover:opacity-60 transition-opacity`} />
+      {Art && <Art size={84} className="hidden sm:block absolute -right-2 -bottom-3 group-hover:animate-float-c pointer-events-none transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3" />}
+      {Art && <Art size={46} className="sm:hidden absolute right-1.5 top-1.5 pointer-events-none" />}
+      {/* phones: icon above the words, so two cards fit side by side; sm and up: icon beside the words */}
+      <div className="relative flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3 sm:pr-20">
+        <IconTile tone={tone} size="w-9 h-9 sm:w-11 sm:h-11">{icon}</IconTile>
         <div className="min-w-0 flex-1">
-          <div className="font-display font-bold text-sm text-slate-900 dark:text-white">{title}</div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">{hint}</div>
+          <div className="font-display font-bold text-[13px] sm:text-sm text-slate-900 dark:text-white">{title}</div>
+          <div className="text-[10.5px] sm:text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">{hint}</div>
         </div>
-        {!Art && <ArrowRight className="w-4 h-4 text-slate-400 transition-transform group-hover:translate-x-1" />}
+        {!Art && <ArrowRight className="hidden sm:block w-4 h-4 text-slate-400 transition-transform group-hover:translate-x-1" />}
       </div>
     </button>
   );
@@ -218,7 +236,7 @@ export const SectionBanner: React.FC<{
   const Art = art ? ART[art] : null;
   return (
     <div
-      className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6 flex items-center justify-between gap-4"
+      className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-4 sm:p-6 flex items-center justify-between gap-3 sm:gap-4"
       style={{ ['--rim-accent' as string]: GLOW[tone] }}
     >
       <div aria-hidden className={`absolute -right-12 -top-16 w-64 h-64 rounded-full bg-gradient-to-br ${TONES[tone]} opacity-[0.38] bloom`} />

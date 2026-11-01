@@ -175,7 +175,7 @@ export const AdminDashboard: React.FC = () => {
     adminNavGroups.flatMap((g) => g.items).find((i) => i.id === activeTab)?.label || 'Console';
 
   return (
-    <div className="flex flex-col lg:flex-row items-start gap-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-200">
+    <div className="flex flex-col lg:flex-row items-start gap-1 lg:gap-6 max-w-7xl mx-auto pb-12 animate-in fade-in duration-200">
       {/* ========================================================
           COLLAPSIBLE ADMIN SIDEBAR NAVIGATION DOCK
           ======================================================== */}
@@ -192,7 +192,7 @@ export const AdminDashboard: React.FC = () => {
           ======================================================== */}
       <div className="flex-1 w-full space-y-4 min-w-0">
         {/* Header */}
-        <div className="px-4 py-3 rounded-2xl bg-slate-900 border border-purple-900/40 shadow-lg flex items-center justify-between gap-3">
+        <div className="px-3 sm:px-4 py-2 sm:py-3 rounded-2xl bg-slate-900 border border-purple-900/40 shadow-lg flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-lg bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
               <ShieldCheck className="w-4 h-4" />
@@ -304,7 +304,7 @@ export const AdminDashboard: React.FC = () => {
                     return (
                       <div key={acc.id} className="py-3.5 space-y-2">
                         <div className="flex items-center justify-between">
-                          <div>
+                          <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="font-mono font-bold text-white text-sm">#{acc.accountNumber}</span>
                               <span
@@ -319,7 +319,7 @@ export const AdminDashboard: React.FC = () => {
                                 {acc.status}
                               </span>
                             </div>
-                            <span className="text-[11px] text-slate-400 block mt-0.5">{acc.brokerServer}</span>
+                            <span className="text-[11px] text-slate-400 block mt-0.5 truncate">{acc.brokerServer}</span>
                           </div>
 
                           <div className="text-right">
@@ -493,7 +493,7 @@ export const AdminDashboard: React.FC = () => {
                   invoices.map((inv) => (
                     <div key={inv.id} className="py-3.5 space-y-2">
                       <div className="flex items-center justify-between">
-                        <div>
+                        <div className="min-w-0">
                           <span className="font-mono font-bold text-white text-sm">Account #{inv.accountNumber}</span>
                           <span className="text-[10px] text-slate-500 block font-mono">Invoice #{inv.id.slice(0, 10)}</span>
                         </div>

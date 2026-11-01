@@ -86,7 +86,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
       </button>
 
       {toast && !open && (
-        <div className="absolute right-0 top-11 z-40 w-72 rounded-xl border border-emerald-500/30 bg-slate-900 text-white p-3 shadow-xl animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="notif-pop absolute right-0 top-11 z-40 w-[min(18rem,calc(100vw-3.5rem))] rounded-xl border border-emerald-500/30 bg-slate-900 text-white p-3 shadow-xl animate-in fade-in slide-in-from-top-2 duration-300">
           <div className="flex items-start justify-between gap-2">
             <div>
               <div className="text-[11px] font-bold text-emerald-400">{toast.title}</div>
@@ -100,7 +100,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
       )}
 
       {open && (
-        <div className="absolute right-0 top-11 z-40 w-80 max-h-96 overflow-y-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl">
+        <div className="notif-pop absolute right-0 top-11 z-40 w-[min(20rem,calc(100vw-3.5rem))] max-h-96 overflow-y-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xl">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
             <span className="text-sm font-bold text-slate-900 dark:text-white">Notifications</span>
             <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="text-slate-500 cursor-pointer">

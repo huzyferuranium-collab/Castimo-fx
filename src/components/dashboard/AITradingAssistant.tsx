@@ -68,7 +68,7 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, t
     <div
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`rounded-3xl bg-white dark:bg-slate-900 border border-transparent p-4 sm:p-5 shadow-sm relative overflow-hidden flex flex-col sm:flex-row items-center gap-4 select-none transition-all duration-300 hover:scale-[1.015] hover:border-cyan-500/50 hover:shadow-xl hover:shadow-cyan-950/20 ${className}`}
+      className={`rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 border border-transparent p-3 sm:p-5 shadow-sm relative overflow-hidden flex flex-row items-center gap-3 sm:gap-4 select-none transition-all duration-300 hover:scale-[1.015] hover:border-cyan-500/50 hover:shadow-xl hover:shadow-cyan-950/20 ${className}`}
       role="region"
       aria-label="Castimo AI Trading Assistant"
     >
@@ -84,7 +84,7 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, t
       />
 
       {/* 1. COMPACT ROBOT / AI CORE VISUAL (Left/Top) */}
-      <div className="relative shrink-0 flex items-center justify-center w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-gradient-to-br from-brand-electric/20 via-brand-violet/15 to-brand-cyan/25 dark:from-brand-electric/30 dark:via-brand-violet/25 dark:to-brand-cyan/20 shadow-[inset_0_1px_0_rgba(255,255,255,.25)] overflow-visible">
+      <div className="relative shrink-0 flex items-center justify-center w-16 h-16 sm:w-28 sm:h-28 rounded-2xl sm:rounded-3xl bg-gradient-to-br from-brand-electric/20 via-brand-violet/15 to-brand-cyan/25 dark:from-brand-electric/30 dark:via-brand-violet/25 dark:to-brand-cyan/20 shadow-[inset_0_1px_0_rgba(255,255,255,.25)] overflow-visible">
         {/* 'Live Analysis' Tooltip Overlay near the robot's head */}
         {showTooltip && (
           <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-30 pointer-events-none animate-in fade-in zoom-in-95 duration-200">
@@ -100,7 +100,7 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, t
         {/* Subtle Background Radar Sweep Ring (Accelerates on Hover) */}
         <div className="absolute inset-1 rounded-full border border-slate-200 dark:border-slate-800/50 pointer-events-none" />
         <div
-          className={`absolute w-20 h-20 rounded-full border border-dashed pointer-events-none transition-colors duration-500 ${
+          className={`absolute w-12 h-12 sm:w-20 sm:h-20 rounded-full border border-dashed pointer-events-none transition-colors duration-500 ${
             isSignal ? 'border-amber-400/50' : 'border-cyan-500/40'
           }`}
           style={{
@@ -110,7 +110,7 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, t
         />
 
         {/* Minimalist Cybernetic Robot Head & Torso SVG */}
-        <div className="relative z-10 w-20 h-20 animate-assistant-head">
+        <div className="relative z-10 w-12 h-12 sm:w-20 sm:h-20 animate-assistant-head">
           <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md" fill="none">
             <defs>
               <linearGradient id="astArmor" x1="0" y1="0" x2="1" y2="1">

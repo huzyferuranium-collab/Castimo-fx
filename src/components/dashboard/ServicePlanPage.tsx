@@ -55,16 +55,16 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
     const isSelected = selected === model;
     return (
       <div
-        className={`relative overflow-hidden flex flex-col rounded-3xl p-5 sm:p-6 space-y-3 bg-white dark:bg-slate-900 border border-transparent ${
+        className={`relative overflow-hidden flex flex-col rounded-2xl sm:rounded-3xl p-4 sm:p-6 space-y-2.5 sm:space-y-3 bg-white dark:bg-slate-900 border border-transparent ${
           isSelected ? 'outline outline-2 outline-brand-electric/70' : ''
         }`}
         style={{ ['--rim-accent' as string]: isSub ? '23,107,255' : '133,59,255' }}
       >
-        <div aria-hidden className={`absolute -right-12 -top-14 w-52 h-52 rounded-full bloom opacity-40 bg-gradient-to-br ${isSub ? 'from-brand-sky via-brand-electric to-brand-royal' : 'from-brand-magenta via-brand-violet to-brand-royal'}`} />
-        <div className="relative flex items-start gap-4">
+        <div aria-hidden className={`absolute -right-12 -top-14 w-40 h-40 sm:w-52 sm:h-52 rounded-full bloom opacity-40 bg-gradient-to-br ${isSub ? 'from-brand-sky via-brand-electric to-brand-royal' : 'from-brand-magenta via-brand-violet to-brand-royal'}`} />
+        <div className="relative flex items-start gap-3 sm:gap-4">
           {(() => {
             const PlanArt = isSub ? ART.shield : ART.coins;
-            return <PlanArt size={76} className="shrink-0 -ml-1 animate-float-a" />;
+            return <PlanArt size={76} className="shrink-0 -ml-1 animate-float-a w-14 h-14 sm:w-[76px] sm:h-[76px]" />;
           })()}
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-between gap-2">
@@ -75,7 +75,7 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
                 </span>
               )}
             </div>
-            <div className="mt-1 font-display text-3xl font-extrabold text-slate-900 dark:text-white">
+            <div className="mt-1 font-display text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
               {isSub ? `$${view.price.subscriptionUsdt}` : `${view.price.feePct}%`}
               <span className="text-sm font-medium text-slate-500">
                 {isSub ? ` USD / ${view.price.periodDays} days` : ' of new profit'}
@@ -85,14 +85,14 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
         </div>
 
         {isSub ? (
-          <ul className="relative text-xs text-slate-600 dark:text-slate-300 space-y-1 list-disc pl-4">
+          <ul className="relative text-[11.5px] sm:text-xs text-slate-600 dark:text-slate-300 space-y-1 list-disc pl-4">
             <li>One flat price, with no profit share.</li>
             <li>Paid in USDT (TRC20). Copying starts once the payment is verified.</li>
             <li>No automatic charges: copying stops when the period ends, until you pay again.</li>
             <li>Paying early adds to the time you have left.</li>
           </ul>
         ) : (
-          <ul className="relative text-xs text-slate-600 dark:text-slate-300 space-y-1 list-disc pl-4">
+          <ul className="relative text-[11.5px] sm:text-xs text-slate-600 dark:text-slate-300 space-y-1 list-disc pl-4">
             <li>No upfront fee. {view.price.feePct}% of NEW profit only, measured on your broker equity.</li>
             <li>Deposits and withdrawals never count as profit. Losses are recovered first.</li>
             <li>If a period has new profit, an invoice is created, payable in USDT (TRC20) within {view.price.dueHours ?? 24} hours.</li>
@@ -134,7 +134,7 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
       )}
 
       {selected === 'subscription' && (
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 space-y-3">
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 space-y-3">
           <div className="flex items-center justify-between gap-2">
             <h4 className="text-sm font-bold text-slate-900 dark:text-white">Your subscription</h4>
             <span

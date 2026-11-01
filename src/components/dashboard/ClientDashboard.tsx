@@ -398,7 +398,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   ];
 
   return (
-    <div className="flex flex-col lg:flex-row items-start gap-6 max-w-7xl mx-auto pb-12">
+    <div className="flex flex-col lg:flex-row items-start gap-1 lg:gap-6 max-w-7xl mx-auto pb-12">
       {/* Clean, Minimal Sidebar Navigation */}
       <SidebarNav
         groups={navGroups}
@@ -415,7 +415,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 w-full space-y-6 min-w-0">
+      <div className="flex-1 w-full space-y-4 sm:space-y-6 min-w-0">
         {/* Section banner with its own illustration + Notification Center (the overview shows the welcome banner instead) */}
         {activeSection !== 'overview' && (() => {
           const label = navGroups.flatMap((g) => g.items).find((i) => i.id === activeSection)?.label || 'Castimo FX Terminal';
@@ -619,7 +619,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             {!isUserAdmin && (
             <div>
               <div
-                className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6 border border-transparent"
+                className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-4 sm:p-6 border border-transparent"
                 style={{ ['--rim-accent' as string]: '168,85,247' }}
               >
                 <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-fuchsia-400 via-violet-500 to-indigo-500 opacity-35 bloom" />
@@ -632,16 +632,16 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                     </div>
                   </div>
                 ) : (
-                  <div className="relative flex items-center gap-5">
+                  <div className="relative flex items-center gap-3 sm:gap-5">
                     {isSubscriber ? (
-                      <ProgressRing value={(planView?.subscription?.daysLeft ?? 0) / (planView?.price.periodDays || 30)} size={104}>
+                      <ProgressRing value={(planView?.subscription?.daysLeft ?? 0) / (planView?.price.periodDays || 30)} size={92}>
                         <AnimatedNumber value={planView?.subscription?.daysLeft ?? 0} decimals={0} prefix="" className="font-display font-extrabold text-2xl text-slate-900 dark:text-white" />
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">days left</span>
                       </ProgressRing>
                     ) : (
                       (() => {
                         const PlanArt = hasPendingShare ? ART.clock : ART.medal;
-                        return <PlanArt size={96} className="shrink-0 animate-float-a" />;
+                        return <PlanArt size={96} className="shrink-0 animate-float-a w-16 h-16 sm:w-24 sm:h-24" />;
                       })()
                     )}
                     <div className="min-w-0 flex-1">
@@ -772,9 +772,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
               ];
               const n = actions.length;
               const xlSpan = (i: number) => (n === 5 ? (i < 3 ? 'xl:col-span-2' : 'xl:col-span-3') : n === 4 ? 'xl:col-span-3' : 'xl:col-span-2');
-              const smSpan = (i: number) => (n % 2 === 1 && i === n - 1 ? 'sm:col-span-2' : '');
+              const smSpan = (i: number) => (n % 2 === 1 && i === n - 1 ? 'col-span-2' : '');
               return (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-3 sm:gap-4">
+                <div className="grid grid-cols-2 xl:grid-cols-6 gap-2.5 sm:gap-4">
                   {actions.map((a, i) => (
                     <ActionCard key={a.title} {...a} className={`${smSpan(i)} ${xlSpan(i)}`} />
                   ))}
@@ -784,7 +784,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
 
             {/* 5. RECENT ACTIVITY (your real mirrored trades; nothing is shown until there are some) */}
             {trades.length > 0 && (
-              <div className="rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6 border border-transparent" style={{ ['--rim-accent' as string]: '79,125,255' }}>
+              <div className="rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-4 sm:p-6 border border-transparent" style={{ ['--rim-accent' as string]: '79,125,255' }}>
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <h3 className="font-display font-extrabold text-base text-slate-900 dark:text-white">Recent activity</h3>
                   <button type="button" onClick={() => setActiveSection('history')} className="text-xs font-bold text-blue-600 dark:text-sky-300 hover:underline cursor-pointer">
@@ -864,7 +864,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         {activeSection === 'settlement_due' && !isSubscriber && (
           <div className="space-y-4 animate-in fade-in duration-150">
             {/* Header Card */}
-            <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3 sm:space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 dark:text-amber-400 shrink-0 shadow-inner">
@@ -895,10 +895,10 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
               </div>
 
               {/* Dues KPI Overview */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 font-mono">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                <div className="p-3 sm:p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 font-mono min-w-0">
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-sans">Share due</span>
-                  <span className="text-xl font-bold text-amber-500 dark:text-amber-400 mt-1 block">
+                  <span className="text-base sm:text-xl break-words font-bold text-amber-500 dark:text-amber-400 mt-1 block">
                     ${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT
                   </span>
                   <span className="text-[10px] text-slate-400 block mt-0.5">
@@ -906,9 +906,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                   </span>
                 </div>
 
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 font-mono">
+                <div className="p-3 sm:p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 font-mono min-w-0">
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-sans">Time to pay</span>
-                  <span className="text-base font-bold text-slate-800 dark:text-slate-200 mt-2 block">
+                  <span className="text-base font-bold text-slate-800 dark:text-slate-200 mt-1 sm:mt-2 block">
                     {hasPendingShare ? countdownText : '—'}
                   </span>
                   <span className="text-[10px] text-slate-400 block mt-0.5">
@@ -916,9 +916,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                   </span>
                 </div>
 
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 font-mono">
+                <div className="p-3 sm:p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/80 font-mono col-span-2 sm:col-span-1">
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-sans">Network</span>
-                  <span className="text-base font-bold text-emerald-600 dark:text-emerald-400 mt-2 block">
+                  <span className="text-base font-bold text-emerald-600 dark:text-emerald-400 mt-1 sm:mt-2 block">
                     TRON (USDT TRC20)
                   </span>
                 </div>
@@ -954,7 +954,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
               </div>
 
               {/* Live Transaction Hash Input & Verification Form */}
-              <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950/40 border border-emerald-500/30 space-y-4">
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950/40 border border-emerald-500/30 space-y-3 sm:space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />

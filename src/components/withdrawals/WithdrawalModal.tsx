@@ -93,7 +93,7 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto space-y-4">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
           {success ? (
             <div className="p-6 text-center space-y-3">
               <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto">
