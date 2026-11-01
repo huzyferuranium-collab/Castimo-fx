@@ -18,6 +18,7 @@ import { Reveal, CountUp } from './Reveal';
 import { FAQSection } from './FAQSection';
 import { SilkBand } from './SilkBand';
 import { ReferralGlassStack } from './ReferralGlassStack';
+import { HeroVisual } from './HeroVisual';
 import { Orb } from './Shapes';
 
 type Tab = 'client' | 'referrals' | 'admin';
@@ -90,48 +91,57 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
     <div className="space-y-16 sm:space-y-24 pb-6 overflow-x-clip">
       {/* ================= HERO ================= */}
       <section className="pt-6 sm:pt-12 space-y-8">
-        <div className="text-center max-w-4xl mx-auto space-y-6">
-          <Reveal>
-            <span className="surface inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-700 dark:text-slate-200">
-              <span className="relative flex w-2 h-2">
-                <span className="absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-60 animate-ping" />
-                <span className="relative inline-flex w-2 h-2 rounded-full bg-teal-500" />
+        <div className="grid lg:grid-cols-2 gap-10 lg:gap-12 items-center max-w-6xl mx-auto">
+          {/* left: copy and the two actions */}
+          <div className="space-y-6 text-center lg:text-left">
+            <Reveal>
+              <span className="surface inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold text-slate-700 dark:text-slate-200">
+                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-extrabold tracking-wider bg-amber-500/15 text-amber-700 dark:text-amber-300">MT5</span>
+                <span className="relative flex w-2 h-2">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-60 animate-ping" />
+                  <span className="relative inline-flex w-2 h-2 rounded-full bg-teal-500" />
+                </span>
+                Two ways to pay · 3-level referral program
               </span>
-              Two ways to pay · 3-level referral program
-            </span>
-          </Reveal>
+            </Reveal>
 
-          <Reveal delay={80}>
-            <h1 className={`${heading} text-[2.3rem] leading-[1.08] sm:text-5xl lg:text-6xl`}>
-              Institutional MT5 copying,
-              <br />
-              <span className="text-grad-flame">priced your way.</span>
-            </h1>
-          </Reveal>
+            <Reveal delay={80}>
+              <h1 className={`${heading} text-[2.3rem] leading-[1.08] sm:text-5xl lg:text-[3.3rem] xl:text-6xl`}>
+                Institutional MT5 copying, <span className="hero-accent">priced your way.</span>
+              </h1>
+            </Reveal>
 
-          <Reveal delay={160}>
-            <p className={`${muted} text-base sm:text-lg max-w-2xl mx-auto leading-relaxed`}>
-              A flat $100 a month, or nothing upfront and 50% of new profit. Your funds stay with your own broker.
-            </p>
-          </Reveal>
+            <Reveal delay={160}>
+              <p className={`${muted} text-base sm:text-lg max-w-xl mx-auto lg:mx-0 leading-relaxed`}>
+                A flat $100 a month, or nothing upfront and 50% of new profit. Your funds stay with your own broker.
+              </p>
+            </Reveal>
 
-          <Reveal delay={240}>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-2">
-              <button
-                onClick={() => onSelectTab('client')}
-                className="btn-gold px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <TrendingUp className="w-4 h-4" />
-                <span>Access Client Terminal</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => onSelectTab('referrals')}
-                className="btn-ghost px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Share2 className="w-4 h-4 text-rose-500" />
-                <span>Referral Hub (5% · 3% · 2%)</span>
-              </button>
+            <Reveal delay={240}>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center lg:justify-start gap-3 pt-2">
+                <button
+                  onClick={() => onSelectTab('client')}
+                  className="hero-cta btn-gold px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <TrendingUp className="w-4 h-4" />
+                  <span>Access Client Terminal</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => onSelectTab('referrals')}
+                  className="hero-cta btn-ghost px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Share2 className="w-4 h-4 text-rose-500" />
+                  <span>Referral Hub (5% · 3% · 2%)</span>
+                </button>
+              </div>
+            </Reveal>
+          </div>
+
+          {/* right: glass canvas with the abstract chart and three floating cards */}
+          <Reveal delay={200}>
+            <div className="max-w-xl mx-auto w-full">
+              <HeroVisual />
             </div>
           </Reveal>
         </div>
