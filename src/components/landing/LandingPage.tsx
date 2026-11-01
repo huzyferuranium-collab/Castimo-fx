@@ -17,7 +17,7 @@ import {
 import { Reveal, CountUp } from './Reveal';
 import { FAQSection } from './FAQSection';
 import { SilkBand } from './SilkBand';
-import { ReferralTree } from './ReferralTree';
+import { ReferralGlassStack } from './ReferralGlassStack';
 import { Orb } from './Shapes';
 
 type Tab = 'client' | 'referrals' | 'admin';
@@ -314,8 +314,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
         </Reveal>
 
         <Reveal delay={120}>
-          <div className="surface rounded-3xl p-5 sm:p-7" style={{ ['--rim-accent' as string]: '230,167,0' }}>
-            <ReferralTree className="w-full" />
+          <div className="surface rounded-3xl p-5 sm:p-7" style={{ ['--rim-accent' as string]: '168,85,247' }}>
+            <ReferralGlassStack />
           </div>
         </Reveal>
       </section>
