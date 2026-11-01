@@ -9,6 +9,7 @@
  * - POST /api/trade/provision-client: Connects a client's MT5 account.
  * - GET  /api/trade/my-trades: The caller's own open and closed trades, as the copier service reports them.
  * - GET  /api/trade/admin/copier-check: Administrator's connection check of the copier service.
+ * - GET  /api/trade/admin/risk-rules: The rules the server really enforces (connection minimum, copy size). Read-only.
  */
 
 import { clientIpFrom } from './clientIp';
@@ -330,6 +331,22 @@ tradeRouter.post('/admin/copier-accounts/remove', requireAdmin, async (req: Requ
   } catch (e: any) {
     console.error('❌ [API /admin/copier-accounts/remove]', e?.message || e);
     return res.status(502).json({ success: false, error: 'The copier service did not remove the account.' });
+  }
+});
+
+/**
+ * GET /api/trade/admin/risk-rules  (administrators only, read-only)
+ * The risk rules the server really applies, read from where they are really set: the connection minimum from the
+ * MIN_CONNECT_EQUITY setting, and the copy size from Render or the Duplikium template. copySize is null when it cannot be read.
+ */
+tradeRouter.get('/admin/risk-rules', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    const connectMinimum = connectionManager.getConnectMinimum();
+    const copySize = await connectionManager.getCopySize().catch(() => null);
+    return res.status(200).json({ success: true, connectMinimum, copySize });
+  } catch (e: any) {
+    console.error('❌ [API /admin/risk-rules]', e?.message || e);
+    return res.status(500).json({ success: false, error: 'The risk rules could not be read.' });
   }
 });
 

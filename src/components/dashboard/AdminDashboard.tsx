@@ -4,8 +4,8 @@ import { AdminTerminalsPanel } from '../admin/AdminTerminalsPanel';
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { tradingEngine, CASTIMO_TREASURY_ADDRESS } from '../../services/tradingEngine';
-import { Mt5Account, RiskSettings, ProfitShareInvoice } from '../../types';
-import { RiskSettingsModal } from '../risk/RiskSettingsModal';
+import { Mt5Account, ProfitShareInvoice } from '../../types';
+import { getRiskRules, type RiskRules } from '../../services/riskRulesApi';
 import { LedgerAuditModal } from '../ledger/LedgerAuditModal';
 import { SettlementHistoryModal } from '../settlements/SettlementHistoryModal';
 import { MasterAccountPanel } from '../admin/MasterAccountPanel';
@@ -23,7 +23,6 @@ import {
   Wallet,
   Activity,
   Check,
-  Sliders,
   FileText,
   Award,
   ChevronDown,
@@ -63,14 +62,23 @@ export const AdminDashboard: React.FC = () => {
   const [invoices, setInvoices] = useState<ProfitShareInvoice[]>(
     tradingEngine.getProfitInvoices()
   );
-  const [riskSettings, setRiskSettings] = useState<RiskSettings>(
-    tradingEngine.getRiskSettings()
-  );
+  // The rules the server really applies (read-only). undefined = still loading, null = could not be read.
+  const [riskRules, setRiskRules] = useState<RiskRules | null | undefined>(undefined);
 
-  const [showRiskModal, setShowRiskModal] = useState(false);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
   const [showSettlementModal, setShowSettlementModal] = useState(false);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeTab !== 'governance') return;
+    let cancelled = false;
+    getRiskRules().then((r) => {
+      if (!cancelled) setRiskRules(r);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
 
   useEffect(() => {
     tradingEngine.syncClientsFromBackend();
@@ -80,7 +88,6 @@ export const AdminDashboard: React.FC = () => {
     const unsub = tradingEngine.subscribe(() => {
       setSupervisedAccounts([...tradingEngine.getSupervisedAccounts()]);
       setInvoices([...tradingEngine.getProfitInvoices()]);
-      setRiskSettings({ ...tradingEngine.getRiskSettings() });
     });
 
     const syncTimer = setInterval(() => {
@@ -220,17 +227,6 @@ export const AdminDashboard: React.FC = () => {
                 >
                   <Award className="w-4 h-4 text-amber-400 shrink-0" />
                   <span className="font-medium">Settlement</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowRiskModal(true);
-                    setActionsMenuOpen(false);
-                  }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs rounded-lg hover:bg-purple-950/40 transition text-left cursor-pointer"
-                >
-                  <Sliders className="w-4 h-4 text-rose-400 shrink-0" />
-                  <span className="font-medium">Risk settings</span>
                 </button>
                 <button
                   type="button"
@@ -662,23 +658,34 @@ export const AdminDashboard: React.FC = () => {
               <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
                 <h4 className="text-sm font-semibold text-white">Risk</h4>
                 <div className="px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 grid grid-cols-2 gap-2 text-xs font-mono">
-                  <div>
+                  <div className="min-w-0">
                     <span className="text-[10px] text-slate-500 block">Connection minimum</span>
-                    <span className="font-bold text-red-400">$200.00 USD</span>
+                    <span className="font-bold text-red-400">
+                      {riskRules ? `$${riskRules.connectMinimum.usd.toFixed(2)} USD` : riskRules === undefined ? '…' : 'Not available'}
+                    </span>
                   </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-500 block">Lot multiplier</span>
-                    <span className="font-bold text-white">{riskSettings.lotSizeMultiplier || 1.0}x</span>
+                  <div className="text-right min-w-0">
+                    <span className="text-[10px] text-slate-500 block">Copy size</span>
+                    <span className="font-bold text-white">
+                      {riskRules?.copySize ? `type ${riskRules.copySize.type} · ${riskRules.copySize.value}` : riskRules === undefined ? '…' : 'Not available'}
+                    </span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowRiskModal(true)}
-                  className="btn-red border border-transparent w-full py-2 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span>Risk settings</span>
-                </button>
+                <div className="text-[11px] text-slate-400 leading-relaxed space-y-1.5">
+                  <p>
+                    <strong className="text-slate-300">Connection minimum:</strong> checked once, when a client first connects. A connected account is never paused because its equity falls.{' '}
+                    {riskRules?.connectMinimum.source === 'setting'
+                      ? 'Set by MIN_CONNECT_EQUITY on Render.'
+                      : 'This is the built-in default. Change it with MIN_CONNECT_EQUITY on Render.'}
+                  </p>
+                  <p>
+                    <strong className="text-slate-300">Copy size:</strong> what Duplikium gives every new client.{' '}
+                    {riskRules?.copySize?.source === 'setting'
+                      ? 'Set by DUPLIKIUM_RISK_TYPE and DUPLIKIUM_RISK_VALUE on Render.'
+                      : 'It comes from your Duplikium template; change it there.'}
+                  </p>
+                  <p className="text-slate-500">Read-only. These are the rules the server actually applies.</p>
+                </div>
               </div>
 
               <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl space-y-3">
@@ -708,12 +715,6 @@ export const AdminDashboard: React.FC = () => {
       </div>
 
       {/* Supervisory Modals */}
-      <RiskSettingsModal
-        isOpen={showRiskModal}
-        onClose={() => setShowRiskModal(false)}
-        currentSettings={riskSettings}
-        adminActor={userProfile?.displayName || 'Admin'}
-      />
       <LedgerAuditModal
         isOpen={showLedgerModal}
         onClose={() => setShowLedgerModal(false)}

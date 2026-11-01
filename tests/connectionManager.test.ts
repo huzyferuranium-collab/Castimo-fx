@@ -739,3 +739,43 @@ test('the connection check lists the accounts and templates to choose from, and 
   delete process.env.DUPLIKIUM_API_USER;
   delete process.env.DUPLIKIUM_API_TOKEN;
 });
+
+// ---------- the rules shown to the admin (read-only) ----------
+
+test('the connection minimum shown to the admin is the real one, and says where it comes from', () => {
+  const { m } = setup();
+  const before = process.env.MIN_CONNECT_EQUITY;
+  try {
+    delete process.env.MIN_CONNECT_EQUITY;
+    assert.deepEqual(m.getConnectMinimum(), { usd: 200, source: 'default' });
+    process.env.MIN_CONNECT_EQUITY = '350';
+    assert.deepEqual(m.getConnectMinimum(), { usd: 350, source: 'setting' });
+    process.env.MIN_CONNECT_EQUITY = 'not-a-number';
+    assert.deepEqual(m.getConnectMinimum(), { usd: 200, source: 'default' }, 'a bad setting falls back to the default, and says so');
+  } finally {
+    if (before === undefined) delete process.env.MIN_CONNECT_EQUITY;
+    else process.env.MIN_CONNECT_EQUITY = before;
+  }
+});
+
+test('the copy size shown to the admin comes from the template, or from Render when set', async () => {
+  const { m } = setup();
+  assert.deepEqual(await m.getCopySize(), { type: 11, value: 0.5, source: 'template' });
+  process.env.DUPLIKIUM_RISK_TYPE = '3';
+  process.env.DUPLIKIUM_RISK_VALUE = '2';
+  try {
+    assert.deepEqual(await m.getCopySize(), { type: 3, value: 2, source: 'setting' });
+  } finally {
+    delete process.env.DUPLIKIUM_RISK_TYPE;
+    delete process.env.DUPLIKIUM_RISK_VALUE;
+  }
+});
+
+test('when the copy size cannot be read, nothing is shown (null), never a made-up number', async () => {
+  const noValues = setup();
+  noValues.fake.templateRow = { idMaster: 'MASTER', idSlave: null, idGroup: 'TEMPLATE', copierStatus: 1, riskFactorType: null, riskFactorValue: null };
+  assert.equal(await noValues.m.getCopySize(), null);
+
+  const noTemplate = Mt5ConnectionManager.forTests(new FakeCopier(), { masterId: 'MASTER', templateId: '' });
+  assert.equal(await noTemplate.getCopySize(), null);
+});

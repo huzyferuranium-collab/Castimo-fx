@@ -425,6 +425,27 @@ export class Mt5ConnectionManager {
     return readLimit(process.env.MIN_CONNECT_EQUITY, DEFAULT_MIN_CONNECT_EQUITY);
   }
 
+  /** For the admin page: the minimum equity a NEW client needs to connect, and whether it was set on Render or is the built-in default. */
+  public getConnectMinimum(): { usd: number; source: 'setting' | 'default' } {
+    const raw = process.env.MIN_CONNECT_EQUITY;
+    const n = Number(raw);
+    const isSet = raw !== undefined && raw !== '' && Number.isInteger(n) && n >= 0;
+    return { usd: this.minEquity(), source: isSet ? 'setting' : 'default' };
+  }
+
+  /**
+   * For the admin page: the copy size every new client gets, and where it comes from (Render, or the Duplikium template).
+   * Null when it cannot be read right now, so nothing is ever shown that was not really read.
+   */
+  public async getCopySize(): Promise<{ type: number; value: number; source: 'setting' | 'template' } | null> {
+    const fromEnv = this.envCopySize();
+    if (fromEnv) return { type: fromEnv.riskFactorType, value: fromEnv.riskFactorValue, source: 'setting' };
+    if (!this.api || !this.templateId) return null;
+    const r = await this.riskSettings();
+    if (r.riskFactorType === undefined || r.riskFactorValue === undefined) return null;
+    return { type: r.riskFactorType, value: r.riskFactorValue, source: 'template' };
+  }
+
   public async provisionClientTerminal(
     params: ProvisionClientParams,
     onStage: (stage: Stage) => void = () => {}
@@ -891,8 +912,8 @@ export class Mt5ConnectionManager {
     rec.copyApplied = want;
   }
 
-  /** The copy size settings every client gets: from the environment if set, otherwise the template's own. */
-  private async riskSettings(): Promise<{ riskFactorType?: number; riskFactorValue?: number }> {
+  /** The copy size set on Render (DUPLIKIUM_RISK_TYPE and DUPLIKIUM_RISK_VALUE), or null when it is not set. */
+  private envCopySize(): { riskFactorType: number; riskFactorValue: number } | null {
     const envType = process.env.DUPLIKIUM_RISK_TYPE;
     const envValue = process.env.DUPLIKIUM_RISK_VALUE;
     if (envType !== undefined && envType !== '' && envValue !== undefined && envValue !== '') {
@@ -900,6 +921,13 @@ export class Mt5ConnectionManager {
       const v = Number(envValue);
       if (Number.isFinite(t) && Number.isFinite(v)) return { riskFactorType: t, riskFactorValue: v };
     }
+    return null;
+  }
+
+  /** The copy size settings every client gets: from the environment if set, otherwise the template's own. */
+  private async riskSettings(): Promise<{ riskFactorType?: number; riskFactorValue?: number }> {
+    const fromEnv = this.envCopySize();
+    if (fromEnv) return fromEnv;
     if (this.templateCache && Date.now() - this.templateCache.at < 300_000) {
       return { riskFactorType: this.templateCache.type, riskFactorValue: this.templateCache.value };
     }
