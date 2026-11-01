@@ -81,8 +81,8 @@ const FlowLine: React.FC = () => (
 );
 
 const Bullet: React.FC<{ children: React.ReactNode; tone?: 'blue' | 'rose' }> = ({ children, tone = 'blue' }) => (
-  <li className="flex items-start gap-2.5 text-sm text-slate-700 dark:text-slate-300">
-    <CheckCircle2 className={`w-4 h-4 mt-0.5 shrink-0 ${tone === 'rose' ? 'text-rose-500 dark:text-rose-300' : 'text-blue-600 dark:text-sky-300'}`} />
+  <li className="flex items-start gap-1.5 sm:gap-2.5 text-[11px] leading-snug sm:text-sm sm:leading-normal text-slate-700 dark:text-slate-300">
+    <CheckCircle2 className={`w-3.5 h-3.5 sm:w-4 sm:h-4 mt-px sm:mt-0.5 shrink-0 ${tone === 'rose' ? 'text-rose-500 dark:text-rose-300' : 'text-blue-600 dark:text-sky-300'}`} />
     <span>{children}</span>
   </li>
 );
@@ -208,52 +208,56 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
           />
         </Reveal>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:gap-7 max-w-5xl mx-auto">
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-5 lg:gap-7 max-w-5xl mx-auto">
           <Reveal>
-            <div className="surface surface-hover rounded-3xl p-6 sm:p-8 h-full flex flex-col" style={{ ['--rim-accent' as string]: '56,189,248' }}>
-              <div className="flex items-center gap-3">
+            <div className="surface surface-hover rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 lg:p-8 h-full flex flex-col" style={{ ['--rim-accent' as string]: '56,189,248' }}>
+              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
                 <Tile tone="royal" size="w-9 h-9"><Wallet className="w-4 h-4" /></Tile>
-                <div className="text-xs font-bold uppercase tracking-[0.16em] text-blue-700 dark:text-sky-300">Monthly Subscription</div>
+                <div className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.1em] sm:tracking-[0.16em] leading-tight min-h-[2.1em] sm:min-h-0 text-blue-700 dark:text-sky-300">Monthly Subscription</div>
               </div>
-              <div className="mt-5 flex items-end gap-2">
-                <span className={`${heading} text-5xl sm:text-6xl text-grad-aqua`}>
+              <div className="mt-3 sm:mt-5 flex flex-col items-start sm:flex-row sm:items-end sm:gap-2">
+                <span className={`${heading} text-[2.1rem] leading-none sm:text-6xl sm:leading-[1.05] text-grad-aqua`}>
                   <CountUp to={100} prefix="$" />
                 </span>
-                <span className={`${muted} pb-2 text-sm`}>/ 30 days</span>
+                <span className={`${muted} mt-1 sm:mt-0 sm:pb-2 text-xs sm:text-sm`}>/ 30 days</span>
               </div>
-              <p className={`${muted} text-sm mt-3`}>A flat price. No profit share on top.</p>
-              <ul className="mt-6 space-y-3 flex-1">
+              <p className={`${muted} text-[11.5px] leading-snug min-h-[2.1rem] sm:min-h-0 sm:text-sm mt-2 sm:mt-3`}>A flat price. No profit share on top.</p>
+              <ul className="mt-3 sm:mt-6 space-y-2 sm:space-y-3 flex-1">
                 <Bullet>Paid up front in USDT (TRC20)</Bullet>
                 <Bullet>Copying runs while your plan is active</Bullet>
                 <Bullet>No automatic renewals — you renew when you wish</Bullet>
               </ul>
               <button
                 onClick={() => onSelectTab('client')}
-                className="btn-ghost mt-7 w-full px-5 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+                className="btn-ghost mt-4 sm:mt-7 w-full px-2 sm:px-5 py-2.5 sm:py-3 rounded-xl font-bold text-[11px] min-[360px]:text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Start with Monthly</span>
-                <ArrowRight className="w-4 h-4" />
+                <span className="sm:hidden">Start Monthly</span>
+                <span className="hidden sm:inline">Start with Monthly</span>
+                <ArrowRight className="hidden sm:block w-4 h-4" />
               </button>
             </div>
           </Reveal>
 
           <Reveal delay={120}>
-            <div className="surface edge-gradient surface-hover rounded-3xl p-6 sm:p-8 h-full flex flex-col" style={{ ['--rim-accent' as string]: '244,63,94' }}>
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
+            <div className="surface edge-gradient surface-hover rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 lg:p-8 h-full flex flex-col" style={{ ['--rim-accent' as string]: '244,63,94' }}>
+              <div className="relative flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3">
                   <Tile tone="ruby" size="w-9 h-9"><Sparkles className="w-4 h-4" /></Tile>
-                  <div className="text-xs font-bold uppercase tracking-[0.16em] text-rose-700 dark:text-rose-300">50% Profit Share</div>
+                  <div className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.1em] sm:tracking-[0.16em] leading-tight min-h-[2.1em] sm:min-h-0 text-rose-700 dark:text-rose-300">50% Profit Share</div>
                 </div>
-                <span className="badge-gold px-2.5 py-1 rounded-full text-[10px] font-extrabold">Nothing upfront</span>
+                <span className="badge-gold absolute right-0 top-0 sm:static whitespace-nowrap px-2 sm:px-2.5 py-1 rounded-full text-[9px] sm:text-[10px] font-extrabold">
+                  <span className="md:hidden">$0 upfront</span>
+                  <span className="hidden md:inline">Nothing upfront</span>
+                </span>
               </div>
-              <div className="mt-5 flex items-end gap-2">
-                <span className="font-display font-extrabold tracking-tight text-5xl sm:text-6xl text-grad-flame">
+              <div className="mt-3 sm:mt-5 flex flex-col items-start sm:flex-row sm:items-end sm:gap-2">
+                <span className="font-display font-extrabold tracking-tight text-[2.1rem] leading-none sm:text-6xl sm:leading-[1.05] text-grad-flame">
                   <CountUp to={50} suffix="%" />
                 </span>
-                <span className={`${muted} pb-2 text-sm`}>of new profit only</span>
+                <span className={`${muted} mt-1 sm:mt-0 sm:pb-2 text-xs sm:text-sm`}>of new profit only</span>
               </div>
-              <p className={`${muted} text-sm mt-3`}>No new profit, no fee.</p>
-              <ul className="mt-6 space-y-3 flex-1">
+              <p className={`${muted} text-[11.5px] leading-snug min-h-[2.1rem] sm:min-h-0 sm:text-sm mt-2 sm:mt-3`}>No new profit, no fee.</p>
+              <ul className="mt-3 sm:mt-6 space-y-2 sm:space-y-3 flex-1">
                 <Bullet tone="rose">Fee applies only to profit above your previous high-water mark</Bullet>
                 <Bullet tone="rose">Losses are recovered before any new fee is charged</Bullet>
                 <Bullet tone="rose">Deposits and withdrawals never count as profit</Bullet>
@@ -261,10 +265,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
               </ul>
               <button
                 onClick={() => onSelectTab('client')}
-                className="btn-gold mt-7 w-full px-5 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+                className="btn-gold mt-4 sm:mt-7 w-full px-2 sm:px-5 py-2.5 sm:py-3 rounded-xl font-bold text-[11px] min-[360px]:text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer"
               >
-                <span>Start with Profit Share</span>
-                <ArrowRight className="w-4 h-4" />
+                <span className="sm:hidden">Start Profit Share</span>
+                <span className="hidden sm:inline">Start with Profit Share</span>
+                <ArrowRight className="hidden sm:block w-4 h-4" />
               </button>
             </div>
           </Reveal>
