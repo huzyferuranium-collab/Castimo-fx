@@ -615,8 +615,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
               </div>
             )}
 
-            {/* 3. PLAN AND TRADES AT A GLANCE */}
-            <div className={`grid gap-3 sm:gap-4 ${isConnected || isUserAdmin ? 'md:grid-cols-2' : ''}`}>
+            {/* 3. YOUR PLAN AT A GLANCE (clients only: an admin account has no plan to show) */}
+            {!isUserAdmin && (
+            <div>
               <div
                 className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6 border border-transparent"
                 style={{ ['--rim-accent' as string]: '168,85,247' }}
@@ -683,34 +684,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                   </div>
                 )}
               </div>
-
-              {(isConnected || isUserAdmin) && (
-                <div
-                  className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6 border border-transparent"
-                  style={{ ['--rim-accent' as string]: '34,211,238' }}
-                >
-                  <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-cyan-300 via-sky-400 to-blue-600 opacity-35 bloom" />
-                  <div className="relative flex items-center gap-5">
-                    <ART.robot size={96} className="shrink-0 animate-float-b" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Mirrored trades</div>
-                      <div className="font-display font-extrabold text-4xl text-slate-900 dark:text-white mt-0.5">
-                        <AnimatedNumber value={openTradesCount} decimals={0} prefix="" />
-                        <span className="ml-2 text-sm font-bold text-slate-500 dark:text-slate-400">open now</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setActiveSection('positions')}
-                        className="mt-3 px-4 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-700 dark:text-cyan-200 font-bold text-xs transition cursor-pointer inline-flex items-center gap-1.5"
-                        title="View active mirrored trades"
-                      >
-                        <Activity className="w-3.5 h-3.5" /> View positions
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
+            )}
 
             {/* 2. COMPACT AI TRADING ASSISTANT (ESSENTIAL CENTERPIECE OF AI DASHBOARD) */}
             {!planChosen && !isConnected && (

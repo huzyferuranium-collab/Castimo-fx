@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { Reveal, CountUp } from './Reveal';
 import { FAQSection } from './FAQSection';
-import { HeroShowcase } from './HeroShowcase';
 import { SilkBand } from './SilkBand';
 import { ReferralTree } from './ReferralTree';
 import { Orb } from './Shapes';
@@ -136,10 +135,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
             </div>
           </Reveal>
         </div>
-
-        <Reveal delay={300}>
-          <HeroShowcase />
-        </Reveal>
 
         <Reveal delay={120}>
           <div className="pt-6 flex flex-col sm:flex-row items-center justify-center gap-0 sm:gap-1">
