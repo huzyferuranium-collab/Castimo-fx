@@ -315,8 +315,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
 
         <Reveal delay={120}>
           <div className="surface rounded-3xl p-5 sm:p-7" style={{ ['--rim-accent' as string]: '244,63,94' }}>
-            <ReferralTree className="w-full h-auto text-slate-500 dark:text-slate-300" />
-            <p className={`${muted} text-[11px] text-center mt-2`}>You at the top; each level pays on verified payments.</p>
+            <ReferralTree className="w-full h-auto max-w-[460px] mx-auto" />
+            <p className={`${muted} text-[11px] text-center mt-2`}>You at the centre; each level pays on verified payments.</p>
           </div>
         </Reveal>
       </section>
