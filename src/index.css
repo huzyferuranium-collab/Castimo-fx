@@ -1316,3 +1316,55 @@ html.dark button.surface-hover:not(:hover) { box-shadow: inset 0 0 0 1px #2b2b2b
 /* ordinary actions that used a saturated fill: quiet grey-outlined buttons in dark (light keeps its original colour) */
 html.dark .btn-quiet { background-image: none !important; background-color: transparent !important; color: #ffffff !important; box-shadow: inset 0 0 0 1px #3d3d3d; }
 html.dark .btn-quiet:hover { background-color: rgba(255, 255, 255, .07) !important; box-shadow: inset 0 0 0 1px #ffffff; }
+
+/* ---- Referral network (landing): gold on both themes; everything is scoped to .ref-universe ---- */
+.ref-universe {
+  --rf-l1: #c08400; --rf-l2: #a98b43; --rf-l3: #9a8a5e;
+  --rf-dash: #ffe9a0; --rf-disc: #e6a700; --rf-speck: #c08400;
+  --rf-ink: #4a3200; --rf-rim: rgba(110, 72, 0, .55);
+  --rf-chip-bg: #fffaf0; --rf-chip-edge: rgba(192, 132, 0, .75); --rf-chip-l: #8a6a2a; --rf-chip-p: #4a3200;
+}
+html.dark .ref-universe {
+  --rf-l1: #f2bd2c; --rf-l2: #ecd9a4; --rf-l3: #cdbb8a;
+  --rf-dash: #fff3c4; --rf-disc: #f0b90b; --rf-speck: #f6d56b;
+  --rf-ink: #3a2700; --rf-rim: rgba(255, 255, 255, .55);
+  --rf-chip-bg: #0b0a05; --rf-chip-edge: rgba(242, 189, 44, .7); --rf-chip-l: #cdbb8a; --rf-chip-p: #ffe7a0;
+}
+.ref-universe .rf-l1 { stroke: var(--rf-l1); }
+.ref-universe .rf-l2 { stroke: var(--rf-l2); }
+.ref-universe .rf-l3 { stroke: var(--rf-l3); }
+.ref-universe .rf-line { fill: none; }
+.ref-universe .rf-line.rf-dash { stroke: var(--rf-dash); stroke-dasharray: 2 14; stroke-opacity: .9; animation: rf-dash 2.8s linear infinite; }
+.ref-universe .rf-disc { fill: var(--rf-disc); }
+.ref-universe .rf-speck { fill: var(--rf-speck); }
+.ref-universe .rf-orbit { fill: none; stroke-width: 1.1; stroke-dasharray: 2 7; stroke-linecap: round; stroke-opacity: .34; }
+.ref-universe .rf-rim { stroke: var(--rf-rim); stroke-width: 1.2; }
+.ref-universe .rf-ink { fill: var(--rf-ink); fill-opacity: .95; }
+.ref-universe .rf-coin { stroke: var(--rf-rim); stroke-width: 1; }
+.ref-universe .rf-coin-in { stroke: #8a6a12; stroke-opacity: .55; stroke-width: 1; }
+.ref-universe .rf-node { cursor: pointer; outline: none; }
+.ref-universe .rf-body { transform-box: fill-box; transform-origin: center; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+.ref-universe .rf-node:hover .rf-body,
+.ref-universe .rf-you:focus-visible .rf-body { transform: scale(1.18); }
+.ref-universe .rf-ring { fill: none; stroke-width: 1.6; opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+.ref-universe .rf-node:hover .rf-ring,
+.ref-universe .rf-you:focus-visible .rf-ring,
+.ref-universe .rf-node.is-on .rf-ring { opacity: .95; }
+.ref-universe .rf-chip-bg { fill: var(--rf-chip-bg); stroke: var(--rf-chip-edge); stroke-width: 1.2; transform-box: fill-box; transform-origin: center; transition: transform .2s ease, fill .2s ease; }
+.ref-universe .rf-chip:hover .rf-chip-bg { transform: scale(1.08); }
+.ref-universe .rf-chip:focus-visible .rf-chip-bg { stroke: var(--rf-l1); stroke-width: 2.5; }
+.ref-universe .rf-chip.is-on .rf-chip-bg { fill: var(--rf-l1); stroke: var(--rf-l1); }
+.ref-universe .rf-chip-l { font-size: 9px; font-weight: 700; letter-spacing: .08em; fill: var(--rf-chip-l); }
+.ref-universe .rf-chip-p { font-size: 13px; font-weight: 800; fill: var(--rf-chip-p); }
+.ref-universe .rf-chip.is-on .rf-chip-l,
+.ref-universe .rf-chip.is-on .rf-chip-p { fill: #1a1200; }
+.ref-universe .rf-float { animation: rf-float var(--rf-dur, 6s) ease-in-out var(--rf-del, 0s) infinite; }
+.ref-universe .rf-pulse { transform-box: fill-box; transform-origin: center; opacity: 0; animation: rf-pulse 4.2s ease-out infinite; }
+.ref-universe .rf-pulse-b { animation-delay: 2.1s; }
+@keyframes rf-float { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(0, -3px); } }
+@keyframes rf-pulse { 0% { transform: scale(.92); opacity: .55; } 70% { opacity: 0; } 100% { transform: scale(1.9); opacity: 0; } }
+@keyframes rf-dash { to { stroke-dashoffset: -32; } }
+.ref-universe.is-paused * { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) {
+  .ref-universe * { animation: none !important; transition: none !important; }
+}
