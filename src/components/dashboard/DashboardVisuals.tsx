@@ -96,7 +96,7 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail
             <button
               type="button"
               onClick={primary.onClick}
-              className="keep-ink group px-6 py-3 rounded-2xl bg-white font-extrabold text-sm shadow-xl shadow-black/20 hover:-translate-y-0.5 hover:shadow-2xl transition flex items-center justify-center gap-2 cursor-pointer"
+              className="keep-ink btn-gold group px-6 py-3 rounded-2xl font-extrabold text-sm flex items-center justify-center gap-2 cursor-pointer"
             >
               <span className="flex items-center gap-2">
                 {primary.icon}

@@ -67,7 +67,7 @@ export const AdminWithdrawalsPanel: React.FC = () => {
                     type="button"
                     disabled={busy === w.id}
                     onClick={() => act(w.id, () => adminSetWithdrawalStatus(w.id, 'processing'))}
-                    className="px-3 py-1.5 rounded-lg bg-cyan-600 text-white font-bold cursor-pointer disabled:opacity-50"
+                    className="btn-quiet px-3 py-1.5 rounded-lg bg-cyan-600 text-white font-bold cursor-pointer disabled:opacity-50"
                   >
                     Mark as processing
                   </button>
@@ -84,7 +84,7 @@ export const AdminWithdrawalsPanel: React.FC = () => {
                       type="button"
                       disabled={busy === w.id || (tx[w.id] || '').trim().length < 10}
                       onClick={() => act(w.id, () => adminCompleteWithdrawal(w.id, tx[w.id]))}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-500 text-slate-950 font-bold cursor-pointer disabled:opacity-50"
+                      className="btn-gold px-3 py-1.5 rounded-lg font-bold cursor-pointer disabled:opacity-50"
                     >
                       Verify and complete
                     </button>
@@ -101,7 +101,7 @@ export const AdminWithdrawalsPanel: React.FC = () => {
                     type="button"
                     disabled={busy === w.id || !(why[w.id] || '').trim()}
                     onClick={() => act(w.id, () => adminSetWithdrawalStatus(w.id, 'rejected', why[w.id]))}
-                    className="px-3 py-1.5 rounded-lg bg-rose-600 text-white font-bold cursor-pointer disabled:opacity-50"
+                    className="btn-red px-3 py-1.5 rounded-lg font-bold cursor-pointer disabled:opacity-50"
                   >
                     Reject
                   </button>

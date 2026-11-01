@@ -165,7 +165,7 @@ export const RiskSettingsModal: React.FC<RiskSettingsModalProps> = ({
           <div className="pt-2">
             <button
               type="submit"
-              className="w-full py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 font-semibold text-xs text-white shadow-md shadow-red-600/30 transition flex items-center justify-center gap-2 cursor-pointer"
+              className="btn-red w-full py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer"
             >
               <Lock className="w-3.5 h-3.5" />
               <span>Apply & Enforce Risk Parameters</span>

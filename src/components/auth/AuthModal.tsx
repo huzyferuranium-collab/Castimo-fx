@@ -280,7 +280,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         type="button"
                         disabled={verifyBusy || codeInput.length !== 6}
                         onClick={handleConfirmCode}
-                        className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-semibold disabled:opacity-50 cursor-pointer"
+                        className="btn-gold px-4 py-2 rounded-xl font-semibold disabled:opacity-50 cursor-pointer"
                       >
                         Confirm
                       </button>
@@ -292,7 +292,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 type="button"
                 disabled={verifyBusy || !user}
                 onClick={handleSendLink}
-                className="w-full py-2.5 px-4 font-semibold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 disabled:opacity-50 cursor-pointer"
+                className="btn-gold w-full py-2.5 px-4 rounded-xl font-semibold disabled:opacity-50 cursor-pointer"
               >
                 Send verification link
               </button>
@@ -338,7 +338,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <button
                 type="submit"
                 disabled={resetBusy}
-                className="w-full py-2.5 px-4 font-semibold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 disabled:opacity-50 cursor-pointer"
+                className="btn-gold w-full py-2.5 px-4 rounded-xl font-semibold disabled:opacity-50 cursor-pointer"
               >
                 {resetBusy ? 'Sending…' : 'Send reset link'}
               </button>
@@ -436,7 +436,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-2.5 px-4 text-xs font-semibold rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="btn-gold w-full py-2.5 px-4 text-xs font-semibold rounded-xl flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <span>Please wait…</span>

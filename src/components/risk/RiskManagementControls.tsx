@@ -401,7 +401,7 @@ export const RiskManagementControls: React.FC<RiskManagementControlsProps> = ({
             <button
               type="submit"
               disabled={isSaving}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 font-bold text-xs text-slate-950 shadow-lg shadow-emerald-500/20 transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              className="btn-gold px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
               <span>{isSaving ? 'Applying to Bridge...' : 'Save Risk Parameters'}</span>

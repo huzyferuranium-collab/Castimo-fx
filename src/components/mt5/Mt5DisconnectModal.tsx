@@ -104,7 +104,7 @@ export const Mt5DisconnectModal: React.FC<Mt5DisconnectModalProps> = ({
                 <button
                   type="button"
                   onClick={handleDisconnect}
-                  className="w-1/2 py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 font-semibold text-xs text-white shadow-md shadow-rose-600/30 transition flex items-center justify-center gap-2 cursor-pointer"
+                  className="btn-red w-1/2 py-2.5 px-3 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Power className="w-3.5 h-3.5" />
                   <span>Confirm Disconnect</span>

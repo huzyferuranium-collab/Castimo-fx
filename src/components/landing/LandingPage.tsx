@@ -120,7 +120,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 pt-2">
               <button
                 onClick={() => onSelectTab('client')}
-                className="btn-primary px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+                className="btn-gold px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
               >
                 <TrendingUp className="w-4 h-4" />
                 <span>Access Client Terminal</span>
@@ -237,7 +237,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
               </ul>
               <button
                 onClick={() => onSelectTab('client')}
-                className="btn-primary btn-ruby mt-7 w-full px-5 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+                className="btn-gold mt-7 w-full px-5 py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Start with Profit Share</span>
                 <ArrowRight className="w-4 h-4" />
@@ -309,7 +309,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
             <div className="pt-1">
               <button
                 onClick={() => onSelectTab('referrals')}
-                className="btn-primary btn-ruby px-6 py-3 rounded-xl font-bold text-sm inline-flex items-center gap-2 cursor-pointer"
+                className="btn-red px-6 py-3 rounded-xl font-bold text-sm inline-flex items-center gap-2 cursor-pointer"
               >
                 <span>Open the Referral Hub</span>
                 <ArrowRight className="w-4 h-4" />
@@ -334,7 +334,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
         <Reveal>
           <div className="relative overflow-hidden rounded-3xl surface px-6 py-10 sm:px-12 sm:py-12" style={{ ['--rim-accent' as string]: '168,85,247' }}>
             <SilkBand className="absolute inset-0 w-full h-full opacity-70 dark:opacity-90" />
-            <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-white via-white/80 to-transparent dark:from-[#050505] dark:via-[#050505]/70 dark:to-transparent" />
+            <div aria-hidden className="absolute inset-0 bg-gradient-to-r from-white via-white/80 to-transparent dark:from-black dark:via-black/70 dark:to-transparent" />
             <Orb size={70} from="#ffd0d8" mid="#f43f5e" to="#7f1034" className="absolute right-8 top-6 animate-float-a hidden sm:block drop-shadow-[0_14px_22px_rgba(225,29,72,.45)]" />
             <div className="relative max-w-xl space-y-4">
               <h2 className={`${heading} text-2xl sm:text-3xl leading-tight`}>
@@ -344,7 +344,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
                 Connect your broker account, or share your referral link.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                <button onClick={() => onSelectTab('client')} className="btn-primary px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer">
+                <button onClick={() => onSelectTab('client')} className="btn-gold px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer">
                   <TrendingUp className="w-4 h-4" />
                   <span>Client Terminal</span>
                   <ArrowRight className="w-4 h-4" />

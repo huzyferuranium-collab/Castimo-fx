@@ -157,7 +157,7 @@ export const AdminTerminalsPanel: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-slate-400">Client accounts held at Duplikium.</p>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={runCheck} disabled={busy !== null} className={`${btn} bg-emerald-600 hover:bg-emerald-500 text-white`} title="Signs in to Duplikium, finds the master and the template, and reads the master's trades">
+          <button type="button" onClick={runCheck} disabled={busy !== null} className={`${btn} btn-gold font-semibold`} title="Signs in to Duplikium, finds the master and the template, and reads the master's trades">
             <ShieldCheck className={`w-3.5 h-3.5 ${busy === 'check' ? 'animate-pulse' : ''}`} />
             Connection check
           </button>
@@ -269,7 +269,7 @@ export const AdminTerminalsPanel: React.FC = () => {
                           ? 'This client is in service (or has billing history). Removing the account disconnects them. Remove anyway?'
                           : 'Remove this account from Duplikium?'}
                       </span>
-                      <button type="button" onClick={() => remove(r, confirming.kind === 'force')} disabled={busy !== null} className={`${btn} bg-rose-600 hover:bg-rose-500 text-white`}>
+                      <button type="button" onClick={() => remove(r, confirming.kind === 'force')} disabled={busy !== null} className={`${btn} btn-red font-semibold`}>
                         Yes, remove
                       </button>
                       <button type="button" onClick={() => setConfirm(null)} className={`${btn} bg-slate-800 hover:bg-slate-700 text-slate-200`}>

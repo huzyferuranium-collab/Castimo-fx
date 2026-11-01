@@ -112,7 +112,7 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
               type="button"
               disabled={busy || (!!selected && !view.canSwitch.ok)}
               onClick={() => run(() => selectPlan(model), 'Plan selected.')}
-              className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-xs transition cursor-pointer"
+              className="btn-gold w-full py-2.5 rounded-xl font-bold text-xs disabled:cursor-not-allowed cursor-pointer"
             >
               {selected ? 'Switch to this plan' : 'Choose this plan'}
             </button>
@@ -201,7 +201,7 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
                       return r;
                     }, 'Payment verified. Your subscription is active.')
                   }
-                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="btn-gold px-4 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   {busy && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
                   Verify payment

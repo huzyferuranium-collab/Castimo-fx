@@ -123,7 +123,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab, hideCta }) 
               onClick={() => setActiveCategory(cat.id)}
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer whitespace-nowrap ${
                 activeCategory === cat.id
-                  ? 'bg-sky-500 text-slate-950 font-bold shadow-md shadow-sky-500/20'
+                  ? 'is-selected bg-sky-500 text-slate-950 font-bold shadow-md shadow-sky-500/20'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
               }`}
             >
@@ -223,7 +223,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab, hideCta }) 
             <>
               <button
                 onClick={() => onSelectTab('client')}
-                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 font-bold text-xs text-slate-950 shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer"
+                className="btn-gold flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <span>Client Terminal</span>
                 <ArrowRight className="w-4 h-4" />

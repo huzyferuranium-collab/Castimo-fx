@@ -200,7 +200,7 @@ export const ProfitSharePaymentModal: React.FC<ProfitSharePaymentModalProps> = (
                 <button
                   type="submit"
                   disabled={isVerifying || !invoice}
-                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 font-bold text-xs text-slate-950 transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className="btn-gold w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <CheckCircle2 className="w-4 h-4" />
                   <span>{isVerifying ? 'Verifying…' : 'Verify payment'}</span>

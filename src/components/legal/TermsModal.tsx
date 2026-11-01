@@ -83,7 +83,7 @@ export const TermsModal: React.FC<TermsModalProps> = ({ isOpen, onAccept, onClos
             type="button"
             disabled={busy}
             onClick={submit}
-            className="w-full py-3 rounded-xl text-sm font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+            className="btn-gold w-full py-3 rounded-xl text-sm font-bold disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
           >
             <CheckCircle2 className="w-4 h-4" />
             <span>{busy ? 'Saving...' : 'I Agree'}</span>

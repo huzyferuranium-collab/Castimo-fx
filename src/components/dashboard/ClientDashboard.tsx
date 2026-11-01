@@ -459,7 +459,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             <button
               type="button"
               onClick={() => setActiveSection('plan')}
-              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 font-bold text-xs text-slate-950 shadow-md transition shrink-0 cursor-pointer"
+              className="btn-gold px-4 py-2 rounded-xl font-bold text-xs shrink-0 cursor-pointer"
             >
               Go to payment
             </button>
@@ -483,7 +483,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             <button
               type="button"
               onClick={() => setShowPaymentModal(true)}
-              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 font-bold text-xs text-slate-950 shadow-md transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+              className="btn-gold px-4 py-2 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
             >
               <Wallet className="w-4 h-4" />
               <span>Pay ${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT</span>
@@ -666,7 +666,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                           <button
                             type="button"
                             onClick={() => setShowPaymentModal(true)}
-                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-amber-500/30 hover:-translate-y-0.5 transition cursor-pointer"
+                            className="btn-gold px-4 py-2 rounded-xl font-extrabold text-xs cursor-pointer"
                           >
                             Pay ${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT
                           </button>
@@ -719,7 +719,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 <button
                   type="button"
                   onClick={() => setActiveSection('plan')}
-                  className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 font-bold text-xs text-slate-950 transition shrink-0 cursor-pointer"
+                  className="btn-gold px-3.5 py-1.5 rounded-xl font-bold text-xs shrink-0 cursor-pointer"
                 >
                   Choose plan
                 </button>
@@ -1037,7 +1037,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                     <button
                       type="submit"
                       disabled={isVerifyingHash}
-                      className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
+                      className="btn-gold w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                     >
                       {isVerifyingHash ? (
                         <>
@@ -1178,7 +1178,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                   <button
                     type="button"
                     onClick={() => setShowEmailVerifyModal(true)}
-                    className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs cursor-pointer shrink-0"
+                    className="btn-gold px-3 py-1.5 rounded-lg font-bold text-xs cursor-pointer shrink-0"
                   >
                     Confirm email
                   </button>
@@ -1241,7 +1241,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                     <button
                       type="button"
                       onClick={() => setShowDisconnectModal(true)}
-                      className="px-3.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/30 text-xs font-medium transition cursor-pointer"
+                      className="btn-red border border-transparent px-3.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
                     >
                       Disconnect MT5
                     </button>

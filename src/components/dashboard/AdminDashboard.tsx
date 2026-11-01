@@ -205,7 +205,7 @@ export const AdminDashboard: React.FC = () => {
               type="button"
               onClick={() => setActionsMenuOpen(!actionsMenuOpen)}
               aria-expanded={actionsMenuOpen}
-              className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
+              className="btn-quiet px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer"
             >
               <span>Tools</span>
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${actionsMenuOpen ? 'rotate-180' : ''}`} />
@@ -350,7 +350,7 @@ export const AdminDashboard: React.FC = () => {
                               <button
                                 type="button"
                                 onClick={() => handleReconnect(acc.accountNumber)}
-                                className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-500 hover:bg-blue-400 text-white transition cursor-pointer"
+                                className="btn-quiet px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-500 hover:bg-blue-400 text-white transition cursor-pointer"
                               >
                                 Reconnect
                               </button>
@@ -449,7 +449,7 @@ export const AdminDashboard: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleReconnect(acc.accountNumber)}
-                                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-500 hover:bg-blue-400 text-white transition cursor-pointer"
+                                  className="btn-quiet px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-500 hover:bg-blue-400 text-white transition cursor-pointer"
                                 >
                                   Reconnect
                                 </button>
@@ -674,7 +674,7 @@ export const AdminDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowRiskModal(true)}
-                  className="w-full py-2 px-4 rounded-xl bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/40 text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
+                  className="btn-red border border-transparent w-full py-2 px-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Sliders className="w-3.5 h-3.5" />
                   <span>Risk settings</span>
@@ -695,7 +695,7 @@ export const AdminDashboard: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setShowLedgerModal(true)}
-                    className="flex-1 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
+                    className="btn-quiet flex-1 py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition cursor-pointer"
                   >
                     <FileText className="w-3.5 h-3.5" />
                     <span>Audit ledger</span>

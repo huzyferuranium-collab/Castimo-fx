@@ -191,7 +191,7 @@ export const MasterAccountPanel: React.FC<MasterAccountPanelProps> = ({ onTradeB
               type="button"
               onClick={handleCheck}
               disabled={isChecking}
-              className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              className="btn-gold px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <Zap className={`w-3.5 h-3.5 text-amber-300 ${isChecking ? 'animate-bounce' : ''}`} />
               <span>{isChecking ? 'Checking…' : 'Check connection'}</span>

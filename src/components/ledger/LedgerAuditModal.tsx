@@ -79,7 +79,7 @@ export const LedgerAuditModal: React.FC<LedgerAuditModalProps> = ({
               onClick={() => setTab('ledger')}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
                 tab === 'ledger'
-                  ? 'bg-purple-600 text-white shadow-sm'
+                  ? 'is-selected bg-purple-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -89,7 +89,7 @@ export const LedgerAuditModal: React.FC<LedgerAuditModalProps> = ({
               onClick={() => setTab('audit')}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
                 tab === 'audit'
-                  ? 'bg-purple-600 text-white shadow-sm'
+                  ? 'is-selected bg-purple-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -99,7 +99,7 @@ export const LedgerAuditModal: React.FC<LedgerAuditModalProps> = ({
               onClick={() => setTab('reconciliation')}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
                 tab === 'reconciliation'
-                  ? 'bg-purple-600 text-white shadow-sm'
+                  ? 'is-selected bg-purple-600 text-white shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -246,7 +246,7 @@ export const LedgerAuditModal: React.FC<LedgerAuditModalProps> = ({
                 </div>
                 <button
                   onClick={handleRunReconciliation}
-                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 font-semibold text-xs text-white transition flex items-center gap-1.5 shadow-md shadow-purple-600/30 cursor-pointer"
+                  className="btn-gold px-4 py-2 rounded-xl font-semibold text-xs flex items-center gap-1.5 cursor-pointer"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Run Audit Reconciliation</span>

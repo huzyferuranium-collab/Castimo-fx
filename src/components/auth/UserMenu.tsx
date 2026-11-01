@@ -29,7 +29,7 @@ export const UserMenu: React.FC<UserMenuProps> = ({ onOpenAuth }) => {
       <div className="flex items-center gap-2">
         <button
           onClick={onOpenAuth}
-          className="px-4 py-2 text-xs font-semibold rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition shadow-md shadow-emerald-500/20 cursor-pointer"
+          className="btn-gold px-4 py-2 text-xs font-semibold rounded-xl cursor-pointer"
         >
           Sign In / Connect
         </button>

@@ -146,27 +146,31 @@ samp {
 
 html.dark {
   color-scheme: dark;
-  /* ---- Black luxury palette. Depth comes from stepping through these surfaces, never one flat black. ----
-     page #050505 > secondary #101114 > card #15171C > elevated #1D2027 > hairline #30343D
-     The slate scale below is re-pointed at that ladder, so every existing slate class follows it in dark only
-     (the light theme has its own explicit overrides and is not affected). */
-  --lux-black: #050505;
-  --lux-charcoal: #101114;
-  --lux-card: #15171C;
-  --lux-graphite: #1D2027;
-  --lux-line: #30343D;
-  --lux-text-soft: #B8BEC9;
+  /* ---- Pure black luxury (dark theme only) ----
+     page and cards #000000, hairlines #2B2B2B, headings #FFFFFF, regular text #EAEAEA, neutral greys below.
+     The slate scale is re-pointed at neutral greys, so every existing slate class follows it in dark only
+     (the light theme has its own explicit overrides and is not affected). No blue or charcoal tint anywhere. */
+  --lux-line: #2b2b2b;
+  --lux-line-strong: #454545;
   --color-slate-50: #ffffff;
-  --color-slate-100: #f2f4f8;
-  --color-slate-200: #dadee6;
-  --color-slate-300: #b8bec9;
-  --color-slate-400: #9aa2b1;
-  --color-slate-500: #8a92a1;
-  --color-slate-600: #656c7b;
-  --color-slate-700: #30343d;
-  --color-slate-800: #1d2027;
-  --color-slate-900: #15171c;
-  --color-slate-950: #101114;
+  --color-slate-100: #f5f5f5;
+  --color-slate-200: #f0f0f0;
+  --color-slate-300: #eaeaea;
+  --color-slate-400: #a6a6a6;
+  --color-slate-500: #8c8c8c;
+  --color-slate-600: #6b6b6b;
+  --color-slate-700: #2b2b2b;
+  --color-slate-800: #141414;
+  --color-slate-900: #000000;
+  --color-slate-950: #000000;
+  /* navy-tinted panel fills become plain black */
+  --color-indigo-950: #000000;
+  --color-blue-950: #000000;
+  --color-sky-950: #000000;
+  --color-violet-950: #000000;
+  --color-purple-950: #000000;
+  --color-cyan-950: #000000;
+  --color-teal-950: #000000;
 }
 
 :root {
@@ -927,21 +931,16 @@ html.light .fixed.bg-slate-950\/90 {
 /* let the canvas show through the page shell */
 html.dark .min-h-screen.bg-slate-950 { background-color: transparent; }
 
-/* Header: translucent with a hairline of teal light */
+/* Header: black with a grey hairline */
 html.dark header.sticky {
-  background-color: rgba(5,5,5,.92);
-  border-bottom-color: rgba(48,52,61,.7);
-  box-shadow: 0 1px 0 rgba(var(--rim-accent), .22), 0 10px 30px -18px rgba(var(--rim-accent), .35);
+  background-color: rgba(0,0,0,.94);
+  border-bottom-color: #2b2b2b;
+  box-shadow: none;
 }
 
-/* Status pills (Active, Settled, TRC20 ACTIVE ...) get a soft, desaturated glow */
-html.dark .rounded-full[class*="bg-emerald-500/1"],
-html.dark .rounded-full[class*="bg-emerald-500/2"] {
-  box-shadow: 0 0 0 1px rgba(74,222,128,.18), 0 0 16px -4px rgba(74,222,128,.32);
-}
 
 /* Slim, quiet scrollbars */
-html.dark { scrollbar-color: rgba(148,163,184,.28) transparent; }
+html.dark { scrollbar-color: rgba(255,255,255,.22) transparent; }
 
 /* Light theme: soft layered depth instead of flat white boxes */
 html.light .min-h-screen.bg-slate-950 { background-color: transparent !important; }
@@ -976,7 +975,7 @@ html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class
 }
 .surface-hover { transition: transform .35s cubic-bezier(.2,.7,.2,1), box-shadow .35s ease; }
 .surface-hover:hover { transform: translateY(-4px); }
-html.dark .surface-hover:hover { box-shadow: inset 0 0 0 1px rgba(48,52,61,.8), inset 0 1px 0 rgba(255,255,255,.12), 0 30px 60px -28px rgba(var(--rim-accent), .5); }
+html.dark .surface-hover:hover { box-shadow: inset 0 0 0 1px #4a4a4a; }
 
 /* Featured plan: gradient edge */
 .edge-gradient::after {
@@ -1030,8 +1029,8 @@ html.dark .surface-hover:hover { box-shadow: inset 0 0 0 1px rgba(48,52,61,.8), 
   transition: transform .25s ease, background .25s ease, border-color .25s ease;
 }
 .btn-ghost:hover { transform: translateY(-2px); background: #fff; border-color: rgba(37,99,235,.5); }
-html.dark .btn-ghost { background: rgba(255,255,255,.04); color: #e8ebf2; border-color: rgba(184,190,201,.28); box-shadow: inset 0 1px 0 rgba(255,255,255,.08); }
-html.dark .btn-ghost:hover { background: rgba(56,189,248,.08); border-color: rgba(56,189,248,.6); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 0 26px -8px rgba(56,189,248,.55); }
+html.dark .btn-ghost { background: transparent; color: #ffffff; border-color: #3d3d3d; box-shadow: none; }
+html.dark .btn-ghost:hover { background: rgba(255,255,255,.06); border-color: #ffffff; box-shadow: none; }
 
 /* Gradient text that also reads on a light page */
 .text-electric-soft {
@@ -1040,7 +1039,7 @@ html.dark .btn-ghost:hover { background: rgba(56,189,248,.08); border-color: rgb
   background-clip: text;
   color: transparent;
 }
-html.dark .text-electric-soft { background-image: linear-gradient(100deg, #bbf7d0 0%, #4ade80 28%, #2dd4bf 62%, #67e8f9 100%); filter: drop-shadow(0 0 26px rgba(45,212,191,.2)); }
+html.dark .text-electric-soft { background-image: none; color: #ffffff; -webkit-text-fill-color: #ffffff; filter: none; }
 
 /* Flow line between the three nodes in the hero diagram */
 @keyframes flow-dash { to { stroke-dashoffset: -40; } }
@@ -1070,9 +1069,9 @@ html.dark .text-electric-soft { background-image: linear-gradient(100deg, #bbf7d
 .text-grad-flame { background-image: var(--g-flame-ink); }
 .text-grad-aqua { background-image: var(--g-aqua-ink); }
 .text-grad-gold { background-image: var(--g-gold-ink); }
-html.dark .text-grad-flame { background-image: var(--g-flame); filter: drop-shadow(0 0 24px rgba(168,85,247,.28)); }
-html.dark .text-grad-aqua { background-image: var(--g-aqua); filter: drop-shadow(0 0 22px rgba(56,189,248,.25)); }
-html.dark .text-grad-gold { background-image: var(--g-gold); }
+html.dark .text-grad-flame { background-image: none; color: #ffffff; -webkit-text-fill-color: #ffffff; filter: none; }
+html.dark .text-grad-aqua { background-image: none; color: #ffffff; -webkit-text-fill-color: #ffffff; filter: none; }
+html.dark .text-grad-gold { background-image: none; color: #ffffff; -webkit-text-fill-color: #ffffff; filter: none; }
 .animate-gradient-pan.text-grad-flame, .animate-gradient-pan.text-grad-aqua { animation: gradient-pan 9s ease-in-out infinite; }
 
 /* coloured rim on landing surfaces */
@@ -1123,19 +1122,9 @@ html button[class~="bg-emerald-500"][class*="text-slate-950"]:disabled { filter:
    v3: FLOWING SURFACES — no grid, no outlines, depth from colour + light
    Dark = midnight navy with luminous accents. Light = pearl with coloured washes.
    ======================================================== */
-/* Dark: a deep black sky (#050505), lit softly from the corners by crimson, electric blue, violet, cyan and a hint of champagne.
-   The glow sits on its own fixed layer (not background-attachment: fixed) so scrolling never repaints it. */
-html.dark body { background-color: #050505; color: #ffffff; background-image: none; }
-html.dark::before {
-  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
-  background-image:
-    radial-gradient(1000px 620px at 2% -8%, rgba(var(--c-crimson), .15), transparent 60%),
-    radial-gradient(900px 620px at 100% 0%, rgba(var(--c-electric), .19), transparent 62%),
-    radial-gradient(760px 520px at 78% 112%, rgba(var(--c-violet), .16), transparent 60%),
-    radial-gradient(680px 480px at 0% 100%, rgba(var(--c-turquoise), .09), transparent 60%),
-    radial-gradient(520px 380px at 46% 40%, rgba(var(--c-magenta), .035), transparent 70%),
-    radial-gradient(480px 320px at 100% 58%, rgba(var(--c-gold), .05), transparent 70%);
-}
+/* Dark: pure black, no ambient colour. */
+html.dark body { background-color: #000000; color: #eaeaea; background-image: none; }
+html.dark::before { content: none; }
 /* Light: pearl white with luminous washes of sky, cyan, magenta and a touch of champagne. */
 html.light body { background-color: #F8FAFF !important; background-image: none !important; }
 html.light::before {
@@ -1157,13 +1146,10 @@ html.light::before {
 /* Artwork keeps its drop shadow while still; pieces that float all the time drop it (a filter on a moving layer is re-run every frame) */
 .art.animate-float-a, .art.animate-float-b, .art.animate-float-c { filter: none !important; }
 
-/* Cards: soft rounded surfaces. No outlines; separation comes from colour, light and shadow. */
+/* Cards: soft rounded surfaces. Dark = flat black with a grey hairline; light = soft white depth. */
 html.dark :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0) 32%),
-    radial-gradient(130% 100% at 100% 0%, rgba(var(--rim-accent), .12), transparent 55%),
-    linear-gradient(155deg, #1b1e25, #15171c 55%, #121418);
-  box-shadow: inset 0 0 0 1px rgba(48,52,61,.6), inset 0 1px 0 rgba(255,255,255,.07), 0 26px 56px -30px rgba(0,0,0,.95), 0 14px 44px -28px rgba(var(--rim-accent), .34);
+  background: #000000;
+  box-shadow: inset 0 0 0 1px #2b2b2b;
 }
 html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) {
   background:
@@ -1175,9 +1161,9 @@ html.dark :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*
 
 /* Quiet every outline: panels lose their borders, dividers become barely-there tints */
 html:is(.dark, .light) :is(.rounded-xl, .rounded-2xl, .rounded-3xl):not(button, input, select, textarea, .keep-border)[class*="border"] { border-color: transparent !important; }
-html.dark :not(input, select, textarea, button, svg, path)[class*="border-slate-"] { border-color: rgba(48,52,61,.85) !important; }
+html.dark :not(input, select, textarea, button, svg, path)[class*="border-slate-"] { border-color: #2b2b2b !important; }
 html.light :not(input, select, textarea, button, svg, path)[class*="border-slate-"] { border-color: rgba(30,41,100,.07) !important; }
-html.dark [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) { border-color: rgba(48,52,61,.55) !important; }
+html.dark [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) { border-color: #2b2b2b !important; }
 html.light [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) { border-color: rgba(30,41,100,.06) !important; }
 
 /* Landing surfaces follow the same soft-depth language */
@@ -1187,11 +1173,8 @@ html.light [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) { border-co
   box-shadow: 0 1px 2px rgba(30,41,100,.05), 0 24px 50px -26px rgba(var(--rim-accent), .42);
 }
 html.dark .surface {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,0) 30%),
-    radial-gradient(130% 100% at 100% 0%, rgba(var(--rim-accent), .15), transparent 55%),
-    linear-gradient(155deg, #1b1e25, #15171c 58%, #111317);
-  box-shadow: inset 0 0 0 1px rgba(48,52,61,.65), inset 0 1px 0 rgba(255,255,255,.08), 0 30px 60px -30px rgba(0,0,0,.95), 0 16px 50px -26px rgba(var(--rim-accent), .4);
+  background: #000000;
+  box-shadow: inset 0 0 0 1px #2b2b2b;
 }
 .surface::before, html.dark .surface::before, .edge-gradient::after { content: none; display: none; }
 .edge-gradient { box-shadow: 0 30px 80px -34px rgba(244,63,94,.55), 0 0 70px -24px rgba(139,92,246,.45) !important; }
@@ -1259,74 +1242,77 @@ html:is(.dark, .light) .on-aurora .keep-ink, html:is(.dark, .light) .on-aurora .
 
 
 /* ========================================================
-   v4: BLACK LUXURY (dark only): light, glow and gloss.
-   Static gradients and box-shadows only: no blur filters, no backdrop-filter and nothing animated,
-   so the page stays fast. The light theme is not touched.
+   v5: DEEP-GOLD AND RICH-RED BUTTONS (both themes) + PURE BLACK DARK REFINEMENTS (dark only)
+   Gold = main calls to action. Red = removing, rejecting, disconnecting and other important functions.
+   Flat colour, thin edge, smooth hover brightness, no glow. Everything else keeps its existing style.
    ======================================================== */
+.btn-gold,
+.btn-red {
+  transition: filter .2s ease, background-color .2s ease, border-color .2s ease;
+}
+/* The edge is drawn with an inset shadow so these buttons keep exactly the size of the ones they replace. */
+.btn-gold {
+  background-color: #e6a700;
+  color: #16120a;
+  border-color: #c58b00;
+  box-shadow: inset 0 0 0 1px #c58b00, inset 0 1px 0 rgba(255, 255, 255, .38);
+}
+.btn-red {
+  background-color: #b91c2c;
+  color: #ffffff;
+  border-color: #8f1421;
+  box-shadow: inset 0 0 0 1px #8f1421, inset 0 1px 0 rgba(255, 255, 255, .16);
+}
+.btn-gold:hover,
+.btn-red:hover { filter: brightness(1.08); }
+.btn-gold:active,
+.btn-red:active { filter: brightness(.95); }
+.btn-gold:focus-visible,
+.btn-red:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.btn-gold:disabled,
+.btn-red:disabled { opacity: .55; cursor: not-allowed; filter: none; }
+/* on black, the gold needs no edge and the red gets a fine light one so it reads as a button */
+html.dark .btn-gold { border-color: transparent; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .38); }
+html.dark .btn-red { border-color: rgba(255, 255, 255, .16); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16), inset 0 1px 0 rgba(255, 255, 255, .14); }
 
-/* Primary action: electric blue to violet, with a soft neon halo and a glossy top edge */
-html.dark .btn-primary {
-  box-shadow: 0 0 0 1px rgba(var(--c-violet), .45), 0 12px 34px -12px rgba(var(--c-electric), .8), 0 0 28px -10px rgba(var(--c-violet), .6), inset 0 1px 0 rgba(255,255,255,.4);
-}
-html.dark .btn-primary:hover {
-  box-shadow: 0 0 0 1px rgba(var(--c-violet), .6), 0 18px 44px -12px rgba(var(--c-electric), .9), 0 0 38px -8px rgba(var(--c-violet), .75), inset 0 1px 0 rgba(255,255,255,.45);
-}
-html.dark .btn-ruby {
-  box-shadow: 0 0 0 1px rgba(var(--c-crimson), .5), 0 12px 34px -12px rgba(var(--c-crimson), .8), 0 0 28px -10px rgba(var(--c-crimson), .55), inset 0 1px 0 rgba(255,255,255,.38);
-}
-html.dark .btn-ruby:hover {
-  box-shadow: 0 0 0 1px rgba(var(--c-crimson), .65), 0 18px 44px -12px rgba(var(--c-crimson), .9), 0 0 38px -8px rgba(var(--c-crimson), .7), inset 0 1px 0 rgba(255,255,255,.45);
-}
-/* the app's other primary buttons (green classes remapped to the brand gradient above) */
-html.dark button[class*="from-emerald-5"],
-html.dark button[class~="bg-emerald-500"][class*="text-slate-950"],
-html.dark button[class~="bg-emerald-600"][class*="text-white"] {
-  box-shadow: 0 0 0 1px rgba(var(--c-violet), .4), 0 12px 30px -12px rgba(var(--c-electric), .75), 0 0 24px -10px rgba(var(--c-violet), .5), inset 0 1px 0 rgba(255,255,255,.32);
-}
-
-/* Quiet buttons and chips: graphite with a thin reflection along the top edge */
-html.dark button[class~="bg-slate-800"] {
-  background-image: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,0));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.07);
-}
-
-/* Fields light up in sky blue when focused */
+/* ---- Dark only ---- */
+html.dark ::selection { background: rgba(255, 255, 255, .22); color: #ffffff; }
+html.dark :is(h1, h2, h3, h4, h5, h6):not([class*="text-rose"], [class*="text-red"], [class*="text-amber"], [class*="text-yellow"], [class*="text-orange"], [class*="text-emerald"], [class*="text-teal"], [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"], [class*="text-indigo"], [class*="text-violet"], [class*="text-purple"], [class*="text-fuchsia"], [class*="text-pink"]) { color: #ffffff; }
+/* pop-up backdrops dim the page to black */
+html.dark .fixed.inset-0[class*="bg-slate-950/"] { background-color: rgba(0, 0, 0, .82); }
+/* chart tile */
+html.dark [class*="bg-[#090D16]"] { background-color: #000000; border-color: #2b2b2b; }
+/* fields: grey edge, white when focused (no glow) */
 html.dark :is(input, select, textarea):focus,
-html.dark :is(input, select, textarea):focus-visible {
-  outline: none;
-  border-color: rgba(var(--c-sky), .8);
-  box-shadow: 0 0 0 3px rgba(var(--c-electric), .22), 0 0 24px -6px rgba(var(--c-sky), .5);
+html.dark :is(input, select, textarea):focus-visible { outline: none; border-color: #ffffff; box-shadow: none; }
+/* the featured plan carries a fine gold edge instead of a coloured glow */
+html.dark .edge-gradient { box-shadow: inset 0 0 0 1px rgba(230, 167, 0, .6) !important; }
+/* welcome banner keeps its colour artwork; only the heavy outer glow is dropped */
+html.dark .aurora { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2); }
+/* active navigation item: dark grey with a white marker instead of a gradient pill */
+html.dark .nav-active { background-image: none; background-color: #141414; box-shadow: inset 2px 0 0 #ffffff; }
+/* the app's remaining green "primary" classes (now blue-violet in light) become quiet outlined buttons in dark */
+html.dark button[class*="from-emerald-5"]:not(.btn-gold, .btn-red, .is-selected),
+html.dark button[class~="bg-emerald-500"][class*="text-slate-950"]:not(.btn-gold, .btn-red, .is-selected),
+html.dark button[class~="bg-emerald-600"][class*="text-white"]:not(.btn-gold, .btn-red, .is-selected) {
+  background-image: none !important;
+  background-color: transparent !important;
+  color: #ffffff !important;
+  border: 1px solid #3d3d3d;
+  box-shadow: none;
 }
-
-/* Status pills glow softly in their own colour */
-html.dark .rounded-full[class*="bg-rose-500/1"],
-html.dark .rounded-full[class*="bg-rose-500/2"] { box-shadow: 0 0 0 1px rgba(var(--c-crimson), .22), 0 0 16px -4px rgba(var(--c-crimson), .4); }
-html.dark .rounded-full[class*="bg-amber-500/1"],
-html.dark .rounded-full[class*="bg-amber-500/2"] { box-shadow: 0 0 0 1px rgba(var(--c-gold), .25), 0 0 16px -4px rgba(var(--c-gold), .4); }
-html.dark .rounded-full[class*="bg-sky-500/1"],
-html.dark .rounded-full[class*="bg-sky-500/2"],
-html.dark .rounded-full[class*="bg-blue-500/1"],
-html.dark .rounded-full[class*="bg-blue-500/2"] { box-shadow: 0 0 0 1px rgba(var(--c-sky), .25), 0 0 16px -4px rgba(var(--c-electric), .45); }
-html.dark .rounded-full[class*="bg-violet-500/1"],
-html.dark .rounded-full[class*="bg-violet-500/2"],
-html.dark .rounded-full[class*="bg-purple-500/1"],
-html.dark .rounded-full[class*="bg-purple-500/2"] { box-shadow: 0 0 0 1px rgba(var(--c-violet), .28), 0 0 16px -4px rgba(var(--c-violet), .45); }
-
-/* Welcome banner: a fine champagne keyline around the glow */
-html.dark .aurora {
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.3),
-    inset 0 0 0 1px rgba(var(--c-gold), .22),
-    0 40px 80px -36px rgba(var(--c-electric), .7),
-    0 20px 60px -28px rgba(var(--c-crimson), .5);
+html.dark button[class*="from-emerald-5"]:not(.btn-gold, .btn-red, .is-selected):hover,
+html.dark button[class~="bg-emerald-500"][class*="text-slate-950"]:not(.btn-gold, .btn-red, .is-selected):hover,
+html.dark button[class~="bg-emerald-600"][class*="text-white"]:not(.btn-gold, .btn-red, .is-selected):hover {
+  background-color: rgba(255, 255, 255, .07) !important;
+  border-color: #ffffff;
+  filter: none;
 }
-html.dark .badge-gold { box-shadow: 0 0 20px -4px rgba(var(--c-gold), .6), inset 0 1px 0 rgba(255,255,255,.55); }
+/* a selected tab or toggle is solid white */
+html.dark .is-selected { background-image: none !important; background-color: #ffffff !important; color: #000000 !important; box-shadow: none; }
+/* dashboard quick-link tiles are buttons, so they get the same grey hairline as the cards (hover ring comes from the .surface-hover rule) */
+html.dark button.surface-hover:not(:hover) { box-shadow: inset 0 0 0 1px #2b2b2b; }
 
-/* chart tile keeps its class (the light theme matches on it) and takes the charcoal here */
-html.dark [class*="bg-[#090D16]"] { background-color: #101114; border-color: rgba(48,52,61,.7); }
-
-/* pop-up backdrops are near-black, so the page behind stays black rather than going grey */
-html.dark .fixed.inset-0[class*="bg-slate-950/"] { background-color: rgba(5,5,5,.88); }
-
-html.dark ::selection { background: rgba(var(--c-violet), .5); color: #ffffff; }
-
+/* ordinary actions that used a saturated fill: quiet grey-outlined buttons in dark (light keeps its original colour) */
+html.dark .btn-quiet { background-image: none !important; background-color: transparent !important; color: #ffffff !important; box-shadow: inset 0 0 0 1px #3d3d3d; }
+html.dark .btn-quiet:hover { background-color: rgba(255, 255, 255, .07) !important; box-shadow: inset 0 0 0 1px #ffffff; }

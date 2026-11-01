@@ -12,7 +12,7 @@ const MOODS: Record<BackdropVariant, [string, string, string, string]> = {
 export default function HeroBackdrop({ variant = 'landing' }: { variant?: BackdropVariant }) {
   const [a, b, c, d] = MOODS[variant];
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+    <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden dark:hidden">
       <div className="absolute -left-32 -top-40 size-[620px] rounded-full animate-blob-a opacity-60 dark:opacity-70" style={{ background: `radial-gradient(closest-side, ${a}, transparent)` }} />
       <div className="absolute -right-40 top-40 size-[700px] rounded-full animate-blob-b opacity-60 dark:opacity-70" style={{ background: `radial-gradient(closest-side, ${b}, transparent)` }} />
       <div className="absolute -bottom-56 left-1/4 size-[620px] rounded-full animate-blob-a opacity-60 dark:opacity-70 [animation-delay:-16s]" style={{ background: `radial-gradient(closest-side, ${c}, transparent)` }} />

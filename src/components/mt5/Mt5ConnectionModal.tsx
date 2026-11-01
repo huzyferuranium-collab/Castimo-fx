@@ -143,7 +143,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
               <button
                 type="button"
                 onClick={closeAndReset}
-                className="w-full py-3 px-4 rounded-xl bg-blue-500 hover:bg-blue-400 font-semibold text-sm text-white transition cursor-pointer"
+                className="btn-gold w-full py-3 px-4 rounded-xl font-semibold text-sm cursor-pointer"
               >
                 Got it
               </button>
@@ -266,7 +266,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
               <button
                 type="submit"
                 disabled={isConnecting}
-                className="w-full py-3 px-4 rounded-xl bg-blue-500 hover:bg-blue-400 font-semibold text-sm text-white transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-gold w-full py-3 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
               >
                 {isConnecting ? (
                   <span>{progress?.label || 'Connecting…'}</span>

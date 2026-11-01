@@ -233,7 +233,7 @@ export const WithdrawalModal: React.FC<WithdrawalModalProps> = ({
                 <button
                   type="submit"
                   disabled={isSubmitting || calc.isBlocked || calc.withdrawable <= 0}
-                  className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 font-semibold text-xs text-slate-950 shadow-md shadow-emerald-500/20 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="btn-gold w-full py-2.5 px-4 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Lock className="w-3.5 h-3.5" />
                   <span>Lock Atomic Reservation & Request Payout</span>

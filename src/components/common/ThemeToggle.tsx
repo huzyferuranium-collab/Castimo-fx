@@ -46,7 +46,7 @@ export const ThemeSegmentedControl: React.FC = () => {
         onClick={() => setTheme('dark')}
         className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
           theme === 'dark'
-            ? 'bg-purple-600 text-white shadow-sm'
+            ? 'is-selected bg-purple-600 text-white shadow-sm'
             : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
         }`}
       >
