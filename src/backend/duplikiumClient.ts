@@ -48,6 +48,7 @@ export class DuplikiumError extends Error {
 
 /** A short description of an answer we could not read: the status and the first words, with any password in it hidden. */
 let nonJsonNoted = false;
+let contactUsNoted = false;
 
 export function describeReply(status: number, text: string, secrets: string[] = []): string {
   let t = String(text ?? '');
@@ -696,7 +697,22 @@ export class DuplikiumClient implements CopierApi {
   // ----- copy settings -----
 
   async getSettings(f: { idMaster?: string; idSlave?: string; idGroup?: string }): Promise<DuplikiumSetting[]> {
-    const json = await this.call('settings/getSettings.php', 'settings', { id_master: f.idMaster, id_slave: f.idSlave, id_group: f.idGroup });
+    let json: any;
+    try {
+      json = await this.call('settings/getSettings.php', 'settings', { id_master: f.idMaster, id_slave: f.idSlave, id_group: f.idGroup });
+    } catch (e) {
+      // Seen live: when nothing matches the filter yet, Duplikium answers with only "please contact us at support@trade-copier.com".
+      // That is read as "no settings found". Anything that depends on a setting reads it back and checks the value, so this can
+      // never make a setting look applied.
+      if (e instanceof DuplikiumError && e.kind === 'API' && /^\W*please contact us\b/i.test(e.message)) {
+        if (!contactUsNoted) {
+          contactUsNoted = true;
+          console.warn('ℹ️ [DUPLIKIUM] Reading copy settings was answered with "please contact us" and is treated as "no settings found yet".');
+        }
+        return [];
+      }
+      throw e;
+    }
     const list = Array.isArray(json?.settings) ? json.settings : [];
     return list.map(normalizeSetting).filter((s: DuplikiumSetting | null): s is DuplikiumSetting => s !== null);
   }
@@ -704,21 +720,19 @@ export class DuplikiumClient implements CopierApi {
   async setSettings(s: { idMaster?: string; idSlave?: string; idGroup?: string; copierStatus?: number; riskFactorType?: number; riskFactorValue?: number }): Promise<void> {
     if (s.idSlave && s.idGroup) throw new DuplikiumError('API', 'Set either a slave or a template, not both.');
     if (!s.idSlave && !s.idGroup) throw new DuplikiumError('API', 'A slave or a template is required.');
-    // The documentation does not describe this answer, so its shape is not relied on: callers read the setting back to confirm it took.
-    await this.call(
-      'settings/setSettings.php',
-      'settings',
-      {
-        id_master: s.idMaster,
-        id_slave: s.idSlave,
-        id_group: s.idGroup,
-        copier_status: s.copierStatus,
-        risk_factor_type: s.riskFactorType,
-        risk_factor_value: s.riskFactorValue,
-      },
-      false,
-      true
-    );
+    // The service takes a LIST of settings rows (its own sample does http_build_query on a list), so the row is sent as row 0:
+    // 0[id_master]=..&0[id_slave]=..&0[copier_status]=.. . Its answer is not relied on: callers read the setting back to confirm it took.
+    const row: Record<string, unknown> = {
+      id_master: s.idMaster,
+      id_slave: s.idSlave,
+      id_group: s.idGroup,
+      copier_status: s.copierStatus,
+      risk_factor_type: s.riskFactorType,
+      risk_factor_value: s.riskFactorValue,
+    };
+    const form: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(row)) form[`0[${k}]`] = v;
+    await this.call('settings/setSettings.php', 'settings', form, false, true);
   }
 
   // ----- positions -----

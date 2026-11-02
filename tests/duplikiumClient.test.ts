@@ -196,7 +196,16 @@ test('setSettings needs exactly one of slave or template', async () => {
 test('setSettings sends the copier status and copy size', async () => {
   const { c, requests } = client({ 'access/getToken.php': TOKEN(1), 'settings/setSettings.php': { body: { success: 'ok' } } });
   await c.setSettings({ idMaster: 'M', idSlave: 'S', copierStatus: COPIER.CLOSE_ONLY, riskFactorType: 11, riskFactorValue: 0.5 });
-  assert.deepEqual(form(requests[1]), { id_master: 'M', id_slave: 'S', copier_status: '-1', risk_factor_type: '11', risk_factor_value: '0.5' });
+  // the service takes a list of rows: ours is row 0 (its own sample sends http_build_query of a list)
+  assert.deepEqual(form(requests[1]), { '0[id_master]': 'M', '0[id_slave]': 'S', '0[copier_status]': '-1', '0[risk_factor_type]': '11', '0[risk_factor_value]': '0.5' });
+  assert.ok(!('id_slave' in form(requests[1])), 'not the flat form');
+});
+
+test('reading settings: "please contact us" means no settings found yet, but other errors are still errors', async () => {
+  const none = client({ 'access/getToken.php': TOKEN(1), 'settings/getSettings.php': { status: 200, body: { code: 500, error: 'please contact us at support@trade-copier.com' } } });
+  assert.deepEqual(await none.c.getSettings({ idMaster: 'M' }), []);
+  const bad = client({ 'access/getToken.php': TOKEN(1), 'settings/getSettings.php': { status: 400, body: { code: 12, error: 'Unknown master' } } });
+  await assert.rejects(bad.c.getSettings({ idMaster: 'M' }), (e: any) => e.kind === 'API' && /Unknown master/.test(e.message));
 });
 
 test('getSettings reads the copier status and copy size', async () => {
