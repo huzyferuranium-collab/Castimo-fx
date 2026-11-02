@@ -399,10 +399,10 @@ test('other calls stay strict: plain text where JSON is expected is still an unr
 
 // ---------- the service's own request limit ----------
 
-import { parseRateLimit } from '../src/backend/duplikiumClient.ts';
+import { parseRateLimit, limitsForAccountCount } from '../src/backend/duplikiumClient.ts';
 
 test('the real limit is read from the service\'s own words', () => {
-  assert.deepEqual(parseRateLimit('API: You reached the request limit (2/1 per second) for this endpoint(/webservice/v4/account/getAccounts.php) with 1 accounts'), { max: 1, unit: 'second' });
+  assert.deepEqual(parseRateLimit('API: You reached the request limit (2/1 per second) for this endpoint(/webservice/v4/account/getAccounts.php) with 1 accounts'), { max: 1, unit: 'second', accounts: 1 });
   assert.deepEqual(parseRateLimit('You reached the request limit (31/2 per minute)'), { max: 2, unit: 'minute' });
   assert.deepEqual(parseRateLimit('limit (9/5 per Hour)'), { max: 5, unit: 'hour' });
   assert.deepEqual(parseRateLimit('something else'), {});
@@ -418,11 +418,37 @@ test('a per-second request limit is waited out once, learned, and the call then 
   assert.deepEqual(await c.getAccounts(), []);
   assert.equal(p.counts['account/getAccounts.php'], 1, 'asked twice (counter starts at 0)');
   assert.ok(sleeps.includes(1300), 'it waited before trying again');
-  // learned: the next two calls are now at least a second apart (accounts were allowed 5 per second before)
-  const before = t.now;
-  await c.getAccounts();
-  await c.getAccounts();
-  assert.ok(t.now - before >= 1000, 'two further calls were spaced by at least a second');
+  // learned: Duplikium counts 1 account, so reads are now paced to its smallest allowance (2 a minute, 30 an hour)
+  assert.ok(c.refreshSpacingMs() >= 120_000, 'the periodic read is spaced two minutes apart or more');
+  // a third read inside the minute is held back by our own limiter, without troubling the service
+  await assert.rejects(c.getAccounts(), (e: any) => e.kind === 'RATE_LIMIT' && e.retryAfterMs > 0);
+  assert.equal(p.counts['account/getAccounts.php'], 1, 'the service was not asked again');
+});
+
+test('limits follow the number of linked accounts, as the documentation says', () => {
+  assert.deepEqual(limitsForAccountCount(1).accounts, { perSec: 1, perMin: 2, perHour: 27 }); // 30 an hour with a 10% margin
+  assert.deepEqual(limitsForAccountCount(1).closed, { perSec: 1, perMin: 2, perHour: 27 });
+  assert.deepEqual(limitsForAccountCount(5).accounts, { perSec: 5, perMin: 9, perHour: 135 });
+  const big = limitsForAccountCount(500);
+  assert.equal(big.accounts.perSec, 10);
+  assert.equal(big.closed.perHour, 270); // 300 with a 10% margin
+  assert.equal(limitsForAccountCount(0).accounts.perSec, 1); // never below one
+});
+
+test('the limiter relaxes when more accounts are seen, but the service\'s own count wins for 30 minutes', () => {
+  const t = { now: 0 };
+  const lim = new RateLimiter(DEFAULT_LIMITS, () => t.now);
+  lim.setAccountsCount(1, 'list');
+  const tight = lim.sustainableSpacingMs('accounts');
+  lim.setAccountsCount(6, 'list');
+  assert.ok(lim.sustainableSpacingMs('accounts') < tight, 'more accounts, more room');
+  lim.setAccountsCount(1, 'service'); // Duplikium says it counts 1
+  assert.equal(lim.sustainableSpacingMs('accounts'), tight);
+  lim.setAccountsCount(6, 'list');
+  assert.equal(lim.sustainableSpacingMs('accounts'), tight, 'still the service\'s count');
+  t.now += 31 * 60_000;
+  lim.setAccountsCount(6, 'list');
+  assert.ok(lim.sustainableSpacingMs('accounts') < tight, 'after 30 minutes the list count is used again');
 });
 
 test('a request limit that keeps happening is a calm "busy" error, never a disconnection message', async () => {

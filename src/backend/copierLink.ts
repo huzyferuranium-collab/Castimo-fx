@@ -69,3 +69,14 @@ export function desiredCopierStatus(rec: { status: string; billingBlocked?: bool
   if (!rec.isBrokerVerified) return COPIER.FROZEN;
   return rec.status === 'ACTIVE' && !rec.billingBlocked ? COPIER.ON : COPIER.CLOSE_ONLY;
 }
+
+/**
+ * When to read the whole account list next (milliseconds). Normally every `baseSeconds`, but never faster than twice the
+ * service's sustainable spacing (so other work keeps half of the allowed reads); after a request-limit answer, wait at
+ * least the time the service asked for, and at least the sustainable spacing.
+ */
+export function nextRefreshDelayMs(baseSeconds: number, spacingMs: number, retryMs: number | null): number {
+  const spacing = Math.max(0, spacingMs || 0);
+  if (retryMs !== null) return Math.max(retryMs, spacing);
+  return Math.max(baseSeconds * 1000, 2 * spacing);
+}

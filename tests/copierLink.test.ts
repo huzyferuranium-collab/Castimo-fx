@@ -73,3 +73,12 @@ test('copying: on for active clients, close-only when paused or unpaid, frozen b
   assert.equal(desiredCopierStatus({ status: 'ACTIVE', billingBlocked: true, isBrokerVerified: true }), COPIER.CLOSE_ONLY);
   assert.equal(desiredCopierStatus({ status: 'ACTIVE', isBrokerVerified: false }), COPIER.FROZEN);
 });
+
+test('the account list is read at the normal pace, never faster than half of what the service allows, and calmly after a request limit', async () => {
+  const { nextRefreshDelayMs } = await import('../src/backend/copierLink.ts');
+  assert.equal(nextRefreshDelayMs(60, 2400, null), 60_000); // plenty of room: the normal minute
+  assert.equal(nextRefreshDelayMs(60, 120_000, null), 240_000); // one account linked: 30 reads an hour, so every four minutes
+  assert.equal(nextRefreshDelayMs(60, 120_000, 65_000), 120_000); // after a limit answer: at least the sustainable spacing
+  assert.equal(nextRefreshDelayMs(60, 1100, 3_000), 3_000); // a per-second slip: soon
+  assert.equal(nextRefreshDelayMs(60, 0, null), 60_000); // a service that does not say: the normal minute
+});

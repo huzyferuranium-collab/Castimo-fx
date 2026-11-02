@@ -29,7 +29,7 @@ import {
   type PositionsResult,
 } from './duplikiumClient.ts';
 import { ProvisionGate, HandedOff, friendlyHint, rejectsForGood, type Stage } from './clientBridge.ts';
-import { DISCONNECT_GRACE_MS, decideLink, desiredCopierStatus, type LinkMemory } from './copierLink.ts';
+import { DISCONNECT_GRACE_MS, decideLink, desiredCopierStatus, nextRefreshDelayMs, type LinkMemory } from './copierLink.ts';
 import {
   BrokerVerificationError,
   checkConnectEligibility,
@@ -275,15 +275,33 @@ export class Mt5ConnectionManager {
     return ok;
   }
 
+  /** Set when the service asked us to slow down: the next read waits at least this long. */
+  private retryRefreshInMs: number | null = null;
+
   private startTimer(): void {
-    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    this.stop();
+    this.scheduleRefresh();
+  }
+
+  /**
+   * The next read of the account list. Normally every DUPLIKIUM_REFRESH_SECONDS (60), but never faster than half of what the
+   * service's request limit allows (it allows few reads when few accounts are linked), so other work keeps its share.
+   */
+  private scheduleRefresh(): void {
     const secs = readLimit(process.env.DUPLIKIUM_REFRESH_SECONDS, 60) || 60;
-    this.refreshTimer = setInterval(() => void this.refreshAll(), secs * 1000);
+    const spacing = this.api?.refreshSpacingMs?.() ?? 0;
+    const delay = nextRefreshDelayMs(secs, spacing, this.retryRefreshInMs);
+    this.retryRefreshInMs = null;
+    this.refreshTimer = setTimeout(() => {
+      void this.refreshAll().finally(() => {
+        if (this.refreshTimer) this.scheduleRefresh();
+      });
+    }, delay);
     (this.refreshTimer as any).unref?.();
   }
 
   public stop(): void {
-    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.refreshTimer = null;
   }
 
@@ -311,8 +329,12 @@ export class Mt5ConnectionManager {
       return this.masterState === 'CONNECTED';
     } catch (e: any) {
       if (e instanceof DuplikiumError && e.kind === 'RATE_LIMIT') {
-        // The service asked us to slow down for a moment. That is not a disconnection: keep the last reading and try again at the next refresh.
+        // The service asked us to slow down for a moment. That is not a disconnection: keep the last reading and read again a little later.
         console.warn(`⚠️ [COPIER] The copier service asked us to slow down (${e.detail || e.message}). Keeping the last reading.`);
+        this.retryRefreshInMs = e.retryAfterMs ?? 65_000;
+        if (this.lastRefreshAt === 0) {
+          this.masterNote = 'The copier service asked us to slow down just now, so the master account has not been read yet. It is read again shortly: press refresh in a minute.';
+        }
         return this.masterState === 'CONNECTED';
       }
       this.serviceError = e instanceof DuplikiumError ? `${e.kind}: ${e.message}` : String(e?.message || e);

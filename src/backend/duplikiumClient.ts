@@ -33,13 +33,16 @@ export class DuplikiumError extends Error {
   status?: number;
   /** For the administrator's log only (never shown to clients): what the answer looked like, with secrets removed. */
   detail?: string;
-  constructor(kind: DuplikiumErrorKind, message: string, extra: { code?: string; status?: number; detail?: string } = {}) {
+  /** For a request-limit error: how long to leave the service alone before asking again. */
+  retryAfterMs?: number;
+  constructor(kind: DuplikiumErrorKind, message: string, extra: { code?: string; status?: number; detail?: string; retryAfterMs?: number } = {}) {
     super(message);
     this.name = 'DuplikiumError';
     this.kind = kind;
     this.code = extra.code;
     this.status = extra.status;
     this.detail = extra.detail;
+    this.retryAfterMs = extra.retryAfterMs;
   }
 }
 
@@ -137,6 +140,8 @@ export interface CopierApi {
   setSettings(s: { idMaster?: string; idSlave?: string; idGroup?: string; copierStatus?: number; riskFactorType?: number; riskFactorValue?: number }): Promise<void>;
   getOpenPositions(accountId: string): Promise<PositionsResult>;
   getClosedPositions(accountId: string): Promise<PositionsResult>;
+  /** Optional: how often the whole account list may be read inside the service's limits (milliseconds). */
+  refreshSpacingMs?(): number;
 }
 
 // ---------- reading Duplikium's answers (pure, unit-tested) ----------
@@ -316,6 +321,18 @@ export const DEFAULT_LIMITS: Record<LimitClass, Window> = {
   other: { perSec: 1, perMin: 48, perHour: 2800 },
 };
 
+/**
+ * Duplikium's documented limits for the calls that depend on how many accounts are linked to the API key:
+ * getAccounts min(1xN,10)/s, min(2xN,60)/min, min(30xN,1800)/h; open positions 5, 30, 900; closed positions 5, 15, 300.
+ * Large values keep a 10% margin; small ones are used exactly (2 a minute cannot be made smaller).
+ */
+export function limitsForAccountCount(n: number): Pick<Record<LimitClass, Window>, 'accounts' | 'open' | 'closed'> {
+  const N = Math.max(1, Math.floor(n) || 1);
+  const m = (x: number) => (x >= 10 ? Math.floor(x * 0.9) : x);
+  const w = (sec: number, min: number, hour: number): Window => ({ perSec: Math.min(N, sec), perMin: m(Math.min(2 * N, min)), perHour: m(Math.min(30 * N, hour)) });
+  return { accounts: w(10, 60, 1800), open: w(5, 30, 900), closed: w(5, 15, 300) };
+}
+
 /** Sliding-window limiter. `acquire` waits for a free slot, or gives up after `maxWaitMs`. */
 export class RateLimiter {
   private hits = new Map<LimitClass, number[]>();
@@ -345,6 +362,28 @@ export class RateLimiter {
     const key = unit === 'second' ? 'perSec' : unit === 'minute' ? 'perMin' : 'perHour';
     const w = this.limits[cls];
     if (max < w[key]) w[key] = Math.floor(max);
+  }
+
+  private listCount: number | null = null;
+  private serviceCount: { n: number; at: number } | null = null;
+
+  /**
+   * The limits for the calls that depend on the number of linked accounts. `list` is how many accounts we last saw;
+   * `service` is the number Duplikium itself named in a request-limit answer ("with 1 accounts"), which wins for 30 minutes.
+   */
+  setAccountsCount(n: number, source: 'list' | 'service'): void {
+    const k = Math.max(1, Math.floor(n) || 1);
+    if (source === 'list') this.listCount = k;
+    else this.serviceCount = { n: k, at: this.now() };
+    const fresh = this.serviceCount && this.now() - this.serviceCount.at < 30 * 60_000;
+    const eff = fresh ? Math.min(this.serviceCount!.n, this.listCount ?? this.serviceCount!.n) : (this.listCount ?? k);
+    Object.assign(this.limits, limitsForAccountCount(eff));
+  }
+
+  /** How far apart calls of this kind must be, on average, to stay inside every window (milliseconds). */
+  sustainableSpacingMs(cls: LimitClass): number {
+    const w = this.limits[cls];
+    return Math.ceil(Math.max(1100 / w.perSec, 60_000 / w.perMin, 3_600_000 / w.perHour));
   }
 
   /** Waits (using the same clock as the limiter, so tests can fake it). */
@@ -378,7 +417,7 @@ export class RateLimiter {
         return;
       }
       if (t - started + wait > this.maxWaitMs) {
-        throw new DuplikiumError('RATE_LIMIT', 'The copier service is busy right now. Please try again in a minute.');
+        throw new DuplikiumError('RATE_LIMIT', 'The copier service is busy right now. Please try again in a minute.', { retryAfterMs: wait + 1000 });
       }
       await this.sleep(Math.min(wait + 5, 5_000));
     }
@@ -441,7 +480,12 @@ export class DuplikiumClient implements CopierApi {
     if (!/^https:\/\//i.test(this.baseUrl)) throw new DuplikiumError('NOT_CONFIGURED', 'The copier service must be reached over HTTPS.');
     this.transport = opts.transport ?? fetchTransport;
     this.now = opts.now ?? Date.now;
-    this.limiter = opts.limiter ?? new RateLimiter(DEFAULT_LIMITS, this.now);
+    if (opts.limiter) this.limiter = opts.limiter;
+    else {
+      // Until we have seen the account list, assume the smallest size: the limits only get roomier from there.
+      this.limiter = new RateLimiter(DEFAULT_LIMITS, this.now);
+      this.limiter.setAccountsCount(1, 'list');
+    }
     this.timeoutMs = opts.timeoutMs ?? 20_000;
     this.refreshBefore = opts.refreshBeforeSeconds ?? 3600;
   }
@@ -489,6 +533,11 @@ export class DuplikiumClient implements CopierApi {
       }
     })();
     return this.tokenPromise;
+  }
+
+  /** How often the whole account list may be read, on average, inside the service's limits (milliseconds). */
+  refreshSpacingMs(): number {
+    return this.limiter.sustainableSpacingMs('accounts');
   }
 
   /** Signs in now (or refreshes). Used by the administrator's connection check. */
@@ -551,14 +600,16 @@ export class DuplikiumClient implements CopierApi {
     }
     const limit = res.status === 429 || (message && RATE_LIMIT_WORDS.test(message)) ? parseRateLimit(message) : undefined;
     if (limit) {
-      // The service named its real limit ("2/1 per second"): remember it so we never go over it again.
+      // The service named its real limit ("2/1 per second", "with 1 accounts"): remember it so we never go over it again.
+      if (limit.accounts) this.limiter.setAccountsCount(limit.accounts, 'service');
       if (limit.unit && limit.max) this.limiter.tighten(cls, limit.unit, limit.max);
       // A per-second slip is over in a moment: wait and try once more before giving up.
       if (limit.unit === 'second' && !rateRetried) {
         await this.limiter.pause(1300);
         return this.call(path, cls, form, retried, lenient, true);
       }
-      throw new DuplikiumError('RATE_LIMIT', 'The copier service is busy right now. Please try again in a minute.', { status: res.status, detail: message.slice(0, 200) });
+      const retryAfterMs = limit.unit === 'second' ? 3_000 : limit.unit === 'hour' ? 600_000 : 65_000;
+      throw new DuplikiumError('RATE_LIMIT', 'The copier service is busy right now. Please try again in a minute.', { status: res.status, detail: message.slice(0, 200), retryAfterMs });
     }
     if (message) throw new DuplikiumError('API', message, { status: res.status, code: errCode(json) });
     if (res.status >= 400) throw new DuplikiumError('API', `The copier service answered with status ${res.status}.`, { status: res.status });
@@ -634,6 +685,7 @@ export class DuplikiumClient implements CopierApi {
   async getAccounts(ids?: string | string[]): Promise<DuplikiumAccount[]> {
     const json = await this.call('account/getAccounts.php', 'accounts', { account_id: ids });
     const list = accountRows(json);
+    if (list && ids === undefined) this.limiter.setAccountsCount(list.length, 'list'); // the whole list: how many accounts are linked
     if (!list) {
       const keys = json && typeof json === 'object' ? Object.keys(json).slice(0, 12).join(', ') : typeof json;
       throw new DuplikiumError('BAD_RESPONSE', 'The copier service sent an account list we could not read.', { detail: `the answer had these fields: ${keys || 'none'}` });
@@ -683,9 +735,11 @@ export class DuplikiumClient implements CopierApi {
 const RATE_LIMIT_WORDS = /request limit|rate limit|too many requests/i;
 
 /** Reads "(2/1 per second)" out of the service's own wording: 1 call is allowed, 2 were made. */
-export function parseRateLimit(message: string): { unit?: 'second' | 'minute' | 'hour'; max?: number } {
-  const m = String(message ?? '').match(/\(\s*\d+\s*\/\s*(\d+)\s*per\s*(second|minute|hour)\s*\)/i);
-  return m ? { max: Number(m[1]), unit: m[2].toLowerCase() as 'second' | 'minute' | 'hour' } : {};
+export function parseRateLimit(message: string): { unit?: 'second' | 'minute' | 'hour'; max?: number; accounts?: number } {
+  const text = String(message ?? '');
+  const m = text.match(/\(\s*\d+\s*\/\s*(\d+)\s*per\s*(second|minute|hour)\s*\)/i);
+  const a = text.match(/with\s+(\d+)\s+accounts?/i);
+  return { ...(m ? { max: Number(m[1]), unit: m[2].toLowerCase() as 'second' | 'minute' | 'hour' } : {}), ...(a ? { accounts: Number(a[1]) } : {}) };
 }
 
 function errMessage(json: any): string {
