@@ -179,7 +179,7 @@ export const MasterAccountPanel: React.FC<MasterAccountPanelProps> = ({ onTradeB
           </p>
           <div className="flex items-center gap-2">
             <a
-              href="https://trade-copier.com"
+              href="https://www.trade-copier.com/cockpit/"
               target="_blank"
               rel="noreferrer"
               className="px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer"
