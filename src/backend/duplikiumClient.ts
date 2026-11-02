@@ -44,6 +44,8 @@ export class DuplikiumError extends Error {
 }
 
 /** A short description of an answer we could not read: the status and the first words, with any password in it hidden. */
+let nonJsonNoted = false;
+
 export function describeReply(status: number, text: string, secrets: string[] = []): string {
   let t = String(text ?? '');
   for (const sec of secrets) if (sec) t = t.split(sec).join('***');
@@ -480,11 +482,22 @@ export class DuplikiumClient implements CopierApi {
 
   // ----- plumbing -----
 
-  private parse(res: TransportResponse, secrets: string[] = []): any {
+  /**
+   * `lenient` is for calls whose answer we do not need and whose effect we always read back afterwards (changing copy settings):
+   * a successful (2xx) answer that is not JSON is then accepted, and what it looked like is noted once in the log.
+   */
+  private parse(res: TransportResponse, secrets: string[] = [], lenient = false): any {
     let json: any;
     try {
       json = res.text ? JSON.parse(res.text) : {};
     } catch {
+      if (lenient && res.status >= 200 && res.status < 300) {
+        if (!nonJsonNoted) {
+          nonJsonNoted = true;
+          console.warn(`ℹ️ [DUPLIKIUM] A settings change was answered without JSON (${describeReply(res.status, res.text, secrets)}). The result is checked by reading the settings back.`);
+        }
+        return {};
+      }
       throw new DuplikiumError('BAD_RESPONSE', 'The copier service sent an answer we could not read.', {
         status: res.status,
         detail: describeReply(res.status, res.text, secrets),
@@ -493,7 +506,7 @@ export class DuplikiumClient implements CopierApi {
     return json;
   }
 
-  private async call(path: string, cls: LimitClass, form: Record<string, unknown>, retried = false): Promise<any> {
+  private async call(path: string, cls: LimitClass, form: Record<string, unknown>, retried = false, lenient = false): Promise<any> {
     const token = await this.ensureToken();
     await this.limiter.acquire(cls);
     const body = new URLSearchParams();
@@ -509,13 +522,13 @@ export class DuplikiumClient implements CopierApi {
       body: body.toString(),
       timeoutMs: this.timeoutMs,
     });
-    const json = this.parse(res, [String(form.password ?? '')]);
+    const json = this.parse(res, [String(form.password ?? '')], lenient);
     const message = errMessage(json);
     if (res.status === 401 || res.status === 403 || (message && /token|unauthori[sz]ed|authenticat/i.test(message))) {
       // The token may have expired early: sign in again once and retry.
       if (!retried) {
         this.token = '';
-        return this.call(path, cls, form, true);
+        return this.call(path, cls, form, true, lenient);
       }
       throw new DuplikiumError('AUTH', 'The copier service did not accept our login.', { status: res.status, code: errCode(json) });
     }
@@ -612,14 +625,21 @@ export class DuplikiumClient implements CopierApi {
   async setSettings(s: { idMaster?: string; idSlave?: string; idGroup?: string; copierStatus?: number; riskFactorType?: number; riskFactorValue?: number }): Promise<void> {
     if (s.idSlave && s.idGroup) throw new DuplikiumError('API', 'Set either a slave or a template, not both.');
     if (!s.idSlave && !s.idGroup) throw new DuplikiumError('API', 'A slave or a template is required.');
-    await this.call('settings/setSettings.php', 'settings', {
-      id_master: s.idMaster,
-      id_slave: s.idSlave,
-      id_group: s.idGroup,
-      copier_status: s.copierStatus,
-      risk_factor_type: s.riskFactorType,
-      risk_factor_value: s.riskFactorValue,
-    });
+    // The documentation does not describe this answer, so its shape is not relied on: callers read the setting back to confirm it took.
+    await this.call(
+      'settings/setSettings.php',
+      'settings',
+      {
+        id_master: s.idMaster,
+        id_slave: s.idSlave,
+        id_group: s.idGroup,
+        copier_status: s.copierStatus,
+        risk_factor_type: s.riskFactorType,
+        risk_factor_value: s.riskFactorValue,
+      },
+      false,
+      true
+    );
   }
 
   // ----- positions -----

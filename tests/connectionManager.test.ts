@@ -339,6 +339,18 @@ test('if copying cannot be frozen, the new account is removed instead of left ru
   assert.equal(m.getClientConnection('u1'), undefined);
 });
 
+test('a freeze the service says it accepted but did not apply is caught by reading the setting back, and the account is removed', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  fake.ignoreStatusChange = true; // the answer is fine, but nothing changes at the service
+  const e: any = await m.provisionClientTerminal(creds(), () => {}).then(() => null, (x: any) => x);
+  assert.equal(e?.code, 'VERIFICATION_UNAVAILABLE');
+  assert.equal(e?.ref, 'COPY_SETTINGS');
+  assert.match(e?.detail ?? '', /could not be held back/);
+  assert.deepEqual(fake.deleted, ['D1']);
+  assert.equal(m.getClientConnection('u1'), undefined);
+});
+
 test('if copying does not really switch on, it is not reported as connected', async () => {
   const { fake, m } = setup();
   await m.refreshAll();

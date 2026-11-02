@@ -375,3 +375,24 @@ test('account lists are read in every plain shape Duplikium may use, and an unkn
     await assert.rejects(c.getAccounts(), (e: any) => e.kind === 'BAD_RESPONSE', `unknown shape ${JSON.stringify(body)}`);
   }
 });
+
+// ---------- changing copy settings: the answer's shape is not relied on ----------
+
+test('a settings change answered with plain text (2xx) is accepted, because the caller reads the setting back', async () => {
+  for (const text of ['OK', '<html>done</html>', '1']) {
+    const { c } = client({ 'access/getToken.php': TOKEN(1), 'settings/setSettings.php': { status: 200, body: text } });
+    await c.setSettings({ idMaster: 'M', idSlave: 'S', copierStatus: COPIER.FROZEN });
+  }
+});
+
+test('a settings change that fails is still an error: a JSON error, or a non-JSON answer with a failing status', async () => {
+  const a = client({ 'access/getToken.php': TOKEN(1), 'settings/setSettings.php': { status: 400, body: { code: 12, error: 'Unknown slave' } } });
+  await assert.rejects(a.c.setSettings({ idMaster: 'M', idSlave: 'S', copierStatus: 1 }), (e: any) => e.kind === 'API' && /Unknown slave/.test(e.message));
+  const b = client({ 'access/getToken.php': TOKEN(1), 'settings/setSettings.php': { status: 500, body: '<html>Server error</html>' } });
+  await assert.rejects(b.c.setSettings({ idMaster: 'M', idSlave: 'S', copierStatus: 1 }), (e: any) => e.kind === 'BAD_RESPONSE' && /HTTP 500/.test(e.detail));
+});
+
+test('other calls stay strict: plain text where JSON is expected is still an unreadable answer', async () => {
+  const { c } = client({ 'access/getToken.php': TOKEN(1), 'account/getAccounts.php': { status: 200, body: 'OK' } });
+  await assert.rejects(c.getAccounts(), (e: any) => e.kind === 'BAD_RESPONSE');
+});

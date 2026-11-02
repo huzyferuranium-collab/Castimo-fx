@@ -663,6 +663,19 @@ export class Mt5ConnectionManager {
   private async freeze(accountId: string): Promise<void> {
     try {
       await this.api!.setSettings({ idMaster: this.masterId, idSlave: accountId, copierStatus: COPIER.FROZEN });
+      // Do not rely on the answer to the change: read the setting back, so an unverified account is never left able to copy.
+      const frozen = async () => {
+        const rows = await this.api!.getSettings({ idMaster: this.masterId, idSlave: accountId });
+        return rows.find((r) => r.idSlave === accountId)?.copierStatus;
+      };
+      let got = await frozen();
+      if (got !== COPIER.FROZEN) {
+        await sleepMs(1500); // the service may take a moment to show a new setting
+        got = await frozen();
+      }
+      if (got !== COPIER.FROZEN) {
+        throw new DuplikiumError('API', `Copying could not be held back for the new account (wanted ${COPIER.FROZEN}, the service reports ${got ?? 'nothing'}).`);
+      }
     } catch (e: any) {
       await this.api!.deleteAccount(accountId).catch(() => undefined);
       this.pending.forEach((p, uid) => {
@@ -670,7 +683,7 @@ export class Mt5ConnectionManager {
       });
       const err = new BrokerVerificationError('VERIFICATION_UNAVAILABLE', 'Account verification is temporarily unavailable. Please try again in a few minutes.');
       err.ref = 'COPY_SETTINGS';
-      err.detail = String(e?.message || e).slice(0, 200);
+      err.detail = [String(e?.message || e), e?.detail].filter(Boolean).join(' | ').slice(0, 300);
       throw err;
     }
   }
