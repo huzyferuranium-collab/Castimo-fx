@@ -333,7 +333,8 @@ export class Mt5ConnectionManager {
         console.warn(`⚠️ [COPIER] The copier service asked us to slow down (${e.detail || e.message}). Keeping the last reading.`);
         this.retryRefreshInMs = e.retryAfterMs ?? 65_000;
         if (this.lastRefreshAt === 0) {
-          this.masterNote = 'The copier service asked us to slow down just now, so the master account has not been read yet. It is read again shortly: press refresh in a minute.';
+          const mins = Math.max(1, Math.round((e.retryAfterMs ?? 65_000) / 60_000));
+          this.masterNote = `The copier service asked us to slow down just now, so the master account has not been read yet. It is read again by itself in about ${mins} minute${mins === 1 ? '' : 's'}: there is no need to press Check connection (that uses up the allowance). The refresh icon only reloads what we already have.`;
         }
         return this.masterState === 'CONNECTED';
       }
