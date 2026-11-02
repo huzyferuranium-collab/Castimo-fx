@@ -1099,6 +1099,55 @@ test('when the account list says a trade is open but none is found, the check fa
   assert.match(t.detail, /could not be read/);
 });
 
+test('when Duplikium says it is busy, the last trades are shown (for up to 5 minutes) instead of an error', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  await m.provisionClientTerminal(creds('u1', '5551234'), () => {});
+  fake.openPositions.MASTER = [pos('t1')];
+  fake.openPositions.D1 = [pos('mine')];
+  const first = await m.getMasterTrades();
+  const mine = await m.getClientTrades('u1');
+  assert.equal(first.length, 1);
+  assert.equal(mine!.open.length, 1);
+  const realNow = Date.now;
+  try {
+    Date.now = () => realNow() + 30_000; // the saved answers are now old enough to be read again
+    fake.getOpenPositions = async () => {
+      throw new DuplikiumError('RATE_LIMIT', 'busy');
+    };
+    assert.deepEqual((await m.getMasterTrades()).map((t) => t.id), ['t1']);
+    assert.deepEqual((await m.getClientTrades('u1'))!.open.map((p) => p.id), ['mine']);
+    Date.now = () => realNow() + 400_000; // too old to show
+    await assert.rejects(() => m.getMasterTrades(), /busy/);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('a client is told only when trades stay unreadable: rows that cannot be read, or an account list that keeps saying a trade is open for over 90 seconds', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  await m.provisionClientTerminal(creds('u1', '5551234'), () => {});
+  fake.accounts.get('D1')!.openTrades = 1;
+  await m.refreshAll();
+  const realNow = Date.now;
+  try {
+    assert.equal((await m.getClientTrades('u1'))!.unreadable, 0, 'just now: a trade may simply have closed');
+    Date.now = () => realNow() + 100_000;
+    assert.equal((await m.getClientTrades('u1'))!.unreadable, 1, 'still open per the list, none readable, for over 90 seconds');
+  } finally {
+    Date.now = realNow;
+  }
+  fake.getOpenPositions = async () => ({ positions: [], skipped: 2 });
+  const realNow2 = Date.now;
+  try {
+    Date.now = () => realNow2() + 300_000;
+    assert.equal((await m.getClientTrades('u1'))!.unreadable >= 2, true);
+  } finally {
+    Date.now = realNow2;
+  }
+});
+
 // ---------- administrator tools ----------
 
 test('the admin list shows client accounts only, never the master', async () => {

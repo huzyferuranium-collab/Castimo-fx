@@ -146,6 +146,8 @@ export interface CopierApi {
   setSettings(s: { idMaster?: string; idSlave?: string; idGroup?: string; copierStatus?: number; riskFactorType?: number; riskFactorValue?: number }): Promise<void>;
   getOpenPositions(accountId: string): Promise<PositionsResult>;
   getClosedPositions(accountId: string): Promise<PositionsResult>;
+  /** Optional: how far apart reads of open positions must be, on average, to stay inside the service's limits (milliseconds). */
+  positionsSpacingMs?(): number;
   /** Optional: how often the whole account list may be read inside the service's limits (milliseconds). */
   refreshSpacingMs?(): number;
   /** Optional: how long until the limits let the next read of the account list through (0 = now). */
@@ -680,6 +682,11 @@ export class DuplikiumClient implements CopierApi {
   /** How often the whole account list may be read, on average, inside the service's limits (milliseconds). */
   refreshSpacingMs(): number {
     return this.limiter.sustainableSpacingMs('accounts');
+  }
+
+  /** How far apart reads of open positions must be, on average, to stay inside the service's limits (milliseconds). */
+  positionsSpacingMs(): number {
+    return this.limiter.sustainableSpacingMs('open');
   }
 
   /** How long until the limits let the next read of the account list through (0 = now). */

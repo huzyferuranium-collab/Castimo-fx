@@ -168,6 +168,8 @@ export interface MasterTrade {
 export interface ClientTrades {
   open: DuplikiumPosition[];
   closed: DuplikiumPosition[];
+  /** How many trades are known to exist but could not be read (for a gentle notice on the client's page). */
+  unreadable?: number;
 }
 
 export interface CheckStep {
@@ -1278,17 +1280,50 @@ export class Mt5ConnectionManager {
 
   // ---------- trades ----------
 
-  /** The master's open positions (cached for a few seconds, so many dashboards cost the service one call). */
+  /**
+   * How long a read of open trades is reused. At least `floorMs`, and long enough that the dashboards cannot use up the
+   * service's hourly allowance for open positions (it is small when few accounts are linked).
+   */
+  private tradesTtl(floorMs: number): number {
+    const spacing = this.api?.positionsSpacingMs?.() ?? 0;
+    return Math.max(floorMs, Math.min(2 * spacing, 120_000));
+  }
+
+  private mismatchSince = new Map<string, number>();
+
+  /**
+   * True when the account list has said trades are open, yet none could be read, for more than 90 seconds. (A trade that has
+   * just closed makes the two disagree for a moment; that is not reported.)
+   */
+  private tradesMissing(accountId: string, readCount: number, reportedOpen: number | null | undefined): boolean {
+    if (readCount > 0 || !(typeof reportedOpen === 'number' && reportedOpen > 0)) {
+      this.mismatchSince.delete(accountId);
+      return false;
+    }
+    const since = this.mismatchSince.get(accountId) ?? Date.now();
+    this.mismatchSince.set(accountId, since);
+    return Date.now() - since >= 90_000;
+  }
+
+  /** The master's open positions (cached, so many dashboards cost the service one call). */
   public async getMasterTrades(): Promise<MasterTrade[]> {
     if (!this.api || !this.masterId) throw new DuplikiumError('NOT_CONFIGURED', 'The copier service is not connected.');
-    if (this.masterTradesCache && Date.now() - this.masterTradesCache.at < 10_000) return this.masterTradesCache.trades;
-    const res = await this.api.getOpenPositions(this.masterId);
+    if (this.masterTradesCache && Date.now() - this.masterTradesCache.at < this.tradesTtl(10_000)) return this.masterTradesCache.trades;
+    let res: PositionsResult;
+    try {
+      res = await this.api.getOpenPositions(this.masterId);
+    } catch (e) {
+      // Busy: the last answer (up to 5 minutes old) is better than "unavailable".
+      if (e instanceof DuplikiumError && e.kind === 'RATE_LIMIT' && this.masterTradesCache && Date.now() - this.masterTradesCache.at < 300_000) return this.masterTradesCache.trades;
+      throw e;
+    }
     const reported = this.masterMetrics.openPositionsCount;
     this.noteUnreadTrades('the master', this.masterId, res, reported);
     // Trades were in the answer but none could be read: that is "not readable", never "no trade".
-    if (res.positions.length === 0 && res.skipped > 0) {
+    if (res.positions.length === 0 && (res.skipped > 0 || this.tradesMissing(this.masterId, 0, reported))) {
       throw new DuplikiumError('BAD_RESPONSE', 'The master\'s open trades could not be read.');
     }
+    if (res.positions.length > 0) this.mismatchSince.delete(this.masterId);
     const trades = res.positions.map((p) => ({ id: p.id, symbol: p.symbol, side: p.side, volume: p.volume, openPrice: p.openPrice, openedAt: p.openTime }));
     this.masterTradesCache = { at: Date.now(), trades };
     return trades;
@@ -1297,20 +1332,22 @@ export class Mt5ConnectionManager {
   private unreadNotedAt = new Map<string, number>();
 
   /**
-   * Writes one line to the log (at most every 10 minutes per account) when an answer about open trades could not be fully read:
+   * Writes one line to the log (at most every 10 minutes per account) when an answer about trades could not be fully read:
    * some rows were not readable, or the account list says trades are open but none were found. The line describes the answer's
    * shape (field names and kinds, never passwords or balances), which is what is needed to read it correctly.
    */
-  private noteUnreadTrades(who: string, accountId: string, res: PositionsResult, reportedOpen: number | null | undefined): void {
-    const missing = res.positions.length === 0 && typeof reportedOpen === 'number' && reportedOpen > 0;
+  private noteUnreadTrades(who: string, accountId: string, res: PositionsResult, reportedOpen: number | null | undefined, kind: 'Open' | 'Closed' = 'Open'): void {
+    const missing = kind === 'Open' && res.positions.length === 0 && typeof reportedOpen === 'number' && reportedOpen > 0;
     const noSide = res.positions.filter((p) => p.side === null).length;
-    if (!res.skipped && !missing && !noSide) return;
-    const last = this.unreadNotedAt.get(accountId) ?? 0;
+    const unread = kind === 'Open' ? res.skipped : res.skippedTrades ?? 0;
+    if (!unread && !missing && !noSide) return;
+    const key = `${kind}:${accountId}`;
+    const last = this.unreadNotedAt.get(key) ?? 0;
     if (Date.now() - last < 10 * 60_000) return;
-    this.unreadNotedAt.set(accountId, Date.now());
+    this.unreadNotedAt.set(key, Date.now());
     console.warn(
-      `⚠️ [COPIER] Open trades of ${who} not fully read: ${res.positions.length} read${noSide ? ` (${noSide} without a readable buy/sell)` : ''}, ${res.skipped} unreadable` +
-        (typeof reportedOpen === 'number' ? `, the account list says ${reportedOpen} open` : '') +
+      `⚠️ [COPIER] ${kind} trades of ${who} not fully read: ${res.positions.length} read${noSide ? ` (${noSide} without a readable buy/sell)` : ''}, ${unread} unreadable` +
+        (kind === 'Open' && typeof reportedOpen === 'number' ? `, the account list says ${reportedOpen} open` : '') +
         `. The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 900)}`
     );
   }
@@ -1321,18 +1358,33 @@ export class Mt5ConnectionManager {
     if (!rec || !this.api) return null;
     const c = this.tradesCache.get(userId);
     const now = Date.now();
-    const freshOpen = c && now - c.openAt < 15_000;
+    const freshOpen = c && now - c.openAt < this.tradesTtl(15_000);
     const freshClosed = c && now - c.closedAt < 60_000;
     let open = c?.data.open ?? [];
     let closed = c?.data.closed ?? [];
-    if (!freshOpen) {
-      const res = await this.api.getOpenPositions(rec.accountId);
-      this.noteUnreadTrades(`#${rec.login}`, rec.accountId, res, this.lastAccounts.find((a) => a.accountId === rec.accountId)?.openTrades);
-      open = res.positions;
+    let unreadable = c?.data.unreadable ?? 0;
+    try {
+      if (!freshOpen) {
+        const res = await this.api.getOpenPositions(rec.accountId);
+        const reported = this.lastAccounts.find((a) => a.accountId === rec.accountId)?.openTrades;
+        this.noteUnreadTrades(`#${rec.login}`, rec.accountId, res, reported);
+        open = res.positions;
+        const missing = this.tradesMissing(rec.accountId, res.positions.length, reported);
+        unreadable = res.skipped + (missing && typeof reported === 'number' ? reported : 0);
+      }
+      if (!freshClosed) {
+        const res = await this.api.getClosedPositions(rec.accountId);
+        this.noteUnreadTrades(`#${rec.login}`, rec.accountId, res, null, 'Closed');
+        closed = res.positions;
+      }
+    } catch (e) {
+      // Busy: show the last list (up to 5 minutes old) instead of an error.
+      if (e instanceof DuplikiumError && e.kind === 'RATE_LIMIT' && c && now - Math.max(c.openAt, c.closedAt) < 300_000) return c.data;
+      throw e;
     }
-    if (!freshClosed) closed = (await this.api.getClosedPositions(rec.accountId)).positions;
-    this.tradesCache.set(userId, { at: now, openAt: freshOpen ? c!.openAt : now, closedAt: freshClosed ? c!.closedAt : now, data: { open, closed } });
-    return { open, closed };
+    const data: ClientTrades = { open, closed, unreadable };
+    this.tradesCache.set(userId, { at: now, openAt: freshOpen ? c!.openAt : now, closedAt: freshClosed ? c!.closedAt : now, data });
+    return data;
   }
 
   // ---------- administrator views ----------

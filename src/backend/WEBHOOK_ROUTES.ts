@@ -618,6 +618,7 @@ tradeRouter.get('/my-trades', requireUser, async (req: Request, res: Response) =
     return res.status(200).json({
       success: true,
       connected: true,
+      unreadable: t.unreadable ?? 0,
       trades: [...t.open.map((p) => toTrade(p, 'OPEN')), ...t.closed.map((p) => toTrade(p, 'CLOSED'))],
     });
   } catch (e: any) {

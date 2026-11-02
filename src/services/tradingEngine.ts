@@ -187,6 +187,22 @@ class TradingEngine {
     return this.pendingConnection;
   }
 
+  /** What went wrong the last time the client's trades were loaded: 'failed' (could not be asked) or a count of trades that could not be read. */
+  private tradesLoad: { failed: boolean; unreadable: number } = { failed: false, unreadable: 0 };
+
+  /** A gentle line for the trade pages when the trade list could not be loaded or shown in full; null when everything is fine. */
+  public getTradesNotice(): string | null {
+    if (this.tradesLoad.failed) return "We couldn't load your trades just now. They will appear here as soon as the connection is back.";
+    if (this.tradesLoad.unreadable > 0) return "Some of your trades couldn't be shown yet, so this list may be incomplete. We're working on it.";
+    return null;
+  }
+
+  private setTradesLoad(failed: boolean, unreadable: number): void {
+    if (this.tradesLoad.failed === failed && this.tradesLoad.unreadable === unreadable) return;
+    this.tradesLoad = { failed, unreadable };
+    this.notify();
+  }
+
   /** Stores what the server says about an unfinished connection. Returns true when it changed. */
   private setPending(raw: unknown): boolean {
     const next = normalizePending(raw);
@@ -1214,13 +1230,18 @@ class TradingEngine {
   private async syncOwnTrades(headers: Record<string, string>): Promise<void> {
     try {
       const res = await fetch('/api/trade/my-trades', { headers });
-      if (!res.ok) return;
+      if (!res.ok) {
+        this.setTradesLoad(true, 0);
+        return;
+      }
       const data = await res.json();
       if (data && data.success && data.connected !== false && Array.isArray(data.trades)) {
         this.trades = data.trades as CopiedTrade[];
+        this.setTradesLoad(false, Number(data.unreadable) > 0 ? Number(data.unreadable) : 0);
       }
     } catch {
-      // Keep the last list.
+      // Keep the last list, and say so on the trade pages.
+      this.setTradesLoad(true, 0);
     }
   }
 

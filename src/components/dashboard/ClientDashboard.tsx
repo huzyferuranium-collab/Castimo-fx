@@ -96,6 +96,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   // A connection the server is still looking after (or has given up on), so the client is never left guessing.
   const [pending, setPending] = useState<PendingConnectionView | null>(tradingEngine.getPendingConnection());
   const [trades, setTrades] = useState<CopiedTrade[]>(tradingEngine.getTrades());
+  // Said on the trade pages when the list could not be loaded or shown in full (instead of a page that just looks empty).
+  const [tradesNotice, setTradesNotice] = useState<string | null>(tradingEngine.getTradesNotice());
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -259,6 +261,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
       setAccount({ ...tradingEngine.getMt5Account() });
       setPending(tradingEngine.getPendingConnection());
       setTrades([...tradingEngine.getTrades()]);
+      setTradesNotice(tradingEngine.getTradesNotice());
       setInvoices([...tradingEngine.getProfitInvoices()]);
     });
     return () => unsubscribe();
@@ -857,6 +860,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
               </span>
             </div>
 
+            {tradesNotice && (
+              <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">{tradesNotice}</div>
+            )}
             <TradeCopierTable trades={trades} />
           </div>
         )}
@@ -876,6 +882,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
               </span>
             </div>
 
+            {tradesNotice && (
+              <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">{tradesNotice}</div>
+            )}
             <TradeHistory accountNumber={account.accountNumber} limit={15} />
           </div>
         )}
