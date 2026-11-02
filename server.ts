@@ -17,6 +17,8 @@ import { emailCodeRouter } from './src/backend/EMAIL_CODE_ROUTES';
 import { Mt5ConnectionManager } from './src/backend/MT5_CONNECTION_MANAGER';
 import { BillingService } from './src/backend/billing';
 import { buildAssetLinks } from './src/backend/assetLinks';
+import { securityHeaders } from './src/backend/securityHeaders';
+import { rateLimit, trustProxyHops, isReadOnly } from './src/backend/rateLimit';
 import { saveClientRecord, loadSavedStatus, verifiedTerminalLookup } from './src/backend/clientStore';
 import { getDoc, isFirestoreAdminConfigured } from './src/backend/firestoreAdmin';
 
@@ -37,6 +39,22 @@ process.on('uncaughtException', (err: any) => {
 
 async function startServer() {
   const app = express();
+
+  // Do not announce which software runs the server, and add the browser security headers to every answer.
+  app.disable('x-powered-by');
+  app.use(securityHeaders({ production: isProduction }));
+
+  // Render puts one proxy in front of the server (TRUST_PROXY_HOPS=2 if Cloudflare is added too). This makes
+  // req.ip the visitor's real address, which the request limits below count by.
+  app.set('trust proxy', trustProxyHops(process.env));
+
+  // Request limits, checked before any body is read. The general one is generous (phones share addresses on mobile
+  // networks and the dashboards refresh often); the stricter ones cover only things a person does now and then.
+  const TEN_MINUTES = 10 * 60_000;
+  app.use('/api', rateLimit({ max: 600, windowMs: 60_000 }));
+  app.use('/api/trade', rateLimit({ max: 60, windowMs: TEN_MINUTES, skip: isReadOnly }));
+  app.use('/api/referrals', rateLimit({ max: 60, windowMs: TEN_MINUTES, skip: isReadOnly }));
+  app.use('/api/email-code', rateLimit({ max: 30, windowMs: TEN_MINUTES, skip: isReadOnly }));
 
   // Middleware for body parsing
   app.use(express.json());

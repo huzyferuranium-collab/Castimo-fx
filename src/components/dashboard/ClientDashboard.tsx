@@ -170,7 +170,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
 
   const fetchCopierStatus = async () => {
     try {
-      const res = await fetch('/api/trade/account-status');
+      const res = await fetch('/api/trade/account-status', { headers: await authHeaders() });
       if (res.ok) {
         const data = await res.json();
         setCopierStatus((prev) => ({

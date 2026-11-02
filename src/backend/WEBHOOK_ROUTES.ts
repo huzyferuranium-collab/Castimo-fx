@@ -5,7 +5,7 @@
  * and the Duplikium copier service (Duplikium does the copying; we connect accounts and read results).
  *
  * - POST /api/trade/toggle-mirror: Pauses or resumes a client's copying (ACTIVE <-> IDLE).
- * - GET  /api/trade/account-status: Master account connection status for UI banners.
+ * - GET  /api/trade/account-status: Master account connection status for UI banners (signed-in users; identifiers admin-only).
  * - POST /api/trade/provision-client: Connects a client's MT5 account.
  * - GET  /api/trade/my-trades: The caller's own open and closed trades, as the copier service reports them.
  * - GET  /api/trade/admin/copier-check: Administrator's connection check of the copier service.
@@ -16,6 +16,7 @@ import { clientIpFrom } from './clientIp';
 import { Router, Request, Response } from 'express';
 import { Mt5ConnectionManager } from './MT5_CONNECTION_MANAGER';
 import { requireUser, requireAdmin, getAuthUser, isAdminUser } from './firebaseAuth';
+import { shapeMasterStatus } from './masterStatus';
 import { hasAcceptedTermsServer } from './termsCheck';
 import { recordEvent } from './referralService';
 import { BrokerVerificationError, validateSubmittedCredentials, normalizeBrokerServer } from './brokerVerification';
@@ -86,33 +87,17 @@ const STATUS_BY_CODE: Record<string, number> = {
 /**
  * GET /api/trade/account-status
  * Whether the master account is connected at the copier service, for the status banners in the UI.
+ * Needs a signed-in user. The master's account number, broker server and copier id are returned to administrators only.
  */
-tradeRouter.get('/account-status', async (req: Request, res: Response) => {
+tradeRouter.get('/account-status', requireUser, async (req: Request, res: Response) => {
   try {
+    const admin = await isAdminUser(getAuthUser(req));
+
     const metrics = connectionManager.getMasterMetrics();
     const isConnected = connectionManager.isConnected();
     const activeClients = connectionManager.getActiveClients();
 
-    return res.status(200).json({
-      success: true,
-      connected: isConnected,
-      status: metrics.state,
-      connectionStatus: metrics.connectionStatus,
-      lastPing: metrics.lastHeartbeat,
-      mode: 'LIVE_DUPLIKIUM',
-      master: {
-        accountId: metrics.accountId || '',
-        login: metrics.login || '',
-        server: metrics.server || '',
-        balance: metrics.balance,
-        equity: metrics.equity,
-        freeMargin: metrics.freeMargin,
-        currency: metrics.currency,
-        openPositionsCount: metrics.openPositionsCount,
-      },
-      activeClientsCount: activeClients.length,
-      timestamp: new Date().toISOString(),
-    });
+    return res.status(200).json(shapeMasterStatus(metrics, isConnected, activeClients.length, admin, new Date().toISOString()));
   } catch (error: any) {
     console.error('❌ [API /api/trade/account-status] Failed to fetch account status:', error?.message || error);
     return res.status(500).json({

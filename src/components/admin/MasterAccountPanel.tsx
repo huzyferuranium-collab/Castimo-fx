@@ -50,7 +50,7 @@ export const MasterAccountPanel: React.FC<MasterAccountPanelProps> = ({ onTradeB
 
   const fetchCloudStatus = useCallback(async () => {
     try {
-      const res = await fetch('/api/trade/account-status');
+      const res = await fetch('/api/trade/account-status', { headers: await authHeaders() });
       if (!res.ok) throw new Error(String(res.status));
       const data = await res.json();
       setCloud({

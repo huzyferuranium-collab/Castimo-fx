@@ -1072,7 +1072,7 @@ class TradingEngine {
       `Client (${c.login})`,
       'CONNECTED_TO_MAIN_MASTER',
       'MT5',
-      `Client MT5 #${c.login} verified by the broker (${c.brokerName}, ${c.accountType || 'account'}) and connected to Main Master MT5 #${this.masterAccount.accountNumber}. Broker-reported equity: $${equity.toFixed(2)}.`,
+      `Client MT5 #${c.login} verified by the broker (${c.brokerName}, ${c.accountType || 'account'}) and connected to the Castimofx master account. Broker-reported equity: $${equity.toFixed(2)}.`,
       'SUCCESS'
     );
 

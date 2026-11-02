@@ -94,6 +94,17 @@ To publish it on Google Play as an Android app (a Trusted Web Activity that open
 4. Google Play still needs: a developer account (new personal accounts must run a closed test with 12 testers for 14 days first), a privacy policy link, the Data safety form,
    the Financial features declaration, an in-app way to delete an account, and a review of Google's Payments policy for USDT payments.
 
+## Security built into the server
+- **Browser security headers** (`src/backend/securityHeaders.ts`): no content-type guessing, the site cannot be shown inside another site's frame, other sites see only our address as referrer,
+  camera/microphone/location/payment sheet are switched off, and (production) HTTPS is remembered for 180 days. `public/_headers` only works on Cloudflare Pages, so these come from the server.
+  A Content-Security-Policy is deliberately not set yet: it can break Firebase sign-in and fonts unless it is tested against the live site first.
+- **Request limits** (`src/backend/rateLimit.ts`, counted per visitor address, in memory, so a restart clears them): 600 requests a minute for all of `/api`; 60 changes (anything that is not a plain read) per 10 minutes
+  on `/api/trade` and on `/api/referrals`; 30 per 10 minutes for email codes. Over the limit the server answers "Too many requests" with a wait time. These stop floods and guessing; for real attack traffic put Cloudflare in front.
+  - `TRUST_PROXY_HOPS` (default `1`, correct for Render alone) = how many proxies sit in front of the server. **Set it to `2` if you put Cloudflare in front**, otherwise every visitor looks like one of Cloudflare's addresses and shares one limit.
+  - `RATE_LIMIT_OFF=1` switches every limit off at once (emergency only), no code change needed.
+- **Master account details are private**: `GET /api/trade/account-status` needs a signed-in user. Clients receive the connection state and the master's balance, equity and open-trade count; only an administrator also
+  receives the master's account number, broker server and Duplikium id.
+
 ## Payments wallet
 Add `VITE_TREASURY_ADDRESS` = your real TRON (TRC20) USDT address in Render's environment variables, then redeploy.
 Until it is set, the site shows "Payment address not set yet" and refuses payments, so nobody can send money to a wrong address.

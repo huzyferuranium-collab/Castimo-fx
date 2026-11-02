@@ -46,7 +46,7 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Replicated from Main Master MT5 (#1099284)
+              Copied from the Castimofx master account
             </p>
           </div>
         </div>
