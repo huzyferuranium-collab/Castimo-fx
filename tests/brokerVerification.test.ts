@@ -105,7 +105,7 @@ test('copier service errors become calm, correct client messages and never leak 
   assert.equal(t('NOT_CONFIGURED', 'x').code, 'VERIFICATION_UNAVAILABLE');
   assert.equal(t('RATE_LIMIT', 'busy').code, 'BROKER_SLOW');
   assert.equal(t('NETWORK', 'down').code, 'BROKER_UNREACHABLE');
-  assert.equal(t('BAD_RESPONSE', 'junk').code, 'BAD_BROKER_RESPONSE');
+  assert.equal(t('BAD_RESPONSE', 'junk').code, 'VERIFICATION_UNAVAILABLE'); // our hiccup, retryable, never a final refusal
   // The service's own limits are ours to fix
   assert.equal(t('API', 'Account limit reached for your subscription').code, 'CAPACITY');
   assert.equal(t('API', 'Not enough credit in e-wallet').code, 'CAPACITY');
@@ -196,4 +196,15 @@ test('the equity message names the amount and the minimum', () => {
     assert.match(e.message, /\$150\.00/);
     assert.match(e.message, /\$200\.00/);
   }
+});
+
+test('an unreadable answer from the copier service is a calm, retryable hiccup on our side: it never removes the client\'s account', async () => {
+  const { rejectsForGood, friendlyHint } = await import('../src/backend/clientBridge.ts');
+  const e = translateCopierError(new DuplikiumError('BAD_RESPONSE', 'The copier service sent an answer we could not read.', { detail: 'HTTP 502, 40 characters, starts: "<html>…"' }), creds);
+  assert.equal(e.code, 'VERIFICATION_UNAVAILABLE');
+  assert.equal(e.ref, 'COPIER_BAD_RESPONSE');
+  assert.match(e.detail ?? '', /HTTP 502/); // for the administrator's log
+  assert.ok(!/could not read|answer/i.test(e.message), 'the client is not shown technical wording');
+  assert.ok(!rejectsForGood.has(e.code), 'not treated as a final refusal (that would delete the account created by the attempt)');
+  assert.match(friendlyHint(e.code), /Nothing is wrong with your account/);
 });

@@ -243,8 +243,12 @@ export function translateCopierError(err: any, creds: SubmittedCredentials): Bro
       return e;
     }
     if (err.kind === 'BAD_RESPONSE') {
-      const e = new BrokerVerificationError('BAD_BROKER_RESPONSE', 'The verification service sent an answer we could not read. Please try again in a minute.');
+      // This is a hiccup on our side, not a broker refusal: it is a retryable "unavailable" (the client's account is never removed for it).
+      const e = new BrokerVerificationError('VERIFICATION_UNAVAILABLE', 'Account verification is temporarily unavailable. Please try again in a few minutes.');
       e.ref = 'COPIER_BAD_RESPONSE';
+      // For the administrator only (passwords are already hidden in it): exactly what the copier service sent back.
+      e.detail = String(err.detail || err.message).slice(0, 200);
+      console.warn(`⚠️ [COPIER] Unreadable answer while connecting an account: ${e.detail}`);
       return e;
     }
 

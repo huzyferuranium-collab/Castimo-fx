@@ -141,7 +141,7 @@ export function friendlyHint(code: BrokerErrorCode | string): string {
     case 'BROKER_UNREACHABLE':
       return 'Your broker is a little slow right now. Nothing is lost: wait a minute, then press Connect again and it will carry on from where it stopped.';
     case 'VERIFICATION_UNAVAILABLE':
-      return 'We could not reach our verification service just now. Please try again in a few minutes.';
+      return 'Nothing is wrong with your account. We had a small hiccup on our side. Your details are still here: please press Connect again in a few minutes.';
     case 'MIN_EQUITY':
       return 'Once your account has the minimum, press Connect again. We will be glad to have you.';
     case 'UNSUPPORTED_CURRENCY':
@@ -161,7 +161,7 @@ export function friendlyHint(code: BrokerErrorCode | string): string {
     case 'BAD_INPUT':
       return 'Please check the details above and try again.';
     default:
-      return 'Please try again. If it keeps happening, contact support and quote the reference code, and we will look into it.';
+      return 'Nothing is lost. Please try again in a minute. If it keeps happening, message support with the reference below and we will take care of it for you.';
   }
 }
 

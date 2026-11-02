@@ -309,3 +309,69 @@ test('network failures are reported as NETWORK, not as a wrong login', async () 
   });
   await assert.rejects(c.getAccounts(), (e: any) => e.kind === 'NETWORK');
 });
+
+// ---------- adding an account when the answer is not what we expected ----------
+
+const ADD = { type: 'slave' as const, name: 'CastimoFX Client u1 #420702376', broker: 'mt5' as const, login: '420702376', password: 'Sup3r-Secret$', server: 'XMGlobal-MT5 17', enabled: true, group: 'TPL', subscription: 'auto' };
+
+test('addAccount accepts the other plain ways an id can come back', async () => {
+  for (const body of [{ account_id: 'Z1' }, { account: [{ account_id: 'Z1' }] }, { account: { id: 'Z1' } }, { accounts: [{ account_id: 'Z1' }] }]) {
+    const { c } = client({ 'access/getToken.php': TOKEN(1), 'account/addAccount.php': { body } });
+    assert.equal((await c.addAccount(ADD)).accountId, 'Z1');
+  }
+});
+
+test('an unreadable answer to "add" is recovered when the service did create the account (found by its exact name and login)', async () => {
+  const { c } = client({
+    'access/getToken.php': TOKEN(1),
+    'account/addAccount.php': { status: 200, body: '<html>Notice: something</html>' },
+    'account/getAccounts.php': { body: { accounts: [{ account_id: 'NEW1', name: ADD.name, login: ADD.login, server: ADD.server, type: 1, status: 1 }] } },
+  });
+  assert.equal((await c.addAccount(ADD)).accountId, 'NEW1');
+});
+
+test('an answer with no id is recovered the same way, and never by guessing between several accounts', async () => {
+  const { c } = client({
+    'access/getToken.php': TOKEN(1),
+    'account/addAccount.php': { body: { ok: true } },
+    'account/getAccounts.php': { body: { accounts: [{ account_id: 'A', name: ADD.name, login: ADD.login, type: 1 }, { account_id: 'B', name: ADD.name, login: ADD.login, type: 1 }] } },
+  });
+  await assert.rejects(c.addAccount(ADD), (e: any) => e.kind === 'BAD_RESPONSE' && /these fields: ok/.test(e.detail));
+});
+
+test('an unreadable answer is described for the administrator with the password hidden, and the client message stays calm', async () => {
+  const { c } = client({
+    'access/getToken.php': TOKEN(1),
+    'account/addAccount.php': { status: 502, body: '<html><body>Bad gateway while saving Sup3r-Secret$ for you</body></html>' },
+    'account/getAccounts.php': { body: { accounts: [] } },
+  });
+  await assert.rejects(c.addAccount(ADD), (e: any) => {
+    assert.equal(e.kind, 'BAD_RESPONSE');
+    assert.match(e.detail, /HTTP 502/);
+    assert.match(e.detail, /Bad gateway/);
+    assert.ok(!e.detail.includes('Sup3r-Secret$'), 'the password is not in the detail');
+    assert.ok(!e.message.includes('Bad gateway'), 'the message itself carries no answer text');
+    return true;
+  });
+});
+
+test('account lists are read in every plain shape Duplikium may use, and an unknown shape is an error (never an empty list)', async () => {
+  const row = (id: string) => ({ account_id: id, name: 'n' + id, login: '1', type: 1, status: 1 });
+  const shapes: Array<[string, unknown, string[]]> = [
+    ['documented list', { accounts: [row('A'), row('B')] }, ['A', 'B']],
+    ['one account under "account"', { account: row('A') }, ['A']],
+    ['list under "account"', { account: [row('A'), row('B')] }, ['A', 'B']],
+    ['rows keyed by id', { accounts: { A: row('A'), B: row('B') } }, ['A', 'B']],
+    ['bare list', [row('A')], ['A']],
+    ['no accounts', { accounts: [] }, []],
+    ['no accounts (empty object)', { accounts: {} }, []],
+  ];
+  for (const [label, body, ids] of shapes) {
+    const { c } = client({ 'access/getToken.php': TOKEN(1), 'account/getAccounts.php': { body } });
+    assert.deepEqual((await c.getAccounts()).map((a) => a.accountId), ids, label);
+  }
+  for (const body of [{}, { ok: true }, { message: 'hello' }, 'text']) {
+    const { c } = client({ 'access/getToken.php': TOKEN(1), 'account/getAccounts.php': { body } });
+    await assert.rejects(c.getAccounts(), (e: any) => e.kind === 'BAD_RESPONSE', `unknown shape ${JSON.stringify(body)}`);
+  }
+});

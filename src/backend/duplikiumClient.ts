@@ -31,13 +31,24 @@ export class DuplikiumError extends Error {
   /** The error code Duplikium returned, when it returned one. */
   code?: string;
   status?: number;
-  constructor(kind: DuplikiumErrorKind, message: string, extra: { code?: string; status?: number } = {}) {
+  /** For the administrator's log only (never shown to clients): what the answer looked like, with secrets removed. */
+  detail?: string;
+  constructor(kind: DuplikiumErrorKind, message: string, extra: { code?: string; status?: number; detail?: string } = {}) {
     super(message);
     this.name = 'DuplikiumError';
     this.kind = kind;
     this.code = extra.code;
     this.status = extra.status;
+    this.detail = extra.detail;
   }
+}
+
+/** A short description of an answer we could not read: the status and the first words, with any password in it hidden. */
+export function describeReply(status: number, text: string, secrets: string[] = []): string {
+  let t = String(text ?? '');
+  for (const sec of secrets) if (sec) t = t.split(sec).join('***');
+  t = t.replace(/\s+/g, ' ').trim().slice(0, 140);
+  return `HTTP ${status}, ${text ? `${String(text).length} characters, starts: "${t}"` : 'empty answer'}`;
 }
 
 // ---------- plain types ----------
@@ -142,6 +153,28 @@ const strOrNull = (v: unknown): string | null => {
   const s = str(v);
   return s === '' ? null : s;
 };
+
+/**
+ * The account rows inside an answer to "get accounts". Accepts the documented list ({ accounts: [...] }) and the other plain
+ * shapes a filtered request may return (one { account: {...} }, a list under "account", a bare list, or rows keyed by id).
+ * Anything else is null: an unknown shape is an error, never an empty list.
+ */
+export function accountRows(json: any): any[] | null {
+  if (Array.isArray(json)) return json;
+  if (!json || typeof json !== 'object') return null;
+  const rowLike = (v: any) => v && typeof v === 'object' && (v.account_id !== undefined || v.accountId !== undefined || v.id !== undefined);
+  for (const key of ['accounts', 'account']) {
+    const v = json[key];
+    if (Array.isArray(v)) return v;
+    if (rowLike(v)) return [v];
+    if (v && typeof v === 'object') {
+      const vals = Object.values(v);
+      if (vals.length > 0 && vals.every(rowLike)) return vals;
+      if (vals.length === 0 && key === 'accounts') return [];
+    }
+  }
+  return null;
+}
 
 export function normalizeAccount(raw: any): DuplikiumAccount | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -447,12 +480,15 @@ export class DuplikiumClient implements CopierApi {
 
   // ----- plumbing -----
 
-  private parse(res: TransportResponse): any {
+  private parse(res: TransportResponse, secrets: string[] = []): any {
     let json: any;
     try {
       json = res.text ? JSON.parse(res.text) : {};
     } catch {
-      throw new DuplikiumError('BAD_RESPONSE', 'The copier service sent an answer we could not read.', { status: res.status });
+      throw new DuplikiumError('BAD_RESPONSE', 'The copier service sent an answer we could not read.', {
+        status: res.status,
+        detail: describeReply(res.status, res.text, secrets),
+      });
     }
     return json;
   }
@@ -473,7 +509,7 @@ export class DuplikiumClient implements CopierApi {
       body: body.toString(),
       timeoutMs: this.timeoutMs,
     });
-    const json = this.parse(res);
+    const json = this.parse(res, [String(form.password ?? '')]);
     const message = errMessage(json);
     if (res.status === 401 || res.status === 403 || (message && /token|unauthori[sz]ed|authenticat/i.test(message))) {
       // The token may have expired early: sign in again once and retry.
@@ -492,20 +528,47 @@ export class DuplikiumClient implements CopierApi {
   // ----- accounts -----
 
   async addAccount(p: AddAccountParams): Promise<{ accountId: string }> {
-    const json = await this.call('account/addAccount.php', 'other', {
-      type: p.type === 'master' ? 0 : 1,
-      name: p.name,
-      broker: p.broker,
-      login: p.login,
-      password: p.password,
-      server: p.server,
-      status: p.enabled ? 1 : 0,
-      group: p.group ?? '',
-      subscription: p.subscription ?? '',
-    });
-    const id = str(json?.account?.account_id ?? json?.account?.id);
-    if (!id) throw new DuplikiumError('BAD_RESPONSE', 'The copier service did not return the new account.');
-    return { accountId: id };
+    let json: any;
+    try {
+      json = await this.call('account/addAccount.php', 'other', {
+        type: p.type === 'master' ? 0 : 1,
+        name: p.name,
+        broker: p.broker,
+        login: p.login,
+        password: p.password,
+        server: p.server,
+        status: p.enabled ? 1 : 0,
+        group: p.group ?? '',
+        subscription: p.subscription ?? '',
+      });
+    } catch (e) {
+      // The service may have created the account and then sent something we could not read: look for it by the exact name we gave it.
+      if (e instanceof DuplikiumError && e.kind === 'BAD_RESPONSE') {
+        const found = await this.findAccountWeAdded(p);
+        if (found) return { accountId: found };
+      }
+      throw e;
+    }
+    // The documented shape is { account: { account_id } }; other plain shapes are accepted too, never a guessed id.
+    const a = Array.isArray(json?.account) ? json.account[0] : json?.account;
+    const first = Array.isArray(json?.accounts) ? json.accounts[0] : undefined;
+    const id = str(a?.account_id ?? a?.id ?? first?.account_id ?? first?.id ?? json?.account_id ?? json?.id);
+    if (id) return { accountId: id };
+    const found = await this.findAccountWeAdded(p);
+    if (found) return { accountId: found };
+    const keys = json && typeof json === 'object' ? Object.keys(json).slice(0, 12).join(', ') : typeof json;
+    throw new DuplikiumError('BAD_RESPONSE', 'The copier service did not return the new account.', { detail: `the answer had these fields: ${keys || 'none'}` });
+  }
+
+  /** The id of the account with exactly this name and login, if the service has it (used only when the answer to "add" was unreadable). */
+  private async findAccountWeAdded(p: AddAccountParams): Promise<string | null> {
+    try {
+      const list = await this.getAccounts();
+      const hits = list.filter((a) => a.name === p.name && String(a.login) === String(p.login));
+      return hits.length === 1 ? hits[0].accountId : null;
+    } catch {
+      return null;
+    }
   }
 
   async deleteAccount(accountId: string): Promise<void> {
@@ -530,8 +593,11 @@ export class DuplikiumClient implements CopierApi {
 
   async getAccounts(ids?: string | string[]): Promise<DuplikiumAccount[]> {
     const json = await this.call('account/getAccounts.php', 'accounts', { account_id: ids });
-    const list = Array.isArray(json?.accounts) ? json.accounts : Array.isArray(json) ? json : null;
-    if (!list) throw new DuplikiumError('BAD_RESPONSE', 'The copier service sent an account list we could not read.');
+    const list = accountRows(json);
+    if (!list) {
+      const keys = json && typeof json === 'object' ? Object.keys(json).slice(0, 12).join(', ') : typeof json;
+      throw new DuplikiumError('BAD_RESPONSE', 'The copier service sent an account list we could not read.', { detail: `the answer had these fields: ${keys || 'none'}` });
+    }
     return list.map(normalizeAccount).filter((a: DuplikiumAccount | null): a is DuplikiumAccount => a !== null);
   }
 
