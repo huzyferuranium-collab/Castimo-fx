@@ -104,7 +104,11 @@ test('copier service errors become calm, correct client messages and never leak 
   // Our own login being refused is never blamed on the client
   assert.equal(t('AUTH', 'bad token').code, 'VERIFICATION_UNAVAILABLE');
   assert.equal(t('NOT_CONFIGURED', 'x').code, 'VERIFICATION_UNAVAILABLE');
-  assert.equal(t('RATE_LIMIT', 'busy').code, 'BROKER_SLOW');
+  // Our own request allowance running out is never blamed on the client's broker: it is retryable and says we are busy
+  const busy = t('RATE_LIMIT', 'busy');
+  assert.equal(busy.code, 'VERIFICATION_UNAVAILABLE');
+  assert.match(busy.message, /a little busy/i);
+  assert.doesNotMatch(busy.message, /broker/i);
   assert.equal(t('NETWORK', 'down').code, 'BROKER_UNREACHABLE');
   assert.equal(t('BAD_RESPONSE', 'junk').code, 'VERIFICATION_UNAVAILABLE'); // our hiccup, retryable, never a final refusal
   // The service's own limits are ours to fix

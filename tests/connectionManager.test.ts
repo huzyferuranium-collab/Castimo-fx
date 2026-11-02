@@ -30,6 +30,8 @@ class FakeCopier implements CopierApi {
   settingCalls: any[] = [];
   seq = 0;
   failGetAccounts = false;
+  /** Duplikium refusing reads because the hourly allowance is used up: the full list, or a lookup of one account. */
+  rateLimit: 'list' | 'byId' | 'all' | null = null;
   failSetSettings = false;
   ignoreStatusChange = false;
   /** What a newly added account looks like once Duplikium has logged in. */
@@ -74,6 +76,7 @@ class FakeCopier implements CopierApi {
   async getAccounts(ids?: string | string[]) {
     this.calls.push('getAccounts');
     if (this.failGetAccounts) throw new DuplikiumError('NETWORK', 'down');
+    if (this.rateLimit === 'all' || (this.rateLimit === 'list' && !ids) || (this.rateLimit === 'byId' && ids)) throw new DuplikiumError('RATE_LIMIT', 'The copier service is busy right now');
     const list = Array.from(this.accounts.values()).map((a) => ({ ...a }));
     if (!ids) return list;
     const want = new Set(Array.isArray(ids) ? ids : [ids]);
@@ -780,15 +783,79 @@ test('on a restart the master and other people\'s accounts are never adopted', a
   assert.equal(fake.deleted.length, 0);
 });
 
-test('a client opening the dashboard before the restore finished is brought back on demand', async () => {
+test('a dashboard asking for a client never reads the copier service itself', async () => {
   const { fake, m } = setup();
   await m.refreshAll();
   await m.provisionClientTerminal(creds(), () => {});
   const m2 = Mt5ConnectionManager.forTests(fake, { masterId: 'MASTER', templateId: 'TEMPLATE' });
   m2.wasVerified = async () => 'yes';
+  const before = fake.calls.filter((c) => c === 'getAccounts').length;
+  // before any list has been read: nothing to go on, and no read is spent finding out
+  for (let i = 0; i < 5; i++) assert.equal(await m2.restoreClientForUser('u1'), undefined);
+  assert.equal(fake.calls.filter((c) => c === 'getAccounts').length, before);
+});
+
+test('the periodic read brings a saved client back, using the one list it already read', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  await m.provisionClientTerminal(creds(), () => {});
+  const m2 = Mt5ConnectionManager.forTests(fake, { masterId: 'MASTER', templateId: 'TEMPLATE' });
+  m2.wasVerified = async () => 'yes';
+  const before = fake.calls.filter((c) => c === 'getAccounts').length;
+  await m2.refreshAll();
+  // the master's check and the clients' check are one read, and it also restored the client
+  assert.equal(fake.calls.filter((c) => c === 'getAccounts').length - before, 1);
+  assert.equal(m2.getClientConnection('u1')?.accountId, 'D1');
+  assert.equal((await m2.restoreClientForUser('stranger')), undefined);
+});
+
+test('a client whose restore was missed is brought back from the last list without another read', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  await m.provisionClientTerminal(creds(), () => {});
+  const m2 = Mt5ConnectionManager.forTests(fake, { masterId: 'MASTER', templateId: 'TEMPLATE' });
+  let verifiedAnswer: 'yes' | 'unknown' = 'unknown';
+  m2.wasVerified = async () => verifiedAnswer;
+  await m2.refreshAll(); // the saved note could not be read this time, so the client is not in memory yet
+  const reads = fake.calls.filter((c) => c === 'getAccounts').length;
+  verifiedAnswer = 'yes';
   const rec = await m2.restoreClientForUser('u1');
   assert.equal(rec?.accountId, 'D1');
-  assert.equal(await m2.restoreClientForUser('stranger'), undefined);
+  assert.equal(fake.calls.filter((c) => c === 'getAccounts').length, reads);
+});
+
+test('when the copier service refuses the list, a connect is turned into a calm retry and nothing is created or removed', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  fake.rateLimit = 'list';
+  const before = fake.calls.length;
+  let err: any;
+  try {
+    await m.provisionClientTerminal(creds(), () => {});
+  } catch (e) {
+    err = e;
+  }
+  assert.ok(err instanceof BrokerVerificationError, String(err));
+  assert.equal(err.code, 'VERIFICATION_UNAVAILABLE');
+  assert.match(err.message, /a little busy/i);
+  assert.doesNotMatch(err.message, /broker/i);
+  assert.equal(fake.added.length, 0);
+  assert.equal(fake.deleted.length, 0);
+  assert.deepEqual(fake.calls.slice(before), ['getAccounts']);
+});
+
+test('when the copier service refuses the lookups after the account was added, the account is kept and finished in the background', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  fake.rateLimit = 'byId';
+  assert.equal(await code(m.provisionClientTerminal(creds(), () => {})), 'HANDED_OFF');
+  assert.equal(fake.added.length, 1);
+  assert.equal(fake.deleted.length, 0);
+  // once reads are allowed again the periodic check finishes the connection
+  fake.rateLimit = null;
+  await m.refreshAll();
+  assert.equal(m.getClientConnection('u1')?.accountId, 'D1');
+  assert.equal(fake.deleted.length, 0);
 });
 
 // ---------- trades ----------

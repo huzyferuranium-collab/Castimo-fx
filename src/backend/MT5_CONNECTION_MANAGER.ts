@@ -275,15 +275,8 @@ export class Mt5ConnectionManager {
     if (!this.templateId) console.error('❌ [COPIER] DUPLIKIUM_TEMPLATE_ID is not set. No client account can be connected until it is.');
 
     this.startTimer();
-    const ok = await this.refreshAll();
-    if (ok) {
-      try {
-        await this.restoreFromList(this.lastAccounts);
-      } catch (e: any) {
-        console.warn('⚠️ [COPIER] Could not bring back saved clients:', e?.message || e);
-      }
-      void this.reconcileCopyState(true);
-    }
+    const ok = await this.refreshAll(); // also brings saved clients back
+    if (ok) void this.reconcileCopyState(true);
     return ok;
   }
 
@@ -335,6 +328,13 @@ export class Mt5ConnectionManager {
         if (seen.has(rec.accountId) || !rec.isBrokerVerified) continue;
         seen.add(rec.accountId);
         this.applyAccountToClient(rec, byId.get(rec.accountId), accounts.length > 0 && Boolean(byId.get(this.masterId)));
+      }
+      // Saved clients that are not in memory (after a restart, or because an earlier read was refused) are brought back from this
+      // same list: it costs no extra read.
+      try {
+        await this.restoreFromList(accounts);
+      } catch (e: any) {
+        console.warn('⚠️ [COPIER] Could not bring back saved clients:', e?.message || e);
       }
       await this.tickPending(byId);
       void this.reconcileCopyState(false);
@@ -575,6 +575,8 @@ export class Mt5ConnectionManager {
         );
       }
 
+      // A fresh list, always: the checks below (already linked, leftovers, capacity) must never run on an old one, or the same
+      // broker account could be added twice and copied twice.
       const all = await api.getAccounts();
       const existing = all.find((a) => a.type !== 'master' && sameLogin(a.login, login) && eq(a.server, server));
       if (existing && !isOwnedBy(existing.name, userId)) {
@@ -656,10 +658,20 @@ export class Mt5ConnectionManager {
       // --- wait for the broker to answer through the copier service ---
       go('syncing');
       const waitMs = (readLimit(process.env.CONNECT_SYNC_WAIT_SECONDS, 120) || 120) * 1000;
-      const everyMs = readLimit(process.env.CONNECT_PROBE_MS, 4000) || 4000;
+      // Reads are scarce when few accounts are linked: never ask faster than the service sustainably allows. What does not fit
+      // in this window is finished in the background by the periodic read. (Copying itself does not wait for this: Duplikium
+      // starts it as soon as it has logged in.)
+      const everyMs = Math.max(readLimit(process.env.CONNECT_PROBE_MS, 4000) || 4000, api.refreshSpacingMs?.() ?? 0);
       const until = Date.now() + waitMs;
+      await sleepMs(Math.min(everyMs, 8000)); // Duplikium needs a few seconds to log in: asking at once only spends a read
       for (;;) {
-        const acc = (await api.getAccounts(accountId))[0] ?? null;
+        let acc: DuplikiumAccount | null;
+        try {
+          acc = (await api.getAccounts(accountId))[0] ?? null;
+        } catch (e: any) {
+          if (e instanceof DuplikiumError && e.kind === 'RATE_LIMIT') throw new HandedOff('Still connecting', { stage: 'syncing', ref: 'RATE_LIMITED' });
+          throw e;
+        }
         const d = decideLink(acc, link, Date.now(), this.graceMs());
         if (d.action === 'VERIFY') {
           go('verifying');
@@ -896,12 +908,14 @@ export class Mt5ConnectionManager {
     const existing = this.clientPool.get(userId);
     if (existing) return existing;
     if (!this.api || this.connecting.has(userId) || this.pending.has(userId)) return undefined;
+    // It never reads the copier service itself: a dashboard asks every few seconds, and reads are scarce when few accounts are
+    // linked. It uses the last full list (read by the periodic check, which also brings saved clients back after a restart).
+    if (!this.lastAccounts.length) return undefined;
     const last = this.lastLazyRestore.get(userId) || 0;
     if (Date.now() - last < 30_000) return undefined;
     this.lastLazyRestore.set(userId, Date.now());
     try {
-      const list = this.lastRefreshAt && Date.now() - this.lastRefreshAt < 30_000 ? this.lastAccounts : await this.api.getAccounts();
-      await this.restoreFromList(list, userId);
+      await this.restoreFromList(this.lastAccounts, userId);
     } catch (err: any) {
       console.warn('⚠️ [COPIER] Lazy restore failed:', err?.message);
     }

@@ -229,7 +229,8 @@ export function translateCopierError(err: any, creds: SubmittedCredentials): Bro
       return e;
     }
     if (err.kind === 'RATE_LIMIT') {
-      const busy = new BrokerVerificationError('BROKER_SLOW', 'Our verification service is busy. Please try again in a minute.');
+      // Our side is busy, not the client's broker: say so, and keep it retryable (the client's details are never lost).
+      const busy = new BrokerVerificationError('VERIFICATION_UNAVAILABLE', 'We are a little busy right now. Please try again in a few minutes.');
       busy.ref = 'RATE_LIMITED';
       return busy;
     }
