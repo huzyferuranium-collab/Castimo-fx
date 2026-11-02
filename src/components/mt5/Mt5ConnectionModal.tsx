@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { tradingEngine, ConnectError, type ConnectProgress } from '../../services/tradingEngine';
+import { TermsModal } from '../legal/TermsModal';
+import { acceptTerms, recoverAcceptance } from '../../services/agreements';
 import { KeyRound, Server, CheckCircle2, Lock, AlertTriangle, ArrowRight, Eye, EyeOff, Loader2, Circle } from 'lucide-react';
 
 const STEPS: Array<{ stage: string; text: string }> = [
@@ -54,6 +56,10 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
   const [progress, setProgress] = useState<ConnectProgress | null>(null);
   // The broker is slow: the server keeps connecting the terminal and the dashboard follows it.
   const [background, setBackground] = useState(false);
+  // The server wants the Terms accepted first: the client is asked right here, and connecting carries on straight after.
+  const [needTerms, setNeedTerms] = useState(false);
+  // True once the client has just tapped "I Agree" in this window: if the server still says no, we tell them plainly instead of asking again and again.
+  const justAgreed = useRef(false);
 
   // Opening the window again starts fresh (unless a connection is still running in it).
   useEffect(() => {
@@ -68,8 +74,13 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
     onClose();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    justAgreed.current = false;
+    return runConnect();
+  };
+
+  const runConnect = async () => {
     if (isConnecting) return; // a second tap never starts a second connection
     setErrorMsg(null);
     setErrorHint(null);
@@ -85,7 +96,17 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
         throw new Error('Please enter your trading password.');
       }
 
-      const outcome = await tradingEngine.connectMt5Account(userId, accountNumber.trim(), brokerServer.trim(), password, setProgress);
+      let outcome: Awaited<ReturnType<typeof tradingEngine.connectMt5Account>>;
+      try {
+        outcome = await tradingEngine.connectMt5Account(userId, accountNumber.trim(), brokerServer.trim(), password, setProgress);
+      } catch (first) {
+        // Accepted before, but the record never reached the database: save it through the server and carry on, no questions.
+        if (first instanceof ConnectError && first.code === 'TERMS_NOT_ACCEPTED' && (await recoverAcceptance(userId))) {
+          outcome = await tradingEngine.connectMt5Account(userId, accountNumber.trim(), brokerServer.trim(), password, setProgress);
+        } else {
+          throw first;
+        }
+      }
       // Password is immediately discarded from memory
       setPassword('');
       if (outcome === 'background') {
@@ -99,6 +120,16 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
         onClose();
       }, 1500);
     } catch (err: any) {
+      if (err instanceof ConnectError && err.code === 'TERMS_NOT_ACCEPTED') {
+        if (justAgreed.current) {
+          justAgreed.current = false;
+          setErrorMsg('We could not save your agreement just now. Nothing is wrong with your account. Please tap Try again in a minute.');
+          return;
+        }
+        // Never a dead end: ask for the acceptance here. Their details stay filled in and connecting resumes once they agree.
+        setNeedTerms(true);
+        return;
+      }
       setErrorMsg(err.message || 'Connection failed.');
       if (err instanceof ConnectError) {
         setErrorHint(err.hint || null);
@@ -114,6 +145,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
     'w-full pl-9 pr-3 py-2.5 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:border-blue-500 text-white';
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 animate-in fade-in duration-200">
       <div className="relative w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto text-slate-100">
         <div className="p-5 border-b border-slate-800 flex items-center justify-between">
@@ -284,5 +316,18 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
         </div>
       </div>
     </div>
+    <TermsModal
+      isOpen={needTerms}
+      onAccept={async () => {
+        const r = await acceptTerms(userId);
+        if (r.success) {
+          justAgreed.current = true;
+          setNeedTerms(false);
+          void runConnect();
+        }
+        return r;
+      }}
+    />
+    </>
   );
 };

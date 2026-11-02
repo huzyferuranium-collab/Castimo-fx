@@ -17,7 +17,7 @@ import { Router, Request, Response } from 'express';
 import { Mt5ConnectionManager } from './MT5_CONNECTION_MANAGER';
 import { requireUser, requireAdmin, getAuthUser, isAdminUser } from './firebaseAuth';
 import { shapeMasterStatus } from './masterStatus';
-import { hasAcceptedTermsServer } from './termsCheck';
+import { hasAcceptedTermsServer, recordTermsAcceptanceServer } from './termsCheck';
 import { recordEvent } from './referralService';
 import { BrokerVerificationError, validateSubmittedCredentials, normalizeBrokerServer } from './brokerVerification';
 import { ConnectJobs, pendingFor } from './clientBridge';
@@ -197,6 +197,23 @@ tradeRouter.post('/toggle-mirror', requireUser, async (req: Request, res: Respon
     }
     console.error('❌ [API /api/trade/toggle-mirror] Error:', error?.message || error);
     return res.status(500).json({ success: false, error: 'Failed to toggle mirror state' });
+  }
+});
+
+/**
+ * POST /api/trade/accept-terms  (signed-in users only)
+ * Records, on the server, that the caller tapped "I Agree" to the current Terms. The browser tries to save this itself, but
+ * if that fails (for example the database rules refuse it) the client would be stuck, so the server keeps the record too.
+ */
+tradeRouter.post('/accept-terms', requireUser, async (req: Request, res: Response) => {
+  try {
+    const user = getAuthUser(req);
+    const saved = await recordTermsAcceptanceServer(user, String(req.headers['user-agent'] || ''));
+    if (!saved) return res.status(503).json({ success: false, error: 'Your acceptance could not be saved right now. Please try again in a moment.' });
+    return res.json({ success: true });
+  } catch (error: any) {
+    console.error('❌ [API /api/trade/accept-terms] Error:', error?.message || error);
+    return res.status(500).json({ success: false, error: 'Your acceptance could not be saved right now. Please try again in a moment.' });
   }
 });
 
