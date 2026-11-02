@@ -220,6 +220,10 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                   <input
                     type="text"
                     inputMode="numeric"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     required
                     value={accountNumber}
                     onChange={(e) => setAccountNumber(e.target.value)}
@@ -241,6 +245,9 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     disabled={isConnecting}
                     className={inputCls + ' pr-10'}
                   />
@@ -253,6 +260,11 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
+                {password !== password.trim() && (
+                  <p className="text-[11px] text-amber-400 mt-1" role="status">
+                    There is a space at the start or end of your password. If it is not part of your password, please remove it (phone keyboards sometimes add one).
+                  </p>
+                )}
                 <p className="text-[11px] text-slate-500 mt-1">Not the investor (read-only) password.</p>
               </div>
 
@@ -264,6 +276,10 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                     type="text"
                     required
                     list="server-options"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     value={brokerServer}
                     onChange={(e) => setBrokerServer(e.target.value)}
                     disabled={isConnecting}
@@ -276,7 +292,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                     ))}
                   </datalist>
                 </div>
-                <p className="text-[11px] text-slate-500 mt-1">Shown in your MT5 login screen.</p>
+                <p className="text-[11px] text-slate-500 mt-1">The exact server of your account, shown on your MT5 login screen. It can differ from account to account, even at the same broker.</p>
               </div>
 
               {isConnecting && progress && (
