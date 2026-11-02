@@ -45,14 +45,14 @@ const FAQ_ITEMS: FAQItem[] = [
     category: 'referrals',
     question: 'How do the 3-phase referral commissions work?',
     answer:
-      'Commissions are paid from the profit share that the traders in your network pay:\n• Phase 1 (your direct referrals): 5%\n• Phase 2 (their referrals): 3%\n• Phase 3 (the next level): 2%',
+      'Each commission is a percentage of what a trader in your network pays us: their $100 Monthly Plan fee, or their 50% profit-share invoice:\n• Phase 1 (your direct referrals): 5%\n• Phase 2 (their referrals): 3%\n• Phase 3 (the next level): 2%\nOnly verified payments earn commission.',
   },
   {
     id: 'ref-math-example',
     category: 'referrals',
     question: 'Can you give an example?',
     answer:
-      'A trader you invited makes $1,000 profit, so their 50% share is $500 USDT.\n• Phase 1 (you): 5% = $25.00 USDT\n• A trader invited by your referral (Phase 2) with $1,000 profit: 3% = $15.00 USDT\n• One level further (Phase 3) with $1,000 profit: 2% = $10.00 USDT\nCommissions come from the platform’s share, never from client capital.',
+      'Profit Share: a trader you invited makes $1,000 profit, so their 50% share is $500 USDT.\n• Phase 1 (you): 5% = $25.00 USDT\n• A trader invited by your referral (Phase 2) with $1,000 profit: 3% = $15.00 USDT\n• One level further (Phase 3) with $1,000 profit: 2% = $10.00 USDT\n\nMonthly Plan: a trader you invited pays the $100 plan fee.\n• Phase 1 (you): 5% = $5.00 USDT\n• Phase 2: 3% = $3.00 USDT\n• Phase 3: 2% = $2.00 USDT\n\nCommissions come from the platform’s share, never from client capital.',
   },
   {
     id: 'ref-payout-methods',

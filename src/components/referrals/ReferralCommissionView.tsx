@@ -70,7 +70,7 @@ export const ReferralCommissionView: React.FC = () => {
         tone="ruby"
         art="network"
         title="Referral Hub"
-        subtitle={`Earn ${s.ratesPct[0]}% / ${s.ratesPct[1]}% / ${s.ratesPct[2]}% of what the people you invite actually pay.`}
+        subtitle={`Earn ${s.ratesPct[0]}% / ${s.ratesPct[1]}% / ${s.ratesPct[2]}% of what the people you invite pay us.`}
       />
       <div className="flex gap-2">
         {(['overview', 'withdraw'] as const).map((t) => (
@@ -98,7 +98,7 @@ export const ReferralCommissionView: React.FC = () => {
               </button>
             </div>
             <p className="text-[11px] text-slate-500">
-              You earn {s.ratesPct[0]}% / {s.ratesPct[1]}% / {s.ratesPct[2]}% of what people you invited (levels 1, 2 and 3) actually pay us. Nothing is earned until they pay.
+              You earn {s.ratesPct[0]}% / {s.ratesPct[1]}% / {s.ratesPct[2]}% (levels 1, 2 and 3) of what the people you invited pay us: their Monthly Plan fee, or their Profit Share fee. Nothing is earned until a payment is verified.
             </p>
           </div>
 
@@ -130,7 +130,15 @@ export const ReferralCommissionView: React.FC = () => {
               <ul className="divide-y divide-slate-200 dark:divide-slate-800">
                 {s.recentCommissions.map((c) => (
                   <li key={c.id} className="py-2 flex items-center justify-between gap-2 text-xs">
-                    <span className="text-slate-600 dark:text-slate-300">Level {c.level} · {c.ratePct}%</span>
+                    <span className="text-slate-600 dark:text-slate-300 min-w-0">
+                      Level {c.level} · {c.ratePct}%
+                      {c.basePaidUsdt != null && (
+                        <span className="block text-[10px] text-slate-500">
+                          of ${Number(c.basePaidUsdt).toFixed(2)}
+                          {c.sourceType === 'subscription' ? ' · Monthly Plan' : c.sourceType === 'profit_invoice' ? ' · Profit Share fee' : ''}
+                        </span>
+                      )}
+                    </span>
                     <span className="text-slate-500 text-[10px] sm:text-xs text-center">{fmt(c.createdAt)}</span>
                     <span className="font-bold text-emerald-500">+${Number(c.amountUsdt).toFixed(2)}</span>
                   </li>

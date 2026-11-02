@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  computeWithdrawal, commissionLines, availableBalance, weeklyCutoff, processingWindow,
+  computeWithdrawal, commissionLines, commissionBaseUsdt, availableBalance, weeklyCutoff, processingWindow,
   validateWithdrawAmount, canMoveStatus, maskName,
 } from '../src/backend/referrals.ts';
 
@@ -17,6 +17,31 @@ test('commissions are 5/3/2 percent up three levels only', () => {
   assert.deepEqual(commissionLines([], 100), []);
   assert.deepEqual(commissionLines(['a'], 0), []);
   assert.deepEqual(commissionLines(['a'], NaN), []);
+});
+
+test('Monthly Plan: a $100 plan fee gives 5 / 3 / 2 dollars up the three levels', () => {
+  const base = commissionBaseUsdt(100, 100);
+  assert.equal(base, 100);
+  assert.deepEqual(commissionLines(['a', 'b', 'c'], base).map((x) => x.amountUsdt), [5, 3, 2]);
+});
+
+test('Profit Share: a $500 invoice (50% of $1,000 profit) gives 25 / 15 / 10 dollars', () => {
+  const base = commissionBaseUsdt(500);
+  assert.equal(base, 500);
+  assert.deepEqual(commissionLines(['a', 'b', 'c'], base).map((x) => x.amountUsdt), [25, 15, 10]);
+});
+
+test('the commission base is the fee owed: extra sent by mistake earns nothing, and a fee is never inflated', () => {
+  assert.equal(commissionBaseUsdt(100, 150), 100);
+  assert.equal(commissionBaseUsdt(100, 100), 100);
+  assert.equal(commissionBaseUsdt(100, 100.004), 100);
+  assert.equal(commissionBaseUsdt(100, 80), 80); // cannot happen after verification, but never pays on more than was received
+  assert.equal(commissionBaseUsdt(100, undefined), 100);
+  assert.equal(commissionBaseUsdt(100, NaN), 100);
+  assert.equal(commissionBaseUsdt(0, 100), 0);
+  assert.equal(commissionBaseUsdt(-5, 100), 0);
+  assert.equal(commissionBaseUsdt(NaN), 0);
+  assert.deepEqual(commissionLines(['a'], commissionBaseUsdt(0, 100)), []);
 });
 
 test('pending, processing and completed withdrawals hold the money; rejected and failed release it', () => {

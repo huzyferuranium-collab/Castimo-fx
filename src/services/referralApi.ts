@@ -25,7 +25,16 @@ export interface ReferralSummary {
   earnedUsdt: number;
   heldUsdt: number;
   availableUsdt: number;
-  recentCommissions: Array<{ id: string; level: number; ratePct: number; amountUsdt: number; createdAt: string }>;
+  recentCommissions: Array<{
+    id: string;
+    level: number;
+    ratePct: number;
+    amountUsdt: number;
+    /** The payment this commission is a percentage of (the plan fee or the profit-share invoice). */
+    basePaidUsdt: number | null;
+    sourceType: 'subscription' | 'profit_invoice' | null;
+    createdAt: string;
+  }>;
   withdrawals: WithdrawalRow[];
   rules: { minUsdt: number; feePct: number; processingHours: number };
   schedule: { serverNow: string; nextCutoff: string; nextExpectedBy: string };

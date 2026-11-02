@@ -25,6 +25,7 @@ import {
 } from './profitShare';
 import { readLimit } from './brokerVerification';
 import { accrueCommissions, recordEvent } from './referralService';
+import { commissionBaseUsdt } from './referrals';
 import {
   DEFAULT_SUBSCRIPTION_PERIOD_DAYS,
   DEFAULT_SUBSCRIPTION_PRICE_USDT,
@@ -353,7 +354,8 @@ export class BillingService {
       periodEnd: period.end,
       at: new Date(now).toISOString(),
     });
-    await this.creditReferrers(userId, check.amountUsdt ?? cfg.subscriptionPriceUsdt, 'subscription', `sub-${txHash}`);
+    // Commission is a share of the plan fee, not of any extra the client happened to send.
+    await this.creditReferrers(userId, commissionBaseUsdt(cfg.subscriptionPriceUsdt, check.amountUsdt), 'subscription', `sub-${txHash}`);
     await recordEvent('SUBSCRIBED', userId, `sub-${txHash}`);
     await this.applyBlocking(userId);
     return updated;

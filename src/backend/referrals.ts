@@ -28,6 +28,17 @@ export function computeWithdrawal(gross: number, feePct = WITHDRAW_FEE_PCT): { g
   return { gross: g, fee, net: round2(g - fee) };
 }
 
+/**
+ * The amount a commission is worked out from: the fee the client owed us (the Monthly Plan price, or the 50% profit-share
+ * invoice), never more. If a client sends more than they owed, the extra does not earn commission. Never below zero.
+ */
+export function commissionBaseUsdt(owedUsdt: number, receivedUsdt?: number): number {
+  const owed = Number(owedUsdt);
+  if (!Number.isFinite(owed) || owed <= 0) return 0;
+  const received = Number(receivedUsdt);
+  return round2(Number.isFinite(received) && received > 0 ? Math.min(owed, received) : owed);
+}
+
 export interface CommissionLine {
   beneficiaryUid: string;
   level: 1 | 2 | 3;

@@ -8,6 +8,7 @@ import { randomInt } from 'node:crypto';
 import { DocExistsError, createDoc, getDoc, isFirestoreAdminConfigured, listAll, queryEquals, queryEqualsWithIds, setDoc } from './firestoreAdmin';
 import { checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron';
 import {
+  REFERRAL_RATES_PCT,
   WITHDRAW_FEE_PCT,
   WITHDRAW_MIN_USDT,
   PROCESSING_HOURS,
@@ -170,7 +171,7 @@ export async function summary(uid: string) {
   return {
     code,
     link: `${BASE_URL}/?ref=${code}`,
-    ratesPct: [5, 3, 2],
+    ratesPct: [...REFERRAL_RATES_PCT],
     counts: { level1: levels[0].length, level2: levels[1].length, level3: levels[2].length },
     earnedUsdt: bal.earned,
     heldUsdt: bal.held,
@@ -178,7 +179,15 @@ export async function summary(uid: string) {
     recentCommissions: commissions
       .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
       .slice(0, 20)
-      .map((c) => ({ id: `${c.sourceId}-L${c.level}`, level: c.level, ratePct: c.ratePct, amountUsdt: c.amountUsdt, createdAt: c.createdAt })),
+      .map((c) => ({
+        id: `${c.sourceId}-L${c.level}`,
+        level: c.level,
+        ratePct: c.ratePct,
+        amountUsdt: c.amountUsdt,
+        basePaidUsdt: c.basePaidUsdt ?? null,
+        sourceType: c.sourceType === 'subscription' || c.sourceType === 'profit_invoice' ? c.sourceType : null,
+        createdAt: c.createdAt,
+      })),
     withdrawals: withdrawals
       .sort((a, b) => String(b.requestedAt).localeCompare(String(a.requestedAt)))
       .map(publicWithdrawal),
