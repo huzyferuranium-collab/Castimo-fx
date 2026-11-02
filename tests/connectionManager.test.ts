@@ -1062,6 +1062,43 @@ test('a client sees only their own trades', async () => {
   assert.equal(await m.getClientTrades('nobody'), null);
 });
 
+test('trades that are in the answer but cannot be read make the master "unreadable", never "no trade", and are logged once', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  fake.getOpenPositions = async () => {
+    const r: any = { positions: [], skipped: 1 };
+    Object.defineProperty(r, 'layout', { value: '{positions:[1× {ticket:number, symbol:string="XAUUSD", type:number=1, volume:number}]}', enumerable: false });
+    return r;
+  };
+  const warn = console.warn;
+  const lines: string[] = [];
+  console.warn = (...a: any[]) => void lines.push(a.join(' '));
+  try {
+    await assert.rejects(() => m.getMasterTrades(), /could not be read/);
+    await assert.rejects(() => m.getMasterTrades(), /could not be read/);
+    const r = await m.runConnectionCheck();
+    const t = r.steps.find((s: any) => s.name === 'Master open trades')!;
+    assert.equal(t.ok, false);
+    assert.match(t.detail, /1 could not be read/);
+    assert.match(t.detail, /type:number=1/, 'the check shows how the service writes buy/sell, so it can be read correctly');
+  } finally {
+    console.warn = warn;
+  }
+  const logged = lines.filter((l) => l.includes('Open trades of the master'));
+  assert.equal(logged.length, 1, 'one log line, not one per dashboard poll');
+  assert.match(logged[0], /type:number=1/);
+});
+
+test('when the account list says a trade is open but none is found, the check fails and says so', async () => {
+  const { fake, m } = setup();
+  fake.accounts.get('MASTER')!.openTrades = 1;
+  const r = await m.runConnectionCheck();
+  const t = r.steps.find((s: any) => s.name === 'Master open trades')!;
+  assert.equal(t.ok, false);
+  assert.match(t.detail, /the account list says 1 open/);
+  assert.match(t.detail, /could not be read/);
+});
+
 // ---------- administrator tools ----------
 
 test('the admin list shows client accounts only, never the master', async () => {

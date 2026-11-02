@@ -7,6 +7,8 @@ import {
   DEFAULT_LIMITS,
   normalizeAccount,
   normalizePosition,
+  readSide,
+  describeAnswer,
   readPositions,
   toIso,
   num,
@@ -230,7 +232,7 @@ test('a position is read under several spellings; unreadable ones are skipped, n
     ],
   });
   assert.equal(r.positions.length, 2);
-  assert.equal(r.skipped, 3);
+  assert.equal(r.skipped, 2, 'the two position rows without a side or a size; text that is not a row is ignored');
   const [a, b] = r.positions;
   assert.equal(a.id, '555');
   assert.equal(a.side, 'BUY');
@@ -252,6 +254,52 @@ test('the list of positions is found whatever it is called, and an empty answer 
   assert.deepEqual(readPositions({}), { positions: [], skipped: 0 });
   assert.deepEqual(readPositions(null), { positions: [], skipped: 0 });
   assert.equal(normalizePosition({ ticket: 1, symbol: 'X', type: 'buy', volume: 'abc' }), null);
+});
+
+test('positions are found in other shapes: keyed by ticket, grouped by account, nested under data', () => {
+  const row = (t: number, side = 'Sell') => ({ ticket: t, symbol: 'XAUUSD', type: side, volume: 0.03 });
+  assert.equal(readPositions({ positions: { '3426236597': row(3426236597) } }).positions.length, 1);
+  assert.equal(readPositions({ data: { positions: [row(1), row(2, 'Buy')] } }).positions.length, 2);
+  assert.equal(readPositions({ positions: [{ account_id: 'A1', positions: [row(1)] }] }).positions.length, 1);
+  assert.equal(readPositions([[row(1)]]).positions.length, 1);
+  assert.equal(readPositions({ positions: [row(1), row(1)] }).positions.length, 1, 'the same ticket twice is one trade');
+});
+
+test('when reading open trades, closed or pending groups are not entered', () => {
+  const r = readPositions(
+    { open: [{ ticket: 1, symbol: 'X', type: 'buy', volume: 1 }], closed: [{ ticket: 2, symbol: 'Y', type: 'sell', volume: 1 }], pending: [{ ticket: 3, symbol: 'Z', type: 'buy', volume: 1 }] },
+    { skipGroups: /closed|history|pending/i }
+  );
+  assert.deepEqual(r.positions.map((p) => p.id), ['1']);
+});
+
+test("another account's trade is never shown as this account's", () => {
+  const r = readPositions({ positions: [{ account_id: 'A1', ticket: 1, symbol: 'X', type: 'buy', volume: 1 }, { account_id: 'B2', ticket: 2, symbol: 'X', type: 'buy', volume: 1 }, { ticket: 3, symbol: 'X', type: 'sell', volume: 1 }] }, { accountId: 'A1' });
+  assert.deepEqual(r.positions.map((p) => p.id), ['1', '3']);
+});
+
+test('buy or sell is read only from words; a number is never turned into a side', () => {
+  assert.equal(readSide('Buy'), 'BUY');
+  assert.equal(readSide('POSITION_TYPE_SELL'), 'SELL');
+  assert.equal(readSide('short'), 'SELL');
+  assert.equal(readSide('b'), 'BUY');
+  assert.equal(readSide('buy_sell'), null);
+  assert.equal(readSide('Buy Limit'), 'BUY');
+  assert.equal(readSide(1), null);
+  assert.equal(readSide('1'), null);
+  const r = readPositions({ positions: [{ ticket: 9, symbol: 'XAUUSD', type: 1, volume: 0.03 }] });
+  assert.equal(r.positions.length, 0);
+  assert.equal(r.skipped, 1, 'counted as unreadable, so the dashboard says "could not be read", not "no trade"');
+});
+
+test('an unreadable answer is described by field names and kinds only, with the side value shown', () => {
+  const r = readPositions({ success: true, positions: { '3426236597': { ticket: 3426236597, symbol: 'XAUUSD', type: 1, volume: 0.03, profit: 0.8, password: 'x' } } });
+  assert.equal(
+    r.layout,
+    '{success:boolean, positions:{#id:{ticket:number, symbol:string="XAUUSD", type:number=1, volume:number, profit:number, password:string}}}'
+  );
+  assert.ok(!Object.keys(r).includes('layout'));
+  assert.equal(describeAnswer({ error: null, list: [] }), '{error:null, list:[]}');
 });
 
 test('getOpenPositions asks for one account', async () => {

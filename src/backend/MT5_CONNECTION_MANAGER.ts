@@ -1283,9 +1283,35 @@ export class Mt5ConnectionManager {
     if (!this.api || !this.masterId) throw new DuplikiumError('NOT_CONFIGURED', 'The copier service is not connected.');
     if (this.masterTradesCache && Date.now() - this.masterTradesCache.at < 10_000) return this.masterTradesCache.trades;
     const res = await this.api.getOpenPositions(this.masterId);
+    const reported = this.masterMetrics.openPositionsCount;
+    this.noteUnreadTrades('the master', this.masterId, res, reported);
+    // Trades were in the answer but none could be read: that is "not readable", never "no trade".
+    if (res.positions.length === 0 && res.skipped > 0) {
+      throw new DuplikiumError('BAD_RESPONSE', 'The master\'s open trades could not be read.');
+    }
     const trades = res.positions.map((p) => ({ id: p.id, symbol: p.symbol, side: p.side, volume: p.volume, openPrice: p.openPrice, openedAt: p.openTime }));
     this.masterTradesCache = { at: Date.now(), trades };
     return trades;
+  }
+
+  private unreadNotedAt = new Map<string, number>();
+
+  /**
+   * Writes one line to the log (at most every 10 minutes per account) when an answer about open trades could not be fully read:
+   * some rows were not readable, or the account list says trades are open but none were found. The line describes the answer's
+   * shape (field names and kinds, never passwords or balances), which is what is needed to read it correctly.
+   */
+  private noteUnreadTrades(who: string, accountId: string, res: PositionsResult, reportedOpen: number | null | undefined): void {
+    const missing = res.positions.length === 0 && typeof reportedOpen === 'number' && reportedOpen > 0;
+    if (!res.skipped && !missing) return;
+    const last = this.unreadNotedAt.get(accountId) ?? 0;
+    if (Date.now() - last < 10 * 60_000) return;
+    this.unreadNotedAt.set(accountId, Date.now());
+    console.warn(
+      `⚠️ [COPIER] Open trades of ${who} not fully read: ${res.positions.length} read, ${res.skipped} unreadable` +
+        (typeof reportedOpen === 'number' ? `, the account list says ${reportedOpen} open` : '') +
+        `. The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 900)}`
+    );
   }
 
   /** A client's own open and closed trades, as the copier service reports them. */
@@ -1298,7 +1324,11 @@ export class Mt5ConnectionManager {
     const freshClosed = c && now - c.closedAt < 60_000;
     let open = c?.data.open ?? [];
     let closed = c?.data.closed ?? [];
-    if (!freshOpen) open = (await this.api.getOpenPositions(rec.accountId)).positions;
+    if (!freshOpen) {
+      const res = await this.api.getOpenPositions(rec.accountId);
+      this.noteUnreadTrades(`#${rec.login}`, rec.accountId, res, this.lastAccounts.find((a) => a.accountId === rec.accountId)?.openTrades);
+      open = res.positions;
+    }
     if (!freshClosed) closed = (await this.api.getClosedPositions(rec.accountId)).positions;
     this.tradesCache.set(userId, { at: now, openAt: freshOpen ? c!.openAt : now, closedAt: freshClosed ? c!.closedAt : now, data: { open, closed } });
     return { open, closed };
@@ -1523,11 +1553,20 @@ export class Mt5ConnectionManager {
       try {
         const res = await this.api.getOpenPositions(this.masterId);
         const first = res.positions[0];
+        const reported = master?.openTrades ?? null;
+        const missing = res.positions.length === 0 && (res.skipped > 0 || (reported ?? 0) > 0);
         add(
           'Master open trades',
-          true,
-          `${res.positions.length} open trade(s) read${res.skipped ? `, ${res.skipped} could not be read` : ''}.` +
-            (first ? ` First: ${first.side} ${first.volume} ${first.symbol}, opened "${first.rawOpenTime ?? 'no time'}" (check this matches your master's time zone).` : ' None open right now, so the trade format is not yet confirmed.')
+          !missing,
+          `${res.positions.length} open trade(s) read${res.skipped ? `, ${res.skipped} could not be read` : ''}` +
+            (reported !== null ? ` (the account list says ${reported} open)` : '') +
+            '.' +
+            (first
+              ? ` First: ${first.side} ${first.volume} ${first.symbol}, opened "${first.rawOpenTime ?? 'no time'}" (check this matches your master's time zone).`
+              : missing
+              ? ' Trades are open but could not be read, so they will not show on the dashboard.'
+              : ' None open right now, so the trade format is not yet confirmed.') +
+            (missing || res.skipped ? ` The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 900)}` : '')
         );
       } catch (e: any) {
         add('Master open trades', false, `${String(e?.message || e)} Trades will not show on the dashboard until this works.`);

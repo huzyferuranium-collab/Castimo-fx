@@ -103,6 +103,8 @@ export interface PositionsResult {
   positions: DuplikiumPosition[];
   /** Entries that could not be read (for example no recognisable buy/sell). They are left out, never invented. */
   skipped: number;
+  /** What the answer looked like (field names and kinds only), for the logs when something could not be read. Not enumerable. */
+  readonly layout?: string;
 }
 
 export interface DuplikiumSetting {
@@ -249,30 +251,65 @@ export function toIso(v: unknown): string | null {
  * calls are the least documented part of the service. A position without a recognisable id, symbol,
  * buy/sell side and size is rejected (null): it is left out rather than shown with made-up values.
  */
-export function normalizePosition(raw: any): DuplikiumPosition | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const id = str(firstDefined(raw, ['ticket', 'position_id', 'positionId', 'order_id', 'id', 'trade_id']));
-  const symbol = str(firstDefined(raw, ['symbol', 'instrument', 'pair']));
-  const rawSide = firstDefined(raw, ['type', 'side', 'action', 'direction', 'cmd', 'order_type']);
-  const volume = num(firstDefined(raw, ['volume', 'lots', 'lot', 'size', 'quantity']));
-  let side: 'BUY' | 'SELL' | null = null;
-  if (typeof rawSide === 'string') {
-    if (/buy|long/i.test(rawSide)) side = 'BUY';
-    else if (/sell|short/i.test(rawSide)) side = 'SELL';
+const POS_ID_KEYS = ['ticket', 'position_id', 'positionId', 'position_ticket', 'order_id', 'orderId', 'order', 'position', 'id', 'trade_id', 'tradeId', 'deal', 'identifier'];
+const POS_SYMBOL_KEYS = ['symbol', 'instrument', 'pair', 'symbol_name', 'symbolName'];
+const POS_SIDE_KEYS = ['type', 'side', 'action', 'direction', 'cmd', 'order_type', 'position_type', 'positionType', 'trade_type', 'operation'];
+const POS_VOLUME_KEYS = ['volume', 'lots', 'lot', 'size', 'quantity', 'qty', 'lot_size'];
+const POS_ACCOUNT_KEYS = ['account_id', 'accountId', 'id_account'];
+
+/** The first of these fields that holds a plain value (text or number). Objects and lists are never read as a value. */
+function firstScalar(raw: any, keys: string[]): string | number | undefined {
+  for (const k of keys) {
+    const v = raw[k];
+    if ((typeof v === 'string' && v.trim() !== '') || (typeof v === 'number' && Number.isFinite(v))) return v;
   }
+  return undefined;
+}
+
+/**
+ * Buy or sell, only when the answer says it in words ("Buy", "SELL", "POSITION_TYPE_BUY", "long", "b"/"s").
+ * A number (for example 0 or 1) is never turned into a side: what the numbers mean has not been confirmed for this service.
+ */
+export function readSide(v: unknown): 'BUY' | 'SELL' | null {
+  if (typeof v !== 'string') return null;
+  const s = v.trim().toLowerCase();
+  if (s === 'b') return 'BUY';
+  if (s === 's') return 'SELL';
+  const words = s.split(/[^a-z]+/).filter(Boolean);
+  const buy = words.some((w) => w === 'buy' || w === 'long');
+  const sell = words.some((w) => w === 'sell' || w === 'short');
+  return buy === sell ? null : buy ? 'BUY' : 'SELL';
+}
+
+/** True for an object that names a symbol and a size: it is read as one position. */
+function looksLikePosition(v: any): boolean {
+  return !!v && typeof v === 'object' && !Array.isArray(v) && firstScalar(v, POS_SYMBOL_KEYS) !== undefined && firstScalar(v, POS_VOLUME_KEYS) !== undefined;
+}
+
+/**
+ * Reads one open or closed position. Several spellings are accepted for each field because the position
+ * calls are the least documented part of the service. A position without a recognisable id, symbol,
+ * buy/sell side and size is rejected (null): it is left out rather than shown with made-up values.
+ */
+export function normalizePosition(raw: any): DuplikiumPosition | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const id = str(firstScalar(raw, POS_ID_KEYS));
+  const symbol = str(firstScalar(raw, POS_SYMBOL_KEYS));
+  const side = readSide(firstScalar(raw, POS_SIDE_KEYS));
+  const volume = num(firstScalar(raw, POS_VOLUME_KEYS));
   if (!id || !symbol || !side || volume === null || volume <= 0) return null;
-  const openRaw = firstDefined(raw, ['open_time', 'opentime', 'time_open', 'open_date', 'openTime', 'time']);
-  const closeRaw = firstDefined(raw, ['close_time', 'closetime', 'time_close', 'close_date', 'closeTime']);
+  const openRaw = firstDefined(raw, ['open_time', 'opentime', 'time_open', 'open_date', 'openTime', 'opened_at', 'openedAt', 'open_at', 'time']);
+  const closeRaw = firstDefined(raw, ['close_time', 'closetime', 'time_close', 'close_date', 'closeTime', 'closed_at', 'closedAt']);
   return {
     id,
     symbol,
     side,
     volume,
-    openPrice: num(firstDefined(raw, ['open_price', 'openprice', 'price_open', 'openPrice', 'price'])),
+    openPrice: num(firstDefined(raw, ['open_price', 'openprice', 'price_open', 'openPrice', 'entry_price', 'price'])),
     closePrice: num(firstDefined(raw, ['close_price', 'closeprice', 'price_close', 'closePrice'])),
     stopLoss: num(firstDefined(raw, ['sl', 'stop_loss', 'stoploss', 'stopLoss'])),
     takeProfit: num(firstDefined(raw, ['tp', 'take_profit', 'takeprofit', 'takeProfit'])),
-    profit: num(firstDefined(raw, ['profit', 'pnl', 'net_profit'])),
+    profit: num(firstDefined(raw, ['profit', 'pnl', 'net_profit', 'floating_profit'])),
     commission: num(raw.commission),
     swap: num(raw.swap),
     openTime: toIso(openRaw),
@@ -281,27 +318,88 @@ export function normalizePosition(raw: any): DuplikiumPosition | null {
   };
 }
 
-/** Finds the list of positions inside whatever object Duplikium returned. */
-export function extractPositionList(json: any): any[] {
-  if (Array.isArray(json)) return json;
-  if (!json || typeof json !== 'object') return [];
-  for (const k of ['positions', 'openPositions', 'open_positions', 'closedPositions', 'closed_positions', 'trades', 'data', 'results']) {
-    if (Array.isArray(json[k])) return json[k];
-  }
-  for (const v of Object.values(json)) if (Array.isArray(v)) return v as any[];
-  return [];
+/** Lists that hold rows whatever is in them, so a row we cannot read is counted, not lost without a word. */
+const ROW_LISTS = /^(positions?|open_?positions?|closed_?positions?|trades?|data|results?|items|rows)$/i;
+
+/**
+ * Finds the positions inside whatever Duplikium returned: a bare list, a list under any name, rows keyed by ticket or by
+ * account, or one level of grouping. Groups whose name matches `skipGroups` (closed trades when reading open ones, and
+ * the other way round) are not entered.
+ */
+export function extractPositionList(json: any, skipGroups?: RegExp): any[] {
+  const rows: any[] = [];
+  const walk = (v: any, key: string, depth: number) => {
+    if (depth > 5 || !v || typeof v !== 'object') return;
+    if (skipGroups && key && skipGroups.test(key)) return;
+    if (Array.isArray(v)) {
+      const holdsRows = ROW_LISTS.test(key) || key === '' || v.some(looksLikePosition);
+      for (const item of v) {
+        if (looksLikePosition(item)) rows.push(item);
+        else if (item && typeof item === 'object' && !Array.isArray(item) && holdsRows && !Object.values(item).some((x) => x && typeof x === 'object')) rows.push(item);
+        else walk(item, key, depth + 1);
+      }
+      return;
+    }
+    if (looksLikePosition(v)) {
+      rows.push(v);
+      return;
+    }
+    for (const [k, child] of Object.entries(v)) walk(child, /^\d+$/.test(k) ? key : k, depth + 1);
+  };
+  walk(json, '', 0);
+  return rows;
 }
 
-export function readPositions(json: any): PositionsResult {
-  const list = extractPositionList(json);
+/** The kind of a value, for describing an answer without showing what is in it. */
+function kindOf(v: unknown): string {
+  return v === null ? 'null' : Array.isArray(v) ? 'list' : typeof v;
+}
+
+/**
+ * What an answer looked like: field names and kinds, never values, except buy/sell and symbol fields (short, and what is
+ * needed to learn how the service writes a side). Keys that are ids (long numbers) are shown as #id. For the logs and the
+ * administrator's connection check.
+ */
+export function describeAnswer(json: any, depth = 0): string {
+  if (json === null || typeof json !== 'object') return kindOf(json);
+  if (depth >= 4) return Array.isArray(json) ? 'list' : 'object';
+  if (Array.isArray(json)) return json.length === 0 ? '[]' : `[${json.length}× ${describeAnswer(json[0], depth + 1)}]`;
+  const entries = Object.entries(json);
+  const shown = entries.slice(0, 16).map(([k, v]) => {
+    const name = /^\d{3,}$/.test(k) ? '#id' : k;
+    if (v !== null && typeof v === 'object') return `${name}:${describeAnswer(v, depth + 1)}`;
+    const reveal = (POS_SIDE_KEYS.includes(k) || POS_SYMBOL_KEYS.includes(k)) && (typeof v === 'number' || (typeof v === 'string' && v.length <= 24));
+    return `${name}:${kindOf(v)}${reveal ? `=${JSON.stringify(v)}` : ''}`;
+  });
+  return `{${shown.join(', ')}${entries.length > 16 ? `, …${entries.length - 16} more` : ''}}`;
+}
+
+export interface ReadPositionsOptions {
+  /** The account that was asked for: rows that name another account are dropped. */
+  accountId?: string;
+  /** Groups not to enter (see extractPositionList). */
+  skipGroups?: RegExp;
+}
+
+export function readPositions(json: any, opts: ReadPositionsOptions = {}): PositionsResult {
+  const list = extractPositionList(json, opts.skipGroups);
   const positions: DuplikiumPosition[] = [];
+  const seen = new Set<string>();
   let skipped = 0;
   for (const raw of list) {
+    const owner = raw && typeof raw === 'object' ? str(firstScalar(raw, POS_ACCOUNT_KEYS)) : '';
+    if (opts.accountId && owner && owner !== String(opts.accountId)) continue; // another account's trade: never shown here
     const p = normalizePosition(raw);
-    if (p) positions.push(p);
-    else skipped++;
+    if (!p) skipped++;
+    else if (!seen.has(p.id)) {
+      seen.add(p.id);
+      positions.push(p);
+    }
   }
-  return { positions, skipped };
+  const result: PositionsResult = { positions, skipped };
+  // Kept beside the result (not enumerable) so a caller can describe an answer it could not fully read.
+  Object.defineProperty(result, 'layout', { value: describeAnswer(json), enumerable: false });
+  return result;
 }
 
 // ---------- rate limits ----------
@@ -794,11 +892,11 @@ export class DuplikiumClient implements CopierApi {
   // ----- positions -----
 
   async getOpenPositions(accountId: string): Promise<PositionsResult> {
-    return readPositions(await this.call('position/getOpenPositions.php', 'open', { account_id: accountId }));
+    return readPositions(await this.call('position/getOpenPositions.php', 'open', { account_id: accountId }), { accountId, skipGroups: /closed|history|pending/i });
   }
 
   async getClosedPositions(accountId: string): Promise<PositionsResult> {
-    return readPositions(await this.call('position/getClosedPositions.php', 'closed', { account_id: accountId }));
+    return readPositions(await this.call('position/getClosedPositions.php', 'closed', { account_id: accountId }), { accountId, skipGroups: /^open|pending/i });
   }
 }
 
