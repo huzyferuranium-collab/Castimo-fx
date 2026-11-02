@@ -20,6 +20,7 @@ import {
 import { authHeaders } from './apiAuth';
 import { liveDetail, normalizePending, type ConnectOutcome, type PendingConnectionView } from './pendingConnection';
 import { needsCopyResume } from './connectSteps';
+import { planSync, type OwnAnswer } from './clientSync';
 
 export const TRC20_USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 // The wallet that receives USDT. Set VITE_TREASURY_ADDRESS to YOUR real TRON (TRC20) address at build time.
@@ -1098,34 +1099,30 @@ class TradingEngine {
   }
 
   /**
-   * Syncs broker-verified accounts from the server. Administrators receive every client;
-   * everyone else receives only their own account. Nothing else is trusted.
-   * A client whose terminal is still connecting (or could not) also learns that here.
+   * Syncs broker-verified accounts from the server. Everybody is told their own account (and a connection still being brought
+   * up for them); administrators are also sent every client, for the admin console. An administrator can use the Client Terminal
+   * with their own account too, which is why their own account is asked for separately rather than looked for in that list
+   * (see planSync). Nothing else is trusted.
    */
   public async syncClientsFromBackend(): Promise<void> {
     try {
       const headers = await authHeaders();
       if (!headers.Authorization) return; // demo / quick-start sessions have nothing to sync
 
-      let clients: any[] = [];
-      // True when the answer is the signed-in user's own account (not a list for an administrator).
-      let own = false;
-      let pendingChanged = false;
-      const all = await fetch('/api/trade/clients', { headers });
-      if (all.ok) {
-        const data = await all.json();
-        clients = Array.isArray(data.clients) ? data.clients : [];
-      } else {
-        const mine = await fetch('/api/trade/my-account', { headers });
-        if (!mine.ok) return;
-        const data = await mine.json();
-        own = true;
-        clients = data.connected && data.client ? [data.client] : [];
-        // Nothing is connected yet: the server may still be bringing a terminal up, or have given up on one.
-        pendingChanged = this.setPending(data.connected ? null : data.pending);
-      }
+      // Both at once. The second is for administrators only: everyone else is simply told no.
+      const [mineRes, allRes] = await Promise.all([
+        fetch('/api/trade/my-account', { headers }).catch(() => null),
+        fetch('/api/trade/clients', { headers }).catch(() => null),
+      ]);
+      const mine: OwnAnswer | null = mineRes && mineRes.ok ? await mineRes.json().catch(() => null) : null;
+      const listBody = allRes && allRes.ok ? await allRes.json().catch(() => null) : null;
+      const list: unknown[] | null = allRes && allRes.ok ? (Array.isArray(listBody?.clients) ? listBody.clients : []) : null;
+      const plan = planSync(mine, list);
+      if (!plan.reachable) return;
+      // Nothing is connected yet: the server may still be bringing the account up, or have given up on it.
+      const pendingChanged = plan.pending ? this.setPending(plan.pending.value) : false;
 
-      for (const c of clients) {
+      for (const { client: c, own } of plan.entries) {
         if (c.isBrokerVerified !== true) continue;
         const mappedAcc: Mt5Account = {
           id: c.accountId || `mt5-acc-${c.userId}`,
@@ -1158,17 +1155,21 @@ class TradingEngine {
           masterAccountName: this.masterAccount.accountName,
         };
 
-        const idx = this.supervisedAccounts.findIndex(
-          (a) => a.userId === c.userId || a.accountNumber === String(c.login)
-        );
-        if (idx >= 0) {
-          this.supervisedAccounts[idx] = { ...this.supervisedAccounts[idx], ...mappedAcc };
-        } else {
-          this.supervisedAccounts.push(mappedAcc);
+        // The admin console lists what the server listed. An administrator's own account is not added to it from here
+        // (it is in that list already whenever it is in service).
+        if (!(own && plan.listed)) {
+          const idx = this.supervisedAccounts.findIndex(
+            (a) => a.userId === c.userId || a.accountNumber === String(c.login)
+          );
+          if (idx >= 0) {
+            this.supervisedAccounts[idx] = { ...this.supervisedAccounts[idx], ...mappedAcc };
+          } else {
+            this.supervisedAccounts.push(mappedAcc);
+          }
         }
 
-        // Our own account answers for the signed-in user even after a page reload, when the in-memory
-        // account does not know the user id yet.
+        // Our own account answers for the signed-in user (administrators included), even after a page reload, when the
+        // in-memory account does not know the user id yet.
         if (own || this.mt5Account.userId === c.userId) {
           this.mt5Account = {
             ...this.mt5Account,
@@ -1193,9 +1194,9 @@ class TradingEngine {
           };
         }
       }
-      // A client's own trades come from the copier service. The list for an administrator has no trades of its own.
-      if (own && clients.length > 0) await this.syncOwnTrades(headers);
-      if (clients.length > 0) {
+      // The signed-in user's own trades come from the copier service. The list for an administrator has no trades of its own.
+      if (plan.entries.some((e) => e.own)) await this.syncOwnTrades(headers);
+      if (plan.entries.length > 0) {
         this.masterAccount.activeCopiersCount = this.supervisedAccounts.length;
         this.notify();
       } else if (pendingChanged) {
