@@ -28,7 +28,9 @@ Duplikium's API may need their Trade Copier API add-on (their documentation says
    - `DUPLIKIUM_MASTER_ID`  = the Duplikium id of your master account
    - `DUPLIKIUM_TEMPLATE_ID` = the Duplikium id of the default slave template
    - `PORT` is set by Render automatically.
-4. Deploy, then open `https://<your-service>.onrender.com/api/health`. It should say `UP`.
+4. Deploy, then open `https://<your-service>.onrender.com/api/health`. It should say `UP`. It also shows `version`, the first seven characters of the
+   commit that is running (the same one GitHub and Render's Events tab show), so after a push you can tell whether your change is live yet. The start-up
+   log line says the same.
 5. Run the **Duplikium connection check** again with all four settings in place. It signs in to Duplikium, finds the master
    and the template, and asks for the master's open trades. Every step says what it found. Do this before inviting any client.
 6. Firebase console -> Authentication -> Settings -> Authorized domains -> add the onrender.com domain.

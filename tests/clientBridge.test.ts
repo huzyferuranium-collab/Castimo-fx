@@ -4,6 +4,7 @@ import {
   ConnectJobs,
   HandedOff,
   ProvisionGate,
+  STAGE_INFO,
   StageTimeoutError,
   friendlyHint,
   pendingFor,
@@ -26,7 +27,7 @@ test('a job reports its stage while running and holds the result when done', asy
   assert.equal(job.status, 'running');
   await tick();
   assert.equal(jobs.get('u1')!.stage, 'creating');
-  assert.equal(jobs.get('u1')!.percent, 25);
+  assert.equal(jobs.get('u1')!.percent, STAGE_INFO.creating.percent);
   release();
   await tick();
   const done = jobs.get('u1')!;
@@ -189,7 +190,7 @@ test('a job whose connection carries on in the background shows a calm state, no
   const j = jobs.get('u1')!;
   assert.equal(j.status, 'background');
   assert.equal(j.stage, 'background');
-  assert.equal(j.percent, 50, 'keeps the progress it had reached');
+  assert.equal(j.percent, STAGE_INFO.deploying.percent, 'keeps the progress it had reached');
   assert.match(j.message!, /do not need to wait/i);
   assert.equal(j.error, undefined);
   const [f] = jobs.recentFailures();
@@ -272,4 +273,15 @@ test('a client who reloads while connecting is told so; the server\'s own report
   // a remembered failure is still reported even if an old job is gone
   const failed = { kind: 'failed' as const, label: 'Could not connect' };
   assert.equal(pendingFor(failed, null), failed);
+});
+
+test('what the client reads while connecting is true: no stage claims a login was confirmed before it was', () => {
+  // the account is being ADDED in this step; the broker has not been asked anything yet
+  assert.match(STAGE_INFO.creating.label, /adding your account/i);
+  assert.doesNotMatch(STAGE_INFO.creating.label, /confirm/i);
+  // waiting for the login is said as what it is
+  assert.match(STAGE_INFO.syncing.label, /logging in/i);
+  // the bar never goes backwards from one step to the next
+  const order = ['queued', 'checking', 'creating', 'syncing', 'verifying', 'done'] as const;
+  for (let i = 1; i < order.length; i++) assert.ok(STAGE_INFO[order[i]].percent > STAGE_INFO[order[i - 1]].percent, `${order[i]} is further along than ${order[i - 1]}`);
 });

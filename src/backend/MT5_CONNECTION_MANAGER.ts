@@ -721,6 +721,9 @@ export class Mt5ConnectionManager {
 
       // --- wait for the broker to answer through the copier service ---
       go('syncing');
+      // While the broker logs the account in, the template's copy settings are read once (they are kept for a few minutes), so that
+      // putting the account into service the moment it is ready needs no further request to the copier service.
+      void this.riskSettings().catch(() => undefined);
       const waitMs = (readLimit(process.env.CONNECT_SYNC_WAIT_SECONDS, 120) || 120) * 1000;
       const until = Date.now() + waitMs;
       // Duplikium logs a new account in by itself within seconds (and starts copying as soon as it has). Reads of its list are the

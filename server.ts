@@ -65,11 +65,15 @@ async function startServer() {
   app.use('/api/referrals', referralRouter);
   app.use('/api/email-code', emailCodeRouter);
 
+  // Which build is running: Render sets the commit of the deploy. Opening /api/health shows it, so "is my latest change live?" can be checked.
+  const version = (process.env.RENDER_GIT_COMMIT || '').slice(0, 7) || 'unknown';
+
   // Health check endpoint
   app.get('/api/health', (req, res) => {
     res.json({
       status: 'UP',
       service: 'CASTIMOFX_MT5_CORE',
+      version,
       timestamp: new Date().toISOString(),
     });
   });
@@ -117,7 +121,7 @@ async function startServer() {
 
   // Start HTTP server immediately so pre-warming check and UI are accessible without waiting on cloud RPC
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 [SERVER] CASTIMOFx Server listening on http://0.0.0.0:${PORT}`);
+    console.log(`🚀 [SERVER] CASTIMOFx Server (version ${version}) listening on http://0.0.0.0:${PORT}`);
 
     // Asynchronously bootstrap the MT5 connection manager and billing in the background
     void (async () => {

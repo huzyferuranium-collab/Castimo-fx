@@ -18,7 +18,8 @@ import {
   NotificationType,
 } from '../types';
 import { authHeaders } from './apiAuth';
-import { normalizePending, type ConnectOutcome, type PendingConnectionView } from './pendingConnection';
+import { liveDetail, normalizePending, type ConnectOutcome, type PendingConnectionView } from './pendingConnection';
+import { needsCopyResume } from './connectSteps';
 
 export const TRC20_USDT_CONTRACT = 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t';
 // The wallet that receives USDT. Set VITE_TREASURY_ADDRESS to YOUR real TRON (TRC20) address at build time.
@@ -135,6 +136,8 @@ export interface ConnectProgress {
   label: string;
   percent: number;
   elapsedSeconds: number;
+  /** What the server last learnt while waiting for the broker, when that says more than the step does (see liveDetail). */
+  detail?: string;
 }
 
 /** A failed connection with a plain-language reason and what to do next. */
@@ -965,7 +968,8 @@ class TradingEngine {
     }
 
     // Poll until the connection finishes. A dropped request does not stop the connection, so we just ask again.
-    const POLL_MS = 2000;
+    // (Once a second: the answer is only memory on the server, and the window then follows it closely.)
+    const POLL_MS = 1000;
     const GIVE_UP_MS = 10 * 60_000;
     const began = Date.now();
     let job = started.job;
@@ -973,7 +977,13 @@ class TradingEngine {
     // The server also says whether it is still looking after a terminal for this client.
     let lastPending: unknown = null;
     while (job && job.status === 'running') {
-      onProgress?.({ stage: job.stage, label: job.label, percent: job.percent, elapsedSeconds: job.elapsedSeconds });
+      onProgress?.({
+        stage: job.stage,
+        label: job.label,
+        percent: job.percent,
+        elapsedSeconds: job.elapsedSeconds,
+        detail: liveDetail(lastPending, job.label),
+      });
       if (Date.now() - began > GIVE_UP_MS) {
         return fail('This is taking longer than expected. Close this window and press Connect again in a minute.', { retryable: true });
       }
@@ -1020,15 +1030,19 @@ class TradingEngine {
     this.pendingConnection = null; // connected: there is nothing left to wait for
     onProgress?.({ stage: 'done', label: 'Connected', percent: 100, elapsedSeconds: job.elapsedSeconds });
 
-    // Start copying (the server checks that this user owns a verified account).
-    try {
-      await fetch('/api/trade/toggle-mirror', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-        body: JSON.stringify({ targetState: 'ACTIVE' }),
-      });
-    } catch (toggleErr: any) {
-      console.warn('⚠️ [TRADING_ENGINE] Toggle mirror notice:', toggleErr?.message);
+    // The server has already put a new connection into service (it copies as the template says as soon as the copier has logged
+    // the account in), so nothing more is asked of it here: a second round trip to the copier only kept this window waiting.
+    // Only an account the server kept paused is asked to resume, as before (the server checks that this user owns a verified account).
+    if (needsCopyResume(c.status)) {
+      try {
+        await fetch('/api/trade/toggle-mirror', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+          body: JSON.stringify({ targetState: 'ACTIVE' }),
+        });
+      } catch (toggleErr: any) {
+        console.warn('⚠️ [TRADING_ENGINE] Toggle mirror notice:', toggleErr?.message);
+      }
     }
 
     const balance = Number(c.balance);

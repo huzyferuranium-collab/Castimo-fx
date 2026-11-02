@@ -1,17 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { tradingEngine, ConnectError, type ConnectProgress } from '../../services/tradingEngine';
+import { connectSteps, mayLeaveWindow } from '../../services/connectSteps';
 import { TermsModal } from '../legal/TermsModal';
 import { acceptTerms, recoverAcceptance } from '../../services/agreements';
 import { KeyRound, Server, CheckCircle2, Lock, AlertTriangle, ArrowRight, Eye, EyeOff, Loader2, Circle } from 'lucide-react';
-
-const STEPS: Array<{ stage: string; text: string }> = [
-  { stage: 'checking', text: 'Checking your details' },
-  { stage: 'creating', text: 'Broker confirms your login' },
-  { stage: 'deploying', text: 'Starting your trading terminal' },
-  { stage: 'syncing', text: 'Syncing with your broker' },
-  { stage: 'verifying', text: 'Reading your account' },
-];
-const stepIndex = (stage: string) => STEPS.findIndex((x) => x.stage === stage);
 
 interface Mt5ConnectionModalProps {
   isOpen: boolean;
@@ -149,6 +141,8 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
 
   const inputCls =
     'w-full pl-9 pr-3 py-2.5 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:border-blue-500 text-white';
+  // Whole seconds since the connection started, as the server counts them.
+  const waited = progress ? Math.max(0, Math.floor(Number(progress.elapsedSeconds) || 0)) : 0;
 
   return (
     <>
@@ -174,8 +168,8 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
               </div>
               <h4 className="text-base font-bold text-white">Still connecting, no need to wait</h4>
               <p className="text-xs text-slate-300 leading-relaxed">
-                Your trading terminal is taking a little longer to connect with your broker. We will keep going in the
-                background, and your dashboard will update by itself when it is ready.
+                Your broker is taking a little longer to accept the login. We will keep going in the background, and your
+                dashboard will update by itself when it is ready.
               </p>
               <p className="text-[11px] text-slate-500">Your password was sent securely and is not kept on this page.</p>
               <button
@@ -213,6 +207,14 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                 </div>
               )}
 
+              {/* While connecting, the form makes room for the progress (on a phone it would otherwise sit below the fold). The details stay as typed. */}
+              {isConnecting && (
+                <p className="text-xs text-slate-400 font-mono truncate" aria-label="Account being connected">
+                  #{accountNumber.trim()} · {brokerServer.trim()}
+                </p>
+              )}
+
+              <div className={isConnecting ? 'hidden' : 'space-y-4'}>
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">Account number</label>
                 <div className="relative">
@@ -294,6 +296,7 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                 </div>
                 <p className="text-[11px] text-slate-500 mt-1">The exact server of your account, shown on your MT5 login screen. It can differ from account to account, even at the same broker.</p>
               </div>
+              </div>
 
               {isConnecting && progress && (
                 <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-3 space-y-2.5" aria-live="polite">
@@ -303,23 +306,46 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                       style={{ width: `${Math.max(3, progress.percent)}%` }}
                     />
                   </div>
+                  {/* A step is ticked only once it has really happened (see connectSteps). */}
                   <ul className="space-y-1.5">
-                    {STEPS.map((st, i) => {
-                      const cur = stepIndex(progress.stage);
-                      const done = cur > i;
-                      const active = cur === i || (cur === -1 && i === 0);
-                      return (
-                        <li key={st.stage} className={`flex items-center gap-2 text-xs ${done ? 'text-emerald-400' : active ? 'text-white' : 'text-slate-500'}`}>
-                          {done ? <CheckCircle2 className="w-3.5 h-3.5" /> : active ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Circle className="w-3.5 h-3.5" />}
-                          <span>{st.text}</span>
-                        </li>
-                      );
-                    })}
+                    {connectSteps(progress.stage).map((st) => (
+                      <li
+                        key={st.key}
+                        className={`flex items-center gap-2 text-xs ${st.state === 'done' ? 'text-emerald-400' : st.state === 'active' ? 'text-white' : 'text-slate-500'}`}
+                      >
+                        {st.state === 'done' ? (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        ) : st.state === 'active' ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Circle className="w-3.5 h-3.5" />
+                        )}
+                        <span>{st.text}</span>
+                      </li>
+                    ))}
                   </ul>
-                  <p className="text-[11px] text-slate-400">
-                    This usually takes under a minute, but some brokers need a few minutes. You can close this window at any
-                    time: we keep connecting in the background and your dashboard updates by itself.
-                  </p>
+                  {/* What is being waited for, and for how long: the window never sits silent. */}
+                  {(progress.detail || waited >= 3) && (
+                    <div className="flex items-start justify-between gap-3 text-[11px] text-slate-400">
+                      <span>{progress.detail || ''}</span>
+                      {waited >= 3 && <span className="tabular-nums shrink-0">{waited} s</span>}
+                    </div>
+                  )}
+                  {mayLeaveWindow(progress.stage) && (
+                    <div className="space-y-2 pt-0.5">
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Your account is added. Only your broker&apos;s answer is left, and you do not have to wait for it here: your
+                        dashboard updates by itself the moment it is ready.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={closeAndReset}
+                        className="w-full py-2 px-3 rounded-lg border border-slate-700 text-xs font-semibold text-slate-200 hover:border-slate-500 hover:text-white transition cursor-pointer"
+                      >
+                        Continue on my dashboard
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

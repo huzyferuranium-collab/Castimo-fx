@@ -78,3 +78,14 @@ export function pendingAccountLine(p: PendingConnectionView): string {
   if (p.server) parts.push(p.server);
   return parts.join(' · ');
 }
+
+/**
+ * The live line the server has about a connection that is running, such as "Waiting for your broker to accept the login…"
+ * (what Duplikium last reported). Empty when there is none, or when it only repeats the step already on screen.
+ */
+export function liveDetail(raw: unknown, stepLabel: string): string {
+  const p = normalizePending(raw);
+  if (!p || p.kind !== 'working') return '';
+  const plain = (t: string) => t.replace(/[\u2026.\s]+$/u, '').trim().toLowerCase();
+  return plain(p.label) === plain(stepLabel) ? '' : p.label;
+}

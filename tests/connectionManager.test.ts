@@ -267,6 +267,28 @@ test('if the template cannot be read, the new account is set explicitly instead 
   assert.equal(fake.settingCalls[fake.settingCalls.length - 1].copierStatus, 1);
 });
 
+test('the template is read while the broker is still logging the account in, so putting it into service needs no further request', async () => {
+  const { fake, m } = setup({ fresh: { state: 'DISCONNECTED' } }); // the broker has not accepted the login yet
+  await m.refreshAll();
+  const templateReads: any[] = [];
+  const original = fake.getSettings.bind(fake);
+  fake.getSettings = async (f: any) => {
+    if (f.idGroup) templateReads.push(f);
+    return original(f);
+  };
+  const done = m.provisionClientTerminal(creds(), () => {});
+  for (let i = 0; i < 100 && templateReads.length === 0; i++) await sleep(5);
+  assert.equal(templateReads.length, 1, 'read once, during the wait, before the login was accepted');
+  assert.equal(m.getClientConnection('u1'), undefined, 'and the account was not yet in service at that time');
+
+  fake.settle('D1'); // the broker accepts the login
+  const rec = await done;
+  assert.equal(rec.isBrokerVerified, true);
+  assert.equal(templateReads.length, 1, 'finishing the connect read nothing more');
+  assert.equal(fake.settingCalls.length, 0, 'and changed no copy setting (the account copies as the template says)');
+  assert.equal(fake.copier.get('D1'), 1);
+});
+
 test('the client\'s password is never kept: it is not in the record, the pool or anything saved', async () => {
   const { m } = setup();
   await m.refreshAll();

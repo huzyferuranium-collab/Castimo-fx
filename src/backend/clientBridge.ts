@@ -37,10 +37,10 @@ export type Stage =
 export const STAGE_INFO: Record<Stage, { percent: number; label: string }> = {
   queued: { percent: 3, label: 'Starting…' },
   checking: { percent: 10, label: 'Checking your details…' },
-  creating: { percent: 25, label: 'Asking your broker to confirm the login…' },
-  deploying: { percent: 50, label: 'Setting up your copy link…' },
-  syncing: { percent: 75, label: 'Syncing with your broker…' },
-  verifying: { percent: 90, label: 'Reading your account from the broker…' },
+  creating: { percent: 30, label: 'Adding your account…' },
+  deploying: { percent: 45, label: 'Setting up your copy link…' }, // not used by the copier service flow; kept so older records still read
+  syncing: { percent: 60, label: 'Logging in to your broker…' },
+  verifying: { percent: 90, label: 'Reading your balance…' },
   done: { percent: 100, label: 'Connected' },
   failed: { percent: 0, label: 'Could not connect' },
   background: { percent: 0, label: 'Still connecting in the background' },
