@@ -43,8 +43,10 @@ Accounts must be USD. An account below `MIN_CONNECT_EQUITY` (default $200) still
 
 ## What the server does with a client
 - **Connect:** the client gives login, server and trading password. The password goes to Duplikium to log in; the server keeps only Duplikium's
-  account id, the login and the server (Firestore `mt5_accounts/{userId}`), never the password. The new account starts with copying **frozen**; it is switched
-  on only after the broker login is confirmed, balances are read and the account passes the checks.
+  account id, the login and the server (Firestore `mt5_accounts/{userId}`), never the password. The account is added from your Duplikium template, exactly as
+  "Add Slave" does it in the cockpit, so it copies as the template says as soon as Duplikium has logged in. No copy setting is changed for an ordinary client.
+  Once the login is confirmed and balances are read, our rules only ever **hold copying back** (paused, unpaid, or below the minimum equity); if that cannot be set
+  at once the client still connects and the periodic check keeps trying. Keep the template's copy status **on**: the server then needs no extra call.
 - **Pause / resume:** a client who pauses, or whose plan is unpaid or expired, is set to **close only**: no new trades are copied, and trades already
   open are still closed when the master closes them. Switching copying on again sets it back to on. After a restart the server checks every account against what it should be.
 - **Disconnect:** the account is removed from Duplikium. Trades that are already open stay open in the client's own MT5 account; nothing is closed for them.

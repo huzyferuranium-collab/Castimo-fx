@@ -55,6 +55,8 @@ class FakeCopier implements CopierApi {
       balance: null, equity: null, freeMargin: null, currency: '', state: 'NONE', lastUpdate: null, groupId: p.group ?? null, subscriptionKey: p.subscription ?? null, openTrades: 0,
       ...this.fresh,
     });
+    // like Duplikium: an account added from a template copies as the template says, with no further call
+    if (p.group) this.copier.set(id, this.templateRow.copierStatus ?? 1);
     return { accountId: id };
   }
   async deleteAccount(id: string) {
@@ -179,7 +181,7 @@ test('a brief request limit from the copier service does not turn the master int
 
 // ---------- connecting ----------
 
-test('a new client is added from the template, frozen first, then switched on and checked', async () => {
+test('a new client is added from the template and copies as the template says, with no setting changed (the way Duplikium itself does it)', async () => {
   const { fake, m, events } = setup();
   await m.refreshAll();
   const stages: string[] = [];
@@ -193,14 +195,9 @@ test('a new client is added from the template, frozen first, then switched on an
   assert.equal(add.name, 'CastimoFX Client u1 #5551234');
   assert.equal(add.broker, 'mt5');
 
-  // frozen before anything else, then ON
-  assert.equal(fake.settingCalls[0].copierStatus, 0);
-  assert.equal(fake.settingCalls[0].idSlave, 'D1');
-  assert.equal(fake.settingCalls[fake.settingCalls.length - 1].copierStatus, 1);
+  // nothing is frozen, nothing is switched: the template already says "copy", and that is what the client gets
+  assert.equal(fake.settingCalls.length, 0, 'no copy setting was changed for an ordinary new client');
   assert.equal(fake.copier.get('D1'), 1);
-  // the template's own copy size is carried over so switching copying on does not change it
-  assert.equal(fake.settingCalls[fake.settingCalls.length - 1].riskFactorType, 11);
-  assert.equal(fake.settingCalls[fake.settingCalls.length - 1].riskFactorValue, 0.5);
 
   assert.equal(rec.isBrokerVerified, true);
   assert.equal(rec.status, 'ACTIVE');
@@ -212,6 +209,37 @@ test('a new client is added from the template, frozen first, then switched on an
   assert.ok(events.saved.includes('u1:ACTIVE'));
   assert.deepEqual(stages.slice(0, 4), ['checking', 'creating', 'syncing', 'verifying']);
   assert.equal(m.pendingView('u1'), null);
+});
+
+test('a copy size set on Render is applied to a new account', async () => {
+  process.env.DUPLIKIUM_RISK_TYPE = '11';
+  process.env.DUPLIKIUM_RISK_VALUE = '0.25';
+  try {
+    const { fake, m } = setup();
+    await m.refreshAll();
+    await m.provisionClientTerminal(creds(), () => {});
+    const last = fake.settingCalls[fake.settingCalls.length - 1];
+    assert.equal(last.copierStatus, 1);
+    assert.equal(last.riskFactorType, 11);
+    assert.equal(last.riskFactorValue, 0.25);
+    assert.equal(fake.copier.get('D1'), 1);
+  } finally {
+    delete process.env.DUPLIKIUM_RISK_TYPE;
+    delete process.env.DUPLIKIUM_RISK_VALUE;
+  }
+});
+
+test('if the template cannot be read, the new account is set explicitly instead of assumed', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  const original = fake.getSettings.bind(fake);
+  fake.getSettings = async (f: any) => {
+    if (f.idGroup) throw new DuplikiumError('API', 'template unreadable');
+    return original(f);
+  };
+  const rec = await m.provisionClientTerminal(creds(), () => {});
+  assert.equal(rec.isBrokerVerified, true);
+  assert.equal(fake.settingCalls[fake.settingCalls.length - 1].copierStatus, 1);
 });
 
 test('the client\'s password is never kept: it is not in the record, the pool or anything saved', async () => {
@@ -426,42 +454,41 @@ test('without a template or master id nothing is accepted (fails closed)', async
   assert.equal(fake.added.length, 0);
 });
 
-test('if copying cannot be frozen, the new account is removed instead of left running', async () => {
+test('a client is never turned away because the copier service refuses a copy-setting change', async () => {
   const { fake, m } = setup();
   await m.refreshAll();
   fake.failSetSettings = true;
-  assert.equal(await code(m.provisionClientTerminal(creds(), () => {})), 'VERIFICATION_UNAVAILABLE');
-  assert.deepEqual(fake.deleted, ['D1']);
-  assert.equal(m.getClientConnection('u1'), undefined);
+  const rec = await m.provisionClientTerminal(creds(), () => {});
+  assert.equal(rec.isBrokerVerified, true);
+  assert.deepEqual(fake.deleted, [], 'the account is kept');
+  assert.equal(fake.copier.get('D1'), 1, 'copying follows the template');
 });
 
-test('a freeze the service says it accepted but did not apply is caught by reading the setting back, and the account is removed', async () => {
-  const { fake, m } = setup();
+test('a hold that cannot be set at connect time is retried by the periodic check, and the client still connects', async () => {
+  const { fake, m } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+  await m.refreshAll();
+  fake.failSetSettings = true; // the hold ("not copying yet") cannot be set right now
+  const rec = await m.provisionClientTerminal(creds(), () => {});
+  assert.equal(rec.lowFunds, true);
+  assert.equal(rec.copyApplied, undefined, 'it is not claimed as applied');
+  assert.equal(fake.copier.get('D1'), 1, 'for now the service still follows the template');
+
+  fake.failSetSettings = false;
+  await (m as any).reconcileCopyState(true);
+  assert.equal(fake.copier.get('D1'), -1, 'the check puts the hold in place');
+});
+
+test('a hold the service says it accepted but did not apply is not reported as applied, and is retried', async () => {
+  const { fake, m } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
   await m.refreshAll();
   fake.ignoreStatusChange = true; // the answer is fine, but nothing changes at the service
-  const e: any = await m.provisionClientTerminal(creds(), () => {}).then(() => null, (x: any) => x);
-  assert.equal(e?.code, 'VERIFICATION_UNAVAILABLE');
-  assert.equal(e?.ref, 'COPY_SETTINGS');
-  assert.match(e?.detail ?? '', /could not be held back/);
-  assert.deepEqual(fake.deleted, ['D1']);
-  assert.equal(m.getClientConnection('u1'), undefined);
-});
+  const rec = await m.provisionClientTerminal(creds(), () => {});
+  assert.equal(rec.isBrokerVerified, true);
+  assert.equal(rec.copyApplied, undefined);
 
-test('if copying does not really switch on, it is not reported as connected', async () => {
-  const { fake, m } = setup();
-  await m.refreshAll();
-  // the freeze goes through, but later changes are ignored by the service
-  const original = fake.setSettings.bind(fake);
-  let n = 0;
-  fake.setSettings = async (s: any) => {
-    n++;
-    if (n === 1) return original(s);
-    fake.settingCalls.push(s);
-  };
-  const result = await code(m.provisionClientTerminal(creds(), () => {}));
-  assert.equal(result, 'HANDED_OFF'); // the account is kept and retried in the background, never shown as copying
-  assert.equal(m.getClientConnection('u1'), undefined);
-  assert.equal(m.pendingView('u1')?.kind, 'working');
+  fake.ignoreStatusChange = false;
+  await (m as any).reconcileCopyState(true);
+  assert.equal(fake.copier.get('D1'), -1);
 });
 
 // ---------- a slow broker ----------

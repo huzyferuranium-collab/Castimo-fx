@@ -4,8 +4,9 @@
  * Duplikium (trade-copier.com) does the copying: the master HFM account is registered there once, and every
  * client's MT5 account is added there as a "slave" built from a template. This manager is our side of that:
  *
- *  - connect:     add the client's account to Duplikium, wait until Duplikium has logged in and reported the
- *                 account's real figures, apply our rules, then switch copying on.
+ *  - connect:     add the client's account to Duplikium from the template (the same as "Add Slave" in the cockpit),
+ *                 wait until Duplikium has logged in and reported the account's real figures, then apply our rules:
+ *                 they only ever hold copying back (paused, unpaid, below the minimum equity).
  *  - disconnect:  delete the client's account from Duplikium.
  *  - pause/resume and unpaid plans: set the account's copier status (on / close-only / frozen).
  *  - figures:     balance, equity and free margin are read from Duplikium (it refreshes them after each
@@ -235,7 +236,7 @@ export class Mt5ConnectionManager {
   private refreshing = false;
   private reconciling = false;
   private lastReconcileAt = 0;
-  private templateCache: { at: number; type?: number; value?: number } | null = null;
+  private templateCache: { at: number; type?: number; value?: number; status?: number } | null = null;
   private masterTradesCache: { at: number; trades: MasterTrade[] } | null = null;
   private tradesCache = new Map<string, { at: number; openAt: number; closedAt: number; data: ClientTrades }>();
 
@@ -594,7 +595,6 @@ export class Mt5ConnectionManager {
         previouslyVerified = this.wasVerified ? (await this.wasVerified(userId, accountId).catch(() => 'unknown')) === 'yes' : false;
         go('creating');
         await api.updateAccount(accountId, { password: params.password, enabled: true });
-        await this.freeze(accountId);
       } else {
         const mine = all.filter((a) => a.type !== 'master' && isOwnedBy(a.name, userId));
         if (mine.length) {
@@ -637,8 +637,8 @@ export class Mt5ConnectionManager {
         createdId = created.accountId;
         accountId = created.accountId;
         gate.attach(userId, accountId);
-        // Copying is held until the account is verified: freeze it at once. If that cannot be done, remove the account.
-        await this.freeze(accountId);
+        // Nothing else is asked of the copier service here: the account was added from the template, so it behaves exactly as an
+        // account added by hand in Duplikium does (it logs in and copies as the template says).
       }
 
       const link: PendingLink = {
@@ -717,35 +717,6 @@ export class Mt5ConnectionManager {
     return e;
   }
 
-  /** Freezes copying for an account: nothing may be copied before the account is verified. */
-  private async freeze(accountId: string): Promise<void> {
-    try {
-      await this.api!.setSettings({ idMaster: this.masterId, idSlave: accountId, copierStatus: COPIER.FROZEN });
-      // Do not rely on the answer to the change: read the setting back, so an unverified account is never left able to copy.
-      const frozen = async () => {
-        const rows = await this.api!.getSettings({ idMaster: this.masterId, idSlave: accountId });
-        return rows.find((r) => r.idSlave === accountId)?.copierStatus;
-      };
-      let got = await frozen();
-      if (got !== COPIER.FROZEN) {
-        await sleepMs(1500); // the service may take a moment to show a new setting
-        got = await frozen();
-      }
-      if (got !== COPIER.FROZEN) {
-        throw new DuplikiumError('API', `Copying could not be held back for the new account (wanted ${COPIER.FROZEN}, the service reports ${got ?? 'nothing'}).`);
-      }
-    } catch (e: any) {
-      await this.api!.deleteAccount(accountId).catch(() => undefined);
-      this.pending.forEach((p, uid) => {
-        if (p.accountId === accountId) this.pending.delete(uid);
-      });
-      const err = new BrokerVerificationError('VERIFICATION_UNAVAILABLE', 'Account verification is temporarily unavailable. Please try again in a few minutes.');
-      err.ref = 'COPY_SETTINGS';
-      err.detail = [String(e?.message || e), e?.detail].filter(Boolean).join(' | ').slice(0, 300);
-      throw err;
-    }
-  }
-
   /** The account is logged in and its figures are real: apply our rules and put it into service. */
   private async completeConnection(link: PendingLink, acc: DuplikiumAccount): Promise<ClientConnectionRecord> {
     const verified = verifyCopierAccount(acc, { login: link.login, server: link.server });
@@ -762,17 +733,9 @@ export class Mt5ConnectionManager {
     const heldBefore = link.verifiedBefore ? Boolean(await this.loadSavedLowFunds?.(link.userId).catch(() => false)) : true;
     record.lowFunds = heldBefore && isBelowCopyMinimum(verified.equity, min);
 
-    // Switch copying on (or leave it held back for a paused / unpaid client) and check that it really took.
     // A client restored after a restart, whose payment standing billing has not judged yet, is left as the service has
     // them: billing decides within seconds (and switches them on if they are in good standing).
-    try {
-      if (!(link.verifiedBefore && this.copyingAwaitsBilling(record))) await this.applyCopyState(record);
-    } catch (e: any) {
-      const err = new BrokerVerificationError('VERIFICATION_UNAVAILABLE', 'Account verification is temporarily unavailable. Please try again in a few minutes.');
-      err.ref = 'COPY_SETTINGS';
-      err.detail = String(e?.message || e).slice(0, 200);
-      throw err;
-    }
+    if (!(link.verifiedBefore && this.copyingAwaitsBilling(record))) await this.settleCopyState(record, !link.verifiedBefore);
 
     this.registerClient(record);
     this.pending.delete(link.userId);
@@ -984,6 +947,32 @@ export class Mt5ConnectionManager {
   // ---------- pause / resume ----------
 
   /**
+   * Puts a verified account into service the way Duplikium itself does it. A NEW account was added from the template, so it already
+   * copies as the template says (no call is needed when that is what we want). Our rules only ever HOLD copying back (paused,
+   * unpaid, or below the minimum equity): that is set now, and checked by reading it back. A failure here never stops the
+   * connection and never shows the client an error: the periodic check keeps trying until the service shows what we want.
+   */
+  private async settleCopyState(rec: ClientConnectionRecord, newAccount: boolean): Promise<void> {
+    const want = desiredCopierStatus(rec);
+    try {
+      if (newAccount && want === COPIER.ON && !this.envCopySize() && (await this.templateCopierStatus()) === COPIER.ON) {
+        rec.copyApplied = want; // follows the template; the periodic check confirms it
+        return;
+      }
+      await this.applyCopyState(rec);
+    } catch (e: any) {
+      rec.copyApplied = undefined;
+      console.warn(`⚠️ [COPIER] #${rec.login} is connected, but its copy setting could not be set yet (retried automatically): ${String(e?.message || e).slice(0, 160)}`);
+    }
+  }
+
+  /** The copy status a new account gets from the template, or undefined when the template cannot be read. */
+  private async templateCopierStatus(): Promise<number | undefined> {
+    await this.riskSettings(); // fills the cache
+    return this.templateCache?.status;
+  }
+
+  /**
    * Switches copying on or off for a client at the copier service, and says whether it really changed.
    * ON copies everything; a paused (or unpaid) client is set to "close only", so positions already open keep
    * following the master's closes and nothing is left stranded, while no new trades are opened.
@@ -1026,7 +1015,7 @@ export class Mt5ConnectionManager {
     try {
       const rows = await this.api!.getSettings({ idGroup: this.templateId });
       const row = rows.find((r) => r.idMaster === this.masterId) ?? rows.find((r) => !r.idMaster) ?? rows[0];
-      this.templateCache = { at: Date.now(), type: row?.riskFactorType ?? undefined, value: row?.riskFactorValue ?? undefined };
+      this.templateCache = { at: Date.now(), type: row?.riskFactorType ?? undefined, value: row?.riskFactorValue ?? undefined, status: row?.copierStatus ?? undefined };
     } catch {
       this.templateCache = { at: Date.now() };
     }

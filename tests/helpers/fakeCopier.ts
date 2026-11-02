@@ -38,6 +38,8 @@ export class FakeCopier implements CopierApi {
       balance: null, equity: null, freeMargin: null, currency: '', state: 'NONE', lastUpdate: null, groupId: p.group ?? null, subscriptionKey: p.subscription ?? null, openTrades: 0,
       ...this.fresh,
     });
+    // like Duplikium: an account added from a template copies as the template says, with no further call
+    if (p.group) this.copier.set(id, this.templateRow.copierStatus ?? 1);
     return { accountId: id };
   }
   async deleteAccount(id: string) {
