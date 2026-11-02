@@ -61,10 +61,17 @@ Set these on Render next to the Duplikium settings:
 Admins can see usage at `/api/trade/capacity` and in Admin console -> **Duplikium Accounts**, where a leftover or stuck account can be removed.
 A client who is in service (or has billing history) needs a second confirmation before their account can be removed there.
 
+**How fast a client connects.** The client's account is added from the template, exactly like *Add Slave* in the cockpit; Duplikium then logs in by itself and
+starts copying. Our site only has to *see* that the login worked, and that takes reads of Duplikium's account list. Duplikium allows few of those when few accounts
+are linked (per linked account: 2 a minute and 30 an hour), so the server spends them carefully: one read is shared by everybody (the Master card, every dashboard,
+every client connecting), a connect uses about 2-3 reads, dashboards use none, and an administrator's page reuses a list read in the last 15 seconds.
+Every new connection is written to the Render log as `Connected #... - took N s (account added after N s, N status reads)`, which shows the real speed.
+More linked accounts means a larger allowance; asking Duplikium to raise the limit is the other way to speed things up.
+
 Optional settings (defaults in brackets):
 - `DUPLIKIUM_REFRESH_SECONDS` [60] how often the server reads accounts from Duplikium.
 - `DUPLIKIUM_RISK_TYPE` / `DUPLIKIUM_RISK_VALUE` copy size given to every new client; if unset the template's own is used.
-- `MIN_CONNECT_EQUITY` [200], `CONNECT_SYNC_WAIT_SECONDS` [120], `CONNECT_PROBE_MS` [4000], `CONNECT_DISCONNECT_GRACE_MS` [45000],
+- `MIN_CONNECT_EQUITY` [200], `CONNECT_SYNC_WAIT_SECONDS` [120], `CONNECT_PROBE_MS` [5000], `CONNECT_FIRST_PROBE_MS` [6000], `CONNECT_KEEP_READS` [3], `CONNECT_DISCONNECT_GRACE_MS` [45000],
   `CONNECT_BACKGROUND_MINUTES` [20], `CONNECT_MAX_PARALLEL` [3]. A slow broker is not a failure: when the browser's wait is over the connection keeps going in the
   background and the dashboard updates by itself.
 - `MASTER_LOGIN` / `MASTER_SERVER` an extra guard so the master account can never be added as a client.

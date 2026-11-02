@@ -32,6 +32,20 @@ class FakeCopier implements CopierApi {
   failGetAccounts = false;
   /** Duplikium refusing reads because the hourly allowance is used up: the full list, or a lookup of one account. */
   rateLimit: 'list' | 'byId' | 'all' | null = null;
+  /** Reads take this long (the list is the state when the read began, like a real service). */
+  readDelayMs = 0;
+  /** How many more reads the service would allow right now (the manager asks, to decide where to spend them). */
+  headroom = Number.POSITIVE_INFINITY;
+  accountsHeadroom() {
+    return this.headroom;
+  }
+  /** Runs at the start of every add, before the account exists. */
+  beforeAdd: (() => void) | null = null;
+  /** A new account is left out of this many list reads after it was added (the list shows it a little late). */
+  hideNewFor = 0;
+  private hidden = new Map<string, number>();
+  /** Once an account has been added, further reads of the list are refused. */
+  refuseReadsAfterAdd = false;
   failSetSettings = false;
   ignoreStatusChange = false;
   /** What a newly added account looks like once Duplikium has logged in. */
@@ -49,6 +63,7 @@ class FakeCopier implements CopierApi {
   }
 
   async addAccount(p: AddAccountParams) {
+    this.beforeAdd?.();
     this.calls.push('addAccount');
     this.added.push(p);
     const id = `D${++this.seq}`;
@@ -59,6 +74,8 @@ class FakeCopier implements CopierApi {
     });
     // like Duplikium: an account added from a template copies as the template says, with no further call
     if (p.group) this.copier.set(id, this.templateRow.copierStatus ?? 1);
+    if (this.hideNewFor > 0) this.hidden.set(id, this.hideNewFor);
+    if (this.refuseReadsAfterAdd) this.rateLimit = 'list';
     return { accountId: id };
   }
   async deleteAccount(id: string) {
@@ -77,7 +94,12 @@ class FakeCopier implements CopierApi {
     this.calls.push('getAccounts');
     if (this.failGetAccounts) throw new DuplikiumError('NETWORK', 'down');
     if (this.rateLimit === 'all' || (this.rateLimit === 'list' && !ids) || (this.rateLimit === 'byId' && ids)) throw new DuplikiumError('RATE_LIMIT', 'The copier service is busy right now');
-    const list = Array.from(this.accounts.values()).map((a) => ({ ...a }));
+    let list = Array.from(this.accounts.values()).map((a) => ({ ...a }));
+    if (this.hidden.size) {
+      list = list.filter((a) => !this.hidden.has(a.accountId));
+      for (const [id, n] of Array.from(this.hidden)) (n <= 1 ? this.hidden.delete(id) : this.hidden.set(id, n - 1));
+    }
+    if (this.readDelayMs) await new Promise((r) => setTimeout(r, this.readDelayMs));
     if (!ids) return list;
     const want = new Set(Array.isArray(ids) ? ids : [ids]);
     return list.filter((a) => want.has(a.accountId));
@@ -783,6 +805,169 @@ test('on a restart the master and other people\'s accounts are never adopted', a
   assert.equal(fake.deleted.length, 0);
 });
 
+test('with no list read yet and the service refusing reads, a connect is a calm retry and nothing is created or removed', async () => {
+  const { fake, m } = setup();
+  fake.rateLimit = 'list';
+  let err: any;
+  try {
+    await m.provisionClientTerminal(creds(), () => {});
+  } catch (e) {
+    err = e;
+  }
+  assert.ok(err instanceof BrokerVerificationError, String(err));
+  assert.equal(err.code, 'VERIFICATION_UNAVAILABLE');
+  assert.match(err.message, /a little busy/i);
+  assert.doesNotMatch(err.message, /broker/i);
+  assert.equal(fake.added.length, 0);
+  assert.equal(fake.deleted.length, 0);
+});
+
+test('a client is not turned away because of our own read budget: with a recent list, the connect goes ahead and finishes in the background', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll(); // a recent list exists
+  fake.rateLimit = 'list'; // and now the service holds reads back
+  assert.equal(await code(m.provisionClientTerminal(creds(), () => {})), 'HANDED_OFF');
+  assert.equal(fake.added.length, 1, 'the account was added: Duplikium logs in and copies by itself');
+  assert.equal(fake.deleted.length, 0);
+  assert.equal(m.getClientConnection('u1'), undefined, 'nothing is shown as connected before the broker has answered');
+  fake.rateLimit = null;
+  await m.refreshAll();
+  assert.equal(m.getClientConnection('u1')?.accountId, 'D1');
+  assert.equal(fake.deleted.length, 0);
+});
+
+test('when reads are refused only after the account was added, it is kept and finished in the background', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  fake.refuseReadsAfterAdd = true;
+  assert.equal(await code(m.provisionClientTerminal(creds(), () => {})), 'HANDED_OFF');
+  assert.equal(fake.added.length, 1);
+  assert.equal(fake.deleted.length, 0);
+  fake.rateLimit = null;
+  await m.refreshAll();
+  assert.equal(m.getClientConnection('u1')?.accountId, 'D1');
+});
+
+test('while reads are held back, an account we added ourselves is still known to the checks (no second row for it)', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  fake.rateLimit = 'list';
+  assert.equal(await code(m.provisionClientTerminal(creds('u1', '5551234'), () => {})), 'HANDED_OFF');
+  assert.equal(fake.added.length, 1);
+  // the same client presses Connect again while reads are still held back: their own account is reused, not duplicated
+  assert.equal(await code(m.provisionClientTerminal(creds('u1', '5551234'), () => {})), 'HANDED_OFF');
+  assert.equal(fake.added.length, 1, 'no second account');
+  // and somebody else cannot take that broker account
+  assert.equal(await code(m.provisionClientTerminal(creds('u2', '5551234'), () => {})), 'ALREADY_LINKED');
+  assert.equal(fake.added.length, 1);
+});
+
+test('a connect needs two reads of the service in the normal case: one before adding and one to see the login', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  const before = fake.calls.filter((c) => c === 'getAccounts').length;
+  await m.provisionClientTerminal(creds(), () => {});
+  assert.equal(fake.calls.filter((c) => c === 'getAccounts').length - before, 2);
+  assert.equal(m.getClientConnection('u1')?.isBrokerVerified, true);
+});
+
+test('when reads are scarce, the reads are kept for seeing the login: the duplicate check uses the recent list', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll(); // a recent list exists
+  fake.headroom = 2; // few accounts are linked: only a couple of reads fit in this minute
+  const before = fake.calls.length;
+  await m.provisionClientTerminal(creds(), () => {});
+  const calls = fake.calls.slice(before);
+  assert.equal(calls[0], 'addAccount', 'no read before the add');
+  assert.equal(calls.filter((c) => c === 'getAccounts').length, 1, 'one read: the one that shows the login');
+  assert.equal(m.getClientConnection('u1')?.isBrokerVerified, true);
+});
+
+test('when there is room to spare, the duplicate check reads the list fresh (an account added by hand a moment ago is seen)', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  fake.headroom = 50;
+  // somebody added this account in the cockpit after our last read
+  fake.accounts.set('H1', { ...(fake.accounts.get('MASTER') as any), accountId: 'H1', name: 'slave - mt5 - 5551234', login: '5551234', server: 'HFMarketsGlobal-Live20', type: 'slave' });
+  assert.equal(await code(m.provisionClientTerminal(creds(), () => {})), 'ALREADY_LINKED');
+  assert.equal(fake.added.length, 0);
+});
+
+test('the administrator\'s pages share reads: the table and the capacity together cost one read, and a second look within 15 seconds none', async () => {
+  const { fake, m } = setup();
+  await m.provisionClientTerminal(creds(), () => {}).catch(() => undefined);
+  await m.refreshAll();
+  const reads = () => fake.calls.filter((c) => c === 'getAccounts').length;
+  const start = reads();
+  // 20 seconds old is too old to reuse: pretend our last read was that long ago
+  (m as any).lastRefreshAt = Date.now() - 20_000;
+  const [rows, cap] = await Promise.all([m.listCopierAccounts(), m.getCapacity()]);
+  assert.equal(reads() - start, 1, 'one read for both');
+  assert.ok(rows.length >= 0 && typeof cap.used === 'number');
+  await m.listCopierAccounts();
+  await m.getCapacity();
+  assert.equal(reads() - start, 1, 'a second look within 15 seconds uses what was just read');
+});
+
+test('everyone who asks while a read is running shares it', async () => {
+  const { fake, m } = setup();
+  fake.readDelayMs = 40;
+  await Promise.all([m.refreshAll(), m.refreshAll(), m.refreshAll()]);
+  assert.equal(fake.calls.filter((c) => c === 'getAccounts').length, 1);
+  await m.refreshAll();
+  assert.equal(fake.calls.filter((c) => c === 'getAccounts').length, 2, 'a read after it finished is a new read');
+});
+
+test('two clients connecting at the same moment share the reads of the service', async () => {
+  const { fake, m } = setup();
+  fake.readDelayMs = 15;
+  await m.refreshAll();
+  const before = fake.calls.filter((c) => c === 'getAccounts').length;
+  await Promise.all([m.provisionClientTerminal(creds('u1', '5551234'), () => {}), m.provisionClientTerminal(creds('u2', '5552222'), () => {})]);
+  const used = fake.calls.filter((c) => c === 'getAccounts').length - before;
+  assert.ok(used <= 4, `two clients should need at most 4 reads between them, used ${used}`);
+  assert.equal(m.getClientConnection('u1')?.isBrokerVerified, true);
+  assert.equal(m.getClientConnection('u2')?.isBrokerVerified, true);
+});
+
+test('a read that began before the account was added is not mistaken for "the account is gone"', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  fake.readDelayMs = 150; // slow reads: the periodic one below is still running when the first status read is due
+  // a periodic read starts the moment the account is being added, so its list cannot contain the new account
+  fake.beforeAdd = () => {
+    fake.beforeAdd = null;
+    void m.refreshAll();
+  };
+  await m.provisionClientTerminal(creds(), () => {});
+  assert.equal(m.getClientConnection('u1')?.isBrokerVerified, true);
+  assert.equal(fake.deleted.length, 0, 'the account was not removed');
+});
+
+test('an account the list shows a little late is waited for, not called "gone"', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  fake.hideNewFor = 2; // the first two reads after the add do not list it yet
+  await m.provisionClientTerminal(creds(), () => {});
+  assert.equal(m.getClientConnection('u1')?.isBrokerVerified, true);
+  assert.equal(fake.deleted.length, 0);
+});
+
+test('every new connection is logged with how long it took and how many reads it needed', async () => {
+  const { m } = setup();
+  await m.refreshAll();
+  const lines: string[] = [];
+  const orig = console.log;
+  console.log = (...a: any[]) => void lines.push(a.join(' '));
+  try {
+    await m.provisionClientTerminal(creds(), () => {});
+  } finally {
+    console.log = orig;
+  }
+  const line = lines.find((l) => /Connected #5551234/.test(l)) ?? '';
+  assert.match(line, /took \d+\.\d s \(account added after \d+\.\d s, 1 status read\)/);
+});
+
 test('a dashboard asking for a client never reads the copier service itself', async () => {
   const { fake, m } = setup();
   await m.refreshAll();
@@ -822,40 +1007,6 @@ test('a client whose restore was missed is brought back from the last list witho
   const rec = await m2.restoreClientForUser('u1');
   assert.equal(rec?.accountId, 'D1');
   assert.equal(fake.calls.filter((c) => c === 'getAccounts').length, reads);
-});
-
-test('when the copier service refuses the list, a connect is turned into a calm retry and nothing is created or removed', async () => {
-  const { fake, m } = setup();
-  await m.refreshAll();
-  fake.rateLimit = 'list';
-  const before = fake.calls.length;
-  let err: any;
-  try {
-    await m.provisionClientTerminal(creds(), () => {});
-  } catch (e) {
-    err = e;
-  }
-  assert.ok(err instanceof BrokerVerificationError, String(err));
-  assert.equal(err.code, 'VERIFICATION_UNAVAILABLE');
-  assert.match(err.message, /a little busy/i);
-  assert.doesNotMatch(err.message, /broker/i);
-  assert.equal(fake.added.length, 0);
-  assert.equal(fake.deleted.length, 0);
-  assert.deepEqual(fake.calls.slice(before), ['getAccounts']);
-});
-
-test('when the copier service refuses the lookups after the account was added, the account is kept and finished in the background', async () => {
-  const { fake, m } = setup();
-  await m.refreshAll();
-  fake.rateLimit = 'byId';
-  assert.equal(await code(m.provisionClientTerminal(creds(), () => {})), 'HANDED_OFF');
-  assert.equal(fake.added.length, 1);
-  assert.equal(fake.deleted.length, 0);
-  // once reads are allowed again the periodic check finishes the connection
-  fake.rateLimit = null;
-  await m.refreshAll();
-  assert.equal(m.getClientConnection('u1')?.accountId, 'D1');
-  assert.equal(fake.deleted.length, 0);
 });
 
 // ---------- trades ----------

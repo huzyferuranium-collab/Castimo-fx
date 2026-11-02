@@ -30,7 +30,7 @@ import {
   type PositionsResult,
 } from './duplikiumClient.ts';
 import { ProvisionGate, HandedOff, friendlyHint, rejectsForGood, type Stage } from './clientBridge.ts';
-import { DISCONNECT_GRACE_MS, decideLink, desiredCopierStatus, nextRefreshDelayMs, type LinkMemory } from './copierLink.ts';
+import { DISCONNECT_GRACE_MS, GONE_GRACE_MS, decideLink, desiredCopierStatus, nextReadDelayMs, type LinkMemory } from './copierLink.ts';
 import {
   BrokerVerificationError,
   checkConnectEligibility,
@@ -139,6 +139,21 @@ interface PendingLink extends LinkMemory {
   verifiedBefore: boolean;
   label: string;
   failure?: { code: string; message: string; hint: string; ref?: string; at: number };
+  /** For the timing line in the log only: when the connect began, when the account was added, and how many reads it took. */
+  t0?: number;
+  addedAt?: number;
+  reads?: number;
+}
+
+/** What one read of the account list came to. */
+interface ReadResult {
+  /** True when the list was really read. */
+  read: boolean;
+  /** When the read began (a read that began before an account was added says nothing about it). */
+  startedAt: number;
+  /** What `refreshAll` reports: whether the master is connected. */
+  ok: boolean;
+  error?: unknown;
 }
 
 export interface MasterTrade {
@@ -233,7 +248,8 @@ export class Mt5ConnectionManager {
   private connecting = new Set<string>();
 
   private refreshTimer: NodeJS.Timeout | null = null;
-  private refreshing = false;
+  /** The read of the account list that is running right now, shared by everyone who asks while it runs. */
+  private refreshing: Promise<ReadResult> | null = null;
   private reconciling = false;
   private lastReconcileAt = 0;
   private templateCache: { at: number; type?: number; value?: number; status?: number } | null = null;
@@ -280,29 +296,57 @@ export class Mt5ConnectionManager {
     return ok;
   }
 
-  /** Set when the service asked us to slow down: the next read waits at least this long. */
-  private retryRefreshInMs: number | null = null;
+  /** Set when the service asked us to slow down: nothing is read before this moment. */
+  private readNotBefore = 0;
 
   private startTimer(): void {
     this.stop();
     this.scheduleRefresh();
   }
 
+  /** How long a new client's connection has been waiting in the background for the broker (null if none is). */
+  private waitingForMs(): number | null {
+    let youngest: number | null = null;
+    for (const p of this.pending.values()) {
+      if (p.failure || p.verifiedBefore || this.connecting.has(p.userId)) continue;
+      const age = Date.now() - p.startedAt;
+      youngest = youngest === null ? age : Math.min(youngest, age);
+    }
+    return youngest;
+  }
+
+  private connectProbeMs(): number {
+    return readLimit(process.env.CONNECT_PROBE_MS, 5000) || 5000;
+  }
+
   /**
-   * The next read of the account list. Normally every DUPLIKIUM_REFRESH_SECONDS (60), but never faster than half of what the
-   * service's request limit allows (it allows few reads when few accounts are linked), so other work keeps its share.
+   * The next read of the account list. Normally every DUPLIKIUM_REFRESH_SECONDS (60), never faster than half of what the service's
+   * request limit allows, and counted from the last read by anyone (a read made while connecting a client replaces the periodic one).
+   * While a new client's connection waits in the background it is quick, so the client is finished within seconds of being ready.
    */
   private scheduleRefresh(): void {
-    const secs = readLimit(process.env.DUPLIKIUM_REFRESH_SECONDS, 60) || 60;
-    const spacing = this.api?.refreshSpacingMs?.() ?? 0;
-    const delay = nextRefreshDelayMs(secs, spacing, this.retryRefreshInMs);
-    this.retryRefreshInMs = null;
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    const left = this.readNotBefore - Date.now();
+    const delay = nextReadDelayMs({
+      baseSeconds: readLimit(process.env.DUPLIKIUM_REFRESH_SECONDS, 60) || 60,
+      spacingMs: this.api?.refreshSpacingMs?.() ?? 0,
+      waitLeftMs: left > 0 ? left : null,
+      sinceLastReadMs: this.lastRefreshAt ? Date.now() - this.lastRefreshAt : null,
+      waitingForMs: this.waitingForMs(),
+      readyInMs: this.api?.accountsReadyInMs?.() ?? 0,
+      quickMs: this.connectProbeMs(),
+    });
     this.refreshTimer = setTimeout(() => {
-      void this.refreshAll().finally(() => {
+      void this.readOnce().finally(() => {
         if (this.refreshTimer) this.scheduleRefresh();
       });
     }, delay);
     (this.refreshTimer as any).unref?.();
+  }
+
+  /** Plans the next read again (a client's connection has just started waiting in the background, or stopped). */
+  private rearmRefresh(): void {
+    if (this.refreshTimer) this.scheduleRefresh();
   }
 
   public stop(): void {
@@ -312,10 +356,27 @@ export class Mt5ConnectionManager {
 
   /** One read of every account at the copier service. Updates the master, the clients and pending connections. */
   public async refreshAll(): Promise<boolean> {
-    if (!this.api || this.refreshing) return this.masterState === 'CONNECTED';
-    this.refreshing = true;
+    return (await this.readOnce()).ok;
+  }
+
+  /**
+   * One read of the account list and everything that follows from it. Whoever asks while a read is running shares it, so the
+   * periodic check, a client's connection and a restore never cost more than one read between them.
+   */
+  private readOnce(): Promise<ReadResult> {
+    if (!this.api) return Promise.resolve({ read: false, startedAt: Date.now(), ok: this.masterState === 'CONNECTED' });
+    if (this.refreshing) return this.refreshing;
+    const run: Promise<ReadResult> = this.readAndApply().finally(() => {
+      if (this.refreshing === run) this.refreshing = null;
+    });
+    this.refreshing = run;
+    return run;
+  }
+
+  private async readAndApply(): Promise<ReadResult> {
+    const startedAt = Date.now();
     try {
-      const accounts = await this.api.getAccounts();
+      const accounts = await this.api!.getAccounts();
       this.lastAccounts = accounts;
       this.serviceError = '';
       this.lastRefreshAt = Date.now();
@@ -338,17 +399,17 @@ export class Mt5ConnectionManager {
       }
       await this.tickPending(byId);
       void this.reconcileCopyState(false);
-      return this.masterState === 'CONNECTED';
+      return { read: true, startedAt, ok: this.masterState === 'CONNECTED' };
     } catch (e: any) {
       if (e instanceof DuplikiumError && e.kind === 'RATE_LIMIT') {
         // The service asked us to slow down for a moment. That is not a disconnection: keep the last reading and read again a little later.
         console.warn(`⚠️ [COPIER] The copier service asked us to slow down (${e.detail || e.message}). Keeping the last reading.`);
-        this.retryRefreshInMs = e.retryAfterMs ?? 65_000;
+        this.readNotBefore = Date.now() + (e.retryAfterMs ?? 65_000);
         if (this.lastRefreshAt === 0) {
           const mins = Math.max(1, Math.round((e.retryAfterMs ?? 65_000) / 60_000));
           this.masterNote = `The copier service asked us to slow down just now, so the master account has not been read yet. It is read again by itself in about ${mins} minute${mins === 1 ? '' : 's'}: there is no need to press Check connection (that uses up the allowance). The refresh icon only reloads what we already have.`;
         }
-        return this.masterState === 'CONNECTED';
+        return { read: false, startedAt, ok: this.masterState === 'CONNECTED', error: e };
       }
       this.serviceError = e instanceof DuplikiumError ? `${e.kind}: ${e.message}` : String(e?.message || e);
       // Do not keep showing "connected" for a service we cannot read. Client figures stay as last read.
@@ -357,9 +418,7 @@ export class Mt5ConnectionManager {
       this.masterMetrics.connectionStatus = 'DISCONNECTED';
       this.masterNote = `The copier service could not be read: ${this.serviceError}`;
       console.error(`❌ [COPIER] Could not read accounts: ${this.serviceError}`);
-      return false;
-    } finally {
-      this.refreshing = false;
+      return { read: false, startedAt, ok: false, error: e };
     }
   }
 
@@ -530,6 +589,7 @@ export class Mt5ConnectionManager {
       throw e;
     }
 
+    const t0 = Date.now();
     const login = String(params.login).trim();
     const server = normalizeBrokerServer(params.server);
 
@@ -553,6 +613,7 @@ export class Mt5ConnectionManager {
     };
 
     this.connecting.add(userId);
+    const earlierLink = this.pending.get(userId); // what this client's earlier attempt left (the checks below still need to know it)
     this.pending.delete(userId); // a new attempt replaces an old "could not connect" notice
     try {
       go('checking');
@@ -575,9 +636,9 @@ export class Mt5ConnectionManager {
         );
       }
 
-      // A fresh list, always: the checks below (already linked, leftovers, capacity) must never run on an old one, or the same
-      // broker account could be added twice and copied twice.
-      const all = await api.getAccounts();
+      // A fresh list when there is room for it: the checks below (already linked, leftovers, capacity) should not run on an old one,
+      // or the same broker account could be added twice. (Only when reads are scarce is the last list used, plus what we added since.)
+      const all = await this.listForConnect(earlierLink);
       const existing = all.find((a) => a.type !== 'master' && sameLogin(a.login, login) && eq(a.server, server));
       if (existing && !isOwnedBy(existing.name, userId)) {
         throw new BrokerVerificationError(
@@ -652,27 +713,35 @@ export class Mt5ConnectionManager {
         label: 'Connecting to your broker…',
         startedAt: Date.now(),
         deadlineAt: previouslyVerified ? 0 : Date.now() + readLimit(process.env.CONNECT_BACKGROUND_MINUTES, 20) * 60_000,
+        t0,
+        addedAt: Date.now(),
+        reads: 0,
       };
       this.pending.set(userId, link);
 
       // --- wait for the broker to answer through the copier service ---
       go('syncing');
       const waitMs = (readLimit(process.env.CONNECT_SYNC_WAIT_SECONDS, 120) || 120) * 1000;
-      // Reads are scarce when few accounts are linked: never ask faster than the service sustainably allows. What does not fit
-      // in this window is finished in the background by the periodic read. (Copying itself does not wait for this: Duplikium
-      // starts it as soon as it has logged in.)
-      const everyMs = Math.max(readLimit(process.env.CONNECT_PROBE_MS, 4000) || 4000, api.refreshSpacingMs?.() ?? 0);
       const until = Date.now() + waitMs;
-      await sleepMs(Math.min(everyMs, 8000)); // Duplikium needs a few seconds to log in: asking at once only spends a read
+      // Duplikium logs a new account in by itself within seconds (and starts copying as soon as it has). Reads of its list are the
+      // scarce thing when few accounts are linked, so they are spent where the answer is likely to be: the first a few seconds
+      // after the add, then every few seconds. Each read is shared with the periodic check and every other client waiting.
+      const everyMs = this.connectProbeMs();
+      const firstMs = readLimit(process.env.CONNECT_FIRST_PROBE_MS, 0) || Math.round(everyMs * 1.2);
+      let due = Date.now() + firstMs;
       for (;;) {
-        let acc: DuplikiumAccount | null;
-        try {
-          acc = (await api.getAccounts(accountId))[0] ?? null;
-        } catch (e: any) {
-          if (e instanceof DuplikiumError && e.kind === 'RATE_LIMIT') throw new HandedOff('Still connecting', { stage: 'syncing', ref: 'RATE_LIMITED' });
-          throw e;
+        const ready = api.accountsReadyInMs?.() ?? 0;
+        if (ready > 0 && Date.now() + ready >= until) throw new HandedOff('Still connecting', { stage: 'syncing', ref: 'RATE_LIMITED' });
+        await sleepMs(Math.max(0, due - Date.now(), ready));
+        let r = await this.readOnce();
+        if (r.read && r.startedAt < (link.addedAt ?? 0)) r = await this.readOnce(); // that read began before the account existed
+        link.reads = (link.reads ?? 0) + 1;
+        if (!r.read) {
+          if (r.error instanceof DuplikiumError && r.error.kind === 'RATE_LIMIT') throw new HandedOff('Still connecting', { stage: 'syncing', ref: 'RATE_LIMITED' });
+          throw r.error ?? new DuplikiumError('NETWORK', 'The copier service could not be read.');
         }
-        const d = decideLink(acc, link, Date.now(), this.graceMs());
+        const acc = this.lastAccounts.find((a) => a.accountId === accountId) ?? null;
+        const d = decideLink(acc, link, Date.now(), this.graceMs(), GONE_GRACE_MS);
         if (d.action === 'VERIFY') {
           go('verifying');
           return await this.completeConnection(link, acc!);
@@ -685,7 +754,7 @@ export class Mt5ConnectionManager {
         if (Date.now() >= until) {
           throw new HandedOff('Still connecting', { stage: 'syncing', ref: 'SYNC_WAIT' });
         }
-        await sleepMs(everyMs);
+        due = Date.now() + (link.disconnectedSince ? Math.round(everyMs * 1.6) : everyMs); // "not logged in" changes slowly: ask a little less often
       }
     } catch (error: any) {
       if (error instanceof HandedOff) throw error; // the pending entry stays and is finished in the background
@@ -709,7 +778,49 @@ export class Mt5ConnectionManager {
     } finally {
       if (claimed) gate.release(userId);
       this.connecting.delete(userId);
+      this.rearmRefresh(); // a connection left for the background is now looked after at the quick pace
     }
+  }
+
+  /**
+   * The account list a connect decides on (already linked? leftovers? capacity?). Normally a fresh read, shared with anyone else
+   * reading at the same moment. While the service is holding reads back (we are over its allowance), the last list we have - if it
+   * is recent - is used instead, with the accounts we added ourselves put back in, so a client is never turned away because of our
+   * own read budget. Without a recent list the client is asked to try again shortly.
+   */
+  private async listForConnect(earlier?: PendingLink): Promise<DuplikiumAccount[]> {
+    const lastOk = this.lastRefreshAt > 0 && this.lastAccounts.length > 0 && Date.now() - this.lastRefreshAt < 10 * 60_000;
+    const heldBack = (): DuplikiumAccount[] => {
+      console.warn('⚠️ [COPIER] Reads are scarce right now: connecting on the last account list we read (plus what we added since).');
+      return this.withOurOwnAccounts(this.lastAccounts, earlier);
+    };
+    // When reads are scarce (few accounts are linked, or the allowance is nearly used), the reads that matter most are the ones that
+    // show the client's login: they are kept free, and this check uses the last list instead. With room to spare it reads fresh.
+    const keep = readLimit(process.env.CONNECT_KEEP_READS, 3);
+    const headroom = this.api?.accountsHeadroom?.() ?? Number.POSITIVE_INFINITY;
+    if (lastOk && ((this.api?.accountsReadyInMs?.() ?? 0) > 4_000 || headroom <= keep)) return heldBack();
+    const r = await this.readOnce();
+    if (r.read) return this.lastAccounts;
+    if (lastOk && r.error instanceof DuplikiumError && r.error.kind === 'RATE_LIMIT') return heldBack();
+    throw r.error ?? new DuplikiumError('NETWORK', 'The copier service could not be read.');
+  }
+
+  /** The list plus the accounts we hold records for that it does not show (added since it was read). */
+  private withOurOwnAccounts(list: DuplikiumAccount[], earlier?: PendingLink): DuplikiumAccount[] {
+    const have = new Set(list.map((a) => a.accountId));
+    const extra: DuplikiumAccount[] = [];
+    const add = (userId: string, accountId: string, login: string, server: string) => {
+      if (have.has(accountId)) return;
+      have.add(accountId);
+      extra.push({
+        accountId, name: clientAccountName(userId, login), login, server, broker: 'mt5', type: 'slave', enabled: true,
+        balance: null, equity: null, freeMargin: null, currency: '', state: 'NONE', lastUpdate: null, groupId: null, subscriptionKey: null, openTrades: 0,
+      });
+    };
+    for (const r of this.clientPool.values()) add(r.userId, r.accountId, r.login, r.server);
+    for (const p of this.pending.values()) if (!p.failure) add(p.userId, p.accountId, p.login, p.server); // a failed attempt left nothing behind
+    if (earlier && !earlier.failure) add(earlier.userId, earlier.accountId, earlier.login, earlier.server);
+    return extra.length ? [...list, ...extra] : list;
   }
 
   private rejection(reason: 'TRADING_NOT_ALLOWED' | 'BROKER_AUTH_FAILED' | 'GONE', link: { login: string; server: string }, acc: DuplikiumAccount | null): BrokerVerificationError {
@@ -755,7 +866,8 @@ export class Mt5ConnectionManager {
     if (!link.verifiedBefore) this.onNewConnection?.(link.userId);
     console.log(
       `${link.verifiedBefore ? '♻️' : '✅'} [COPIER] ${link.verifiedBefore ? 'Restored' : 'Connected'} #${record.login} (${record.status}): ${verified.accountType}, equity $${verified.equity.toFixed(2)}` +
-        (record.lowFunds ? ` - connected, not copying yet (below the $${min.toFixed(2)} minimum)` : '')
+        (record.lowFunds ? ` - connected, not copying yet (below the $${min.toFixed(2)} minimum)` : '') +
+        (link.verifiedBefore ? '' : ` - took ${((Date.now() - (link.t0 ?? link.startedAt)) / 1000).toFixed(1)} s` + (link.addedAt && link.t0 ? ` (account added after ${((link.addedAt - link.t0) / 1000).toFixed(1)} s` + `, ${link.reads ?? 0} status read${link.reads === 1 ? '' : 's'})` : ''))
     );
     return record;
   }
@@ -805,7 +917,7 @@ export class Mt5ConnectionManager {
     for (const link of Array.from(this.pending.values())) {
       if (link.failure || this.connecting.has(link.userId)) continue;
       const acc = byId.get(link.accountId) ?? null;
-      const d = decideLink(acc, link, Date.now(), this.graceMs());
+      const d = decideLink(acc, link, Date.now(), this.graceMs(), GONE_GRACE_MS);
       try {
         if (d.action === 'VERIFY') {
           await this.completeConnection(link, acc!);
@@ -1191,6 +1303,17 @@ export class Mt5ConnectionManager {
 
   // ---------- administrator views ----------
 
+  /**
+   * The account list for a screen that only shows it (the administrator's pages). A list read in the last 15 seconds is reused, and
+   * a read that is needed is the shared one, so opening a page twice, or two pages at once, never costs two reads.
+   */
+  private async listForDisplay(maxAgeMs = 15_000): Promise<DuplikiumAccount[]> {
+    if (this.lastRefreshAt > 0 && Date.now() - this.lastRefreshAt < maxAgeMs) return this.lastAccounts;
+    const r = await this.readOnce();
+    if (r.read) return this.lastAccounts;
+    throw r.error ?? new DuplikiumError('NETWORK', 'The copier service could not be read.');
+  }
+
   /** Admin view of how many client accounts exist at the copier service versus the limit. */
   public async getCapacity(): Promise<{ used: number; limit: number; perUserLimit: number }> {
     const limit = readLimit(process.env.MAX_CLIENT_ACCOUNTS, 0);
@@ -1198,8 +1321,7 @@ export class Mt5ConnectionManager {
     if (!this.api) return { used: 0, limit, perUserLimit };
     let all = this.lastAccounts;
     try {
-      all = await this.api.getAccounts();
-      this.lastAccounts = all;
+      all = await this.listForDisplay();
     } catch {
       // fall back to the last list we read
     }
@@ -1223,8 +1345,7 @@ export class Mt5ConnectionManager {
     }>
   > {
     if (!this.api) throw new DuplikiumError('NOT_CONFIGURED', 'The copier service is not connected.');
-    const all = await this.api.getAccounts();
-    this.lastAccounts = all;
+    const all = await this.listForDisplay();
     const rows = [];
     for (const a of all) {
       if (a.type === 'master' || a.accountId === this.masterId) continue;

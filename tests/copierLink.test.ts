@@ -85,3 +85,35 @@ test('the account list is read at the normal pace, never faster than half of wha
   assert.equal(nextRefreshDelayMs(60, 1100, 3_000), 3_000); // a per-second slip: soon
   assert.equal(nextRefreshDelayMs(60, 0, null), 60_000); // a service that does not say: the normal minute
 });
+
+// ---------- when to read the list, and the grace for a new account that is not listed yet ----------
+
+test('a new account that is not in the list yet is waited for briefly, then called gone', async () => {
+  const { GONE_GRACE_MS } = await import('../src/backend/copierLink.ts');
+  assert.equal(decideLink(null, mem({ startedAt: 1000 }), 2000).action, 'REJECT', 'without a grace, not listed means gone (restores, old links)');
+  assert.equal(decideLink(null, mem({ startedAt: 1000 }), 2000, DISCONNECT_GRACE_MS, GONE_GRACE_MS).action, 'WAIT', 'a few seconds after the add: wait');
+  const late = decideLink(null, mem({ startedAt: 1000 }), 1000 + GONE_GRACE_MS, DISCONNECT_GRACE_MS, GONE_GRACE_MS);
+  assert.deepEqual(late, { action: 'REJECT', reason: 'GONE' }, 'still missing after the grace: gone');
+});
+
+test('reads of the list: counted from the last read by anyone, quick while a new client waits, calm after a limit answer', async () => {
+  const { nextReadDelayMs, QUICK_FOR_MS, RELAXED_FOR_MS } = await import('../src/backend/copierLink.ts');
+  const base = { baseSeconds: 60, spacingMs: 33_000, waitLeftMs: null, sinceLastReadMs: null, waitingForMs: null, readyInMs: 0, quickMs: 5000 };
+  // idle: the normal minute, but never faster than twice the sustainable spacing
+  assert.equal(nextReadDelayMs({ ...base, spacingMs: 2400 }), 60_000);
+  assert.equal(nextReadDelayMs(base), 66_000);
+  assert.equal(nextReadDelayMs({ ...base, spacingMs: 120_000 }), 240_000, 'one account linked: every four minutes');
+  // a read made 40 seconds ago by a connecting client counts: only the rest of the gap is waited
+  assert.equal(nextReadDelayMs({ ...base, sinceLastReadMs: 40_000 }), 26_000);
+  assert.equal(nextReadDelayMs({ ...base, sinceLastReadMs: 500_000 }), 1000, 'overdue: soon, never a busy loop');
+  // a new client waiting in the background: quick, then relaxed, then back to normal
+  assert.equal(nextReadDelayMs({ ...base, waitingForMs: 10_000 }), 5000);
+  assert.equal(nextReadDelayMs({ ...base, waitingForMs: QUICK_FOR_MS + 1 }), 15_000);
+  assert.equal(nextReadDelayMs({ ...base, waitingForMs: RELAXED_FOR_MS + 1 }), 66_000);
+  assert.equal(nextReadDelayMs({ ...base, waitingForMs: 10_000, sinceLastReadMs: 2000 }), 3000, 'counted from the last read');
+  // never before the limits let a read through
+  assert.equal(nextReadDelayMs({ ...base, waitingForMs: 10_000, readyInMs: 20_000 }), 20_000);
+  // after a request-limit answer nothing is read until the service's wait is over
+  assert.equal(nextReadDelayMs({ ...base, waitLeftMs: 400_000, waitingForMs: 10_000 }), 400_000);
+  assert.equal(nextReadDelayMs({ ...base, waitLeftMs: 3000 }), 33_000, 'a short wait: at least the sustainable spacing');
+});

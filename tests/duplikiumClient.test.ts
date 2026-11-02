@@ -473,3 +473,63 @@ test('what is learned about the limit never changes the shared defaults', () => 
   lim.tighten('accounts', 'minute', 999); // never raises
   assert.equal(JSON.stringify(DEFAULT_LIMITS), before);
 });
+
+test('after the service refuses a kind of call, that kind is not sent again until the wait is over (it would only be refused)', async () => {
+  const t = { now: 1_800_000_000_000 };
+  const lim = new RateLimiter(DEFAULT_LIMITS, () => t.now, async (ms) => void (t.now += ms));
+  const hit = { status: 200, body: { code: 5, error: 'You reached the request limit (64/60 per hour) for this endpoint(/webservice/v4/account/getAccounts.php) with 4 accounts' } };
+  const p = pretend({ 'access/getToken.php': TOKEN(1), 'account/getAccounts.php': [hit, { body: { accounts: [] } }] });
+  const c = new DuplikiumClient({ user: 'u', password: 'p', transport: p.transport, now: () => t.now, limiter: lim });
+  await assert.rejects(c.getAccounts(), (e: any) => e.kind === 'RATE_LIMIT' && e.retryAfterMs === 600_000);
+  assert.equal(p.counts['account/getAccounts.php'], 0, 'one request was sent (the counter starts at 0)');
+  // the next three attempts are turned away by our own limiter, without troubling the service
+  for (let i = 0; i < 3; i++) await assert.rejects(c.getAccounts(), (e: any) => e.kind === 'RATE_LIMIT' && e.retryAfterMs > 0);
+  assert.equal(p.counts['account/getAccounts.php'], 0, 'the service was not asked again');
+  assert.ok(c.accountsReadyInMs() > 500_000, 'and we can tell how long it will be');
+  // other kinds of call are unaffected (only the usual second between calls)
+  assert.ok(lim.msUntilFree('other') <= 1100);
+  // after the wait, reads go again
+  t.now += 601_000;
+  assert.equal(c.accountsReadyInMs(), 0);
+  assert.deepEqual(await c.getAccounts(), []);
+  assert.equal(p.counts['account/getAccounts.php'], 1);
+});
+
+test('the limits grow the moment an account is added and shrink when one is removed, before the next list is read', async () => {
+  const t = { now: 1_800_000_000_000 };
+  const lim = new RateLimiter(DEFAULT_LIMITS, () => t.now, async (ms) => void (t.now += ms));
+  const p = pretend({
+    'access/getToken.php': TOKEN(1),
+    'account/getAccounts.php': { body: { accounts: [{ account_id: 'M', type: 0, name: 'master', login: '1', server: 'S', broker: 'mt5', state: 'CONNECTED' }] } },
+    'account/addAccount.php': { body: { account: { account_id: 'S1' } } },
+    'account/deleteAccount.php': { body: {} },
+  });
+  const c = new DuplikiumClient({ user: 'u', password: 'p', transport: p.transport, now: () => t.now, limiter: lim });
+  await c.getAccounts(); // one account linked: the smallest allowance
+  const one = c.refreshSpacingMs();
+  await c.addAccount({ type: 'slave', name: 'n', broker: 'mt5', login: '5', password: 'pw', server: 'S', enabled: true });
+  assert.ok(c.refreshSpacingMs() < one, 'two accounts: more room');
+  await c.deleteAccount('S1');
+  assert.equal(c.refreshSpacingMs(), one, 'back to one account');
+});
+
+test('a limiter can be asked how long a read would wait without using up a slot', () => {
+  const t = { now: 0 };
+  const lim = new RateLimiter({ ...DEFAULT_LIMITS, accounts: { perSec: 10, perMin: 2, perHour: 100 } }, () => t.now);
+  assert.equal(lim.msUntilFree('accounts'), 0);
+  assert.equal(lim.msUntilFree('accounts'), 0, 'asking does not use a slot');
+});
+
+test('the limiter says how many more reads fit in the minute and the hour, without using a slot', () => {
+  const t = { now: 0 };
+  const lim = new RateLimiter({ ...DEFAULT_LIMITS, accounts: { perSec: 10, perMin: 4, perHour: 6 } }, () => t.now);
+  assert.equal(lim.headroom('accounts'), 4, 'the minute is the smaller room');
+  return lim.acquire('accounts').then(async () => {
+    assert.equal(lim.headroom('accounts'), 3);
+    assert.equal(lim.headroom('accounts'), 3, 'asking does not use a slot');
+    for (let i = 0; i < 3; i++) { t.now += 2000; await lim.acquire('accounts'); }
+    assert.equal(lim.headroom('accounts'), 0, 'the minute is full');
+    t.now += 61_000; // a minute later: the minute has room again, the hour (6) has 2 left
+    assert.equal(lim.headroom('accounts'), 2, 'now the hour is the smaller room');
+  });
+});

@@ -143,6 +143,10 @@ export interface CopierApi {
   getClosedPositions(accountId: string): Promise<PositionsResult>;
   /** Optional: how often the whole account list may be read inside the service's limits (milliseconds). */
   refreshSpacingMs?(): number;
+  /** Optional: how long until the limits let the next read of the account list through (0 = now). */
+  accountsReadyInMs?(): number;
+  /** Optional: how many more reads of the account list fit in the current minute and hour. */
+  accountsHeadroom?(): number;
 }
 
 // ---------- reading Duplikium's answers (pure, unit-tested) ----------
@@ -367,6 +371,37 @@ export class RateLimiter {
 
   private listCount: number | null = null;
   private serviceCount: { n: number; at: number } | null = null;
+  private blockedUntil = new Map<LimitClass, number>();
+
+  /**
+   * The service refused a call of this kind: leave this kind of call alone for `ms`. Calls made meanwhile would only be refused
+   * again (and may count against us), so they are not sent at all.
+   */
+  blockFor(cls: LimitClass, ms: number): void {
+    if (!Number.isFinite(ms) || ms <= 0) return;
+    const until = this.now() + ms;
+    if (until > (this.blockedUntil.get(cls) ?? 0)) this.blockedUntil.set(cls, until);
+  }
+
+  /** An account was added (+1) or removed (-1): the count the limits depend on moves with it, before the next list read confirms it. */
+  noteAccountsChange(delta: number): void {
+    if (this.listCount === null || !Number.isFinite(delta)) return;
+    this.setAccountsCount(this.listCount + delta, 'list');
+  }
+
+  /** Milliseconds until a call of this kind would be let through, 0 if it may go now. Does not use up a slot. */
+  msUntilFree(cls: LimitClass): number {
+    return this.waitFor(cls, this.now());
+  }
+
+  /** How many more calls of this kind fit in the current minute and hour (the smaller of the two). Does not use up a slot. */
+  headroom(cls: LimitClass): number {
+    const t = this.now();
+    const w = this.limits[cls];
+    const used = (this.hits.get(cls) ?? []).filter((x) => t - x < 3_600_000);
+    const inMinute = used.filter((x) => t - x < 60_000).length;
+    return Math.max(0, Math.min(w.perMin - inMinute, w.perHour - used.length));
+  }
 
   /**
    * The limits for the calls that depend on the number of linked accounts. `list` is how many accounts we last saw;
@@ -405,10 +440,12 @@ export class RateLimiter {
     check(1100, w.perSec); // a little over a second, so two calls can never land in the same second at the service
     check(60_000, w.perMin);
     check(3_600_000, w.perHour);
+    const blocked = this.blockedUntil.get(cls);
+    if (blocked !== undefined && blocked > t) wait = Math.max(wait, blocked - t);
     return wait;
   }
 
-  async acquire(cls: LimitClass): Promise<void> {
+  async acquire(cls: LimitClass, maxWaitMs: number = this.maxWaitMs): Promise<void> {
     const started = this.now();
     for (;;) {
       const t = this.now();
@@ -417,7 +454,7 @@ export class RateLimiter {
         this.hits.get(cls)!.push(t);
         return;
       }
-      if (t - started + wait > this.maxWaitMs) {
+      if (t - started + wait > maxWaitMs) {
         throw new DuplikiumError('RATE_LIMIT', 'The copier service is busy right now. Please try again in a minute.', { retryAfterMs: wait + 1000 });
       }
       await this.sleep(Math.min(wait + 5, 5_000));
@@ -541,6 +578,16 @@ export class DuplikiumClient implements CopierApi {
     return this.limiter.sustainableSpacingMs('accounts');
   }
 
+  /** How long until the limits let the next read of the account list through (0 = now). */
+  accountsReadyInMs(): number {
+    return this.limiter.msUntilFree('accounts');
+  }
+
+  /** How many more reads of the account list fit in the current minute and hour. */
+  accountsHeadroom(): number {
+    return this.limiter.headroom('accounts');
+  }
+
   /** Signs in now (or refreshes). Used by the administrator's connection check. */
   async signIn(): Promise<{ expiresAt: string }> {
     await this.ensureToken(true);
@@ -610,6 +657,8 @@ export class DuplikiumClient implements CopierApi {
         return this.call(path, cls, form, retried, lenient, true);
       }
       const retryAfterMs = limit.unit === 'second' ? 3_000 : limit.unit === 'hour' ? 600_000 : 65_000;
+      // From here on this kind of call is not sent until the wait is over: it would only be refused again.
+      this.limiter.blockFor(cls, retryAfterMs);
       throw new DuplikiumError('RATE_LIMIT', 'The copier service is busy right now. Please try again in a minute.', { status: res.status, detail: message.slice(0, 200), retryAfterMs });
     }
     if (message) throw new DuplikiumError('API', message, { status: res.status, code: errCode(json) });
@@ -620,6 +669,12 @@ export class DuplikiumClient implements CopierApi {
   // ----- accounts -----
 
   async addAccount(p: AddAccountParams): Promise<{ accountId: string }> {
+    const added = await this.addAccountRaw(p);
+    this.limiter.noteAccountsChange(1); // the limits grow with the number of linked accounts, from this moment on
+    return added;
+  }
+
+  private async addAccountRaw(p: AddAccountParams): Promise<{ accountId: string }> {
     let json: any;
     try {
       json = await this.call('account/addAccount.php', 'other', {
@@ -666,6 +721,7 @@ export class DuplikiumClient implements CopierApi {
   async deleteAccount(accountId: string): Promise<void> {
     try {
       await this.call('account/deleteAccount.php', 'other', { account_id: accountId });
+      this.limiter.noteAccountsChange(-1);
     } catch (e: any) {
       // Removing an account that is already gone is not an error.
       if (e instanceof DuplikiumError && e.kind === 'API' && /not.?found|unknown|does not exist|no such/i.test(e.message)) return;
