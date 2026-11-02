@@ -116,7 +116,7 @@ Until it is set, the site shows "Payment address not set yet" and refuses paymen
 The rule lives in `billingStanding()` (`src/backend/servicePlan.ts`, tested) and is used by the sweep, by switching copying on, and by connecting.
 
 ## Turning on real profit-share billing
-Billing creates invoices from each client's real broker profit and checks USDT payments on the TRON blockchain.
+Billing creates invoices from each client's real closed-trade profit and checks USDT payments on the TRON blockchain.
 It stays OFF until both of these are set on Render (Environment):
 
 1. `TREASURY_ADDRESS` = your real TRON (TRC20) USDT address (use the same value as `VITE_TREASURY_ADDRESS`).
@@ -130,7 +130,19 @@ Optional settings (defaults in brackets):
 - `INVOICE_DUE_HOURS` [24] time to pay an invoice before copying pauses (50% profit-share clients only).
 - `TRONGRID_API_KEY` free key from trongrid.io, recommended to avoid rate limits.
 
-How it works: the first time a client's broker account is verified, their equity becomes the starting
-high-water mark. Deposits and withdrawals are read from the broker and never count as profit or loss.
-At each period end, 50% of profit above the high-water mark becomes an invoice (invoices under $1 roll into the next one).
-Only USD accounts are billed automatically. Publish the updated `firestore.rules` too.
+How it works: profit is the net result (profit + commission + swap) of the trades that **closed** on the client's account, read from the copier service.
+Because a closed trade is never affected by money moving in or out of the account, deposits and withdrawals can never count as profit, and the copier
+service does not need to report them.
+- The first time a client's broker account is verified, a ledger starts. Only trades that closed after that moment are ever counted.
+- Every closed trade is stored once (Firestore `ps_days`), so repeating a check can never count it twice.
+- At each period end (`SETTLEMENT_PERIOD_DAYS`, 7 by default) the cumulative closed-trade result is compared with its high-water mark. 50% of the part above the mark
+  becomes an invoice. After a loss, profit must first climb back above the mark. A fee under $1 rolls into the next period. Open (floating) trades are not charged until they close.
+- If any closed trade has no readable profit or close time, that client is NOT billed or updated until it can be read (the Render log says which client and why). Nothing is guessed.
+- Clients that were connected before this was switched on are billed on trades closed since they connected, but their first invoice waits 2 days after this version first runs, so you can compare the first daily updates with Duplikium before anything is invoiced.
+- **Daily update:** from 00:15 GMT each day, every profit-share client gets a "Profit Share update" in their notifications (Firestore `ps_daily`): what closed the day before,
+  the period so far, and their 50% share so far. Nothing is written for a day whose trades could not be read.
+- Only USD accounts are billed automatically. The new collections are server-only; the existing "everything else is refused" rule already covers them, so no rules change is needed.
+
+Check it with the first real client (after the Duplikium API is enabled): after 00:15 GMT open Render -> Logs and look for "NOT billed or updated" (it lists the reason); in Firebase -> Firestore open
+`ps_days` and `ps_daily` and compare the trades and totals with the client's closed trades in the Duplikium dashboard. Not yet confirmed against a live Duplikium account: the exact fields of its closed-positions
+answer (profit, commission, swap, close time) and whether it lists only trades the copier made. Until you have compared one client, treat the first invoice as a draft and check it before the client pays.

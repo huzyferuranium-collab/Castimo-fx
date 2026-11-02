@@ -1,6 +1,9 @@
 /**
  * Profit-share accounting (pure functions, no I/O, unit-tested).
  *
+ * NOTE: invoices are now made from closed trades (profitShareRealized.ts / profitShareRun.ts). The equity-based
+ * functions below are kept, unchanged and tested, but billing no longer depends on them.
+ *
  * Rule: the platform takes `feePct` (default 50%) of NEW profit only, measured on the client's
  * real broker equity against a high-water mark (HWM):
  *   - The HWM starts at the equity found when the account was first verified.
@@ -88,6 +91,14 @@ export interface ClientLedger {
   blocked?: boolean;
   /** Set when the client leaves profit share. A new ledger (fresh starting equity) is made if they return. */
   closed?: boolean;
+  /**
+   * Profit is billed on closed trades (see profitShareRealized.ts): the net result of all periods already settled, and
+   * the best such figure a fee has been taken on. Ledgers made before this existed start both at 0.
+   */
+  pnlCum?: number;
+  pnlHwm?: number;
+  /** Set once on a ledger made before closed-trade billing existed: no invoice before this time (see profitShareRealized.ts). */
+  settleAfter?: string;
 }
 
 export interface Invoice {
@@ -110,6 +121,10 @@ export interface Invoice {
   paidAt?: string;
   txHash?: string;
   confirmedBy?: string;
+  /** 'closed_trades': billed on the net result of trades closed in the period. */
+  basis?: 'closed_trades';
+  periodTrades?: number;
+  periodPnl?: number;
 }
 
 export function invoiceId(userId: string, periodEndIso: string): string {

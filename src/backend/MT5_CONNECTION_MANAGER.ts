@@ -26,6 +26,7 @@ import {
   type CopierApi,
   type DuplikiumAccount,
   type DuplikiumPosition,
+  type PositionsResult,
 } from './duplikiumClient.ts';
 import { ProvisionGate, HandedOff, friendlyHint, rejectsForGood, type Stage } from './clientBridge.ts';
 import { DISCONNECT_GRACE_MS, decideLink, desiredCopierStatus, type LinkMemory } from './copierLink.ts';
@@ -1320,13 +1321,14 @@ export class Mt5ConnectionManager {
   // ---------- getters ----------
 
   /**
-   * Net deposits minus withdrawals (and credits) on a client's account between two moments, or null when they
-   * cannot be known. Duplikium's API has not been confirmed to give balance operations, so this is null for now and
-   * profit-share invoices are NOT created: billing profit without knowing the money paid in or out would be wrong
-   * (a deposit would be billed as profit). Subscription clients are not affected.
+   * A client's closed trades as the copier service reports them, for profit-share billing (see profitShareRun.ts).
+   * Null when the client has no connected account. Errors (service busy, rate limit) are thrown for the caller to handle.
+   * Billing reads closed trades, not account equity, so it does not need the client's deposits and withdrawals.
    */
-  public async getAccountFlows(_userId: string, _from: Date, _to: Date): Promise<number | null> {
-    return null;
+  public async getClosedPositionsForBilling(userId: string): Promise<PositionsResult | null> {
+    const rec = this.clientPool.get(userId);
+    if (!rec || !this.api) return null;
+    return this.api.getClosedPositions(rec.accountId);
   }
 
   public getMasterMetrics(): MasterAccountMetrics {

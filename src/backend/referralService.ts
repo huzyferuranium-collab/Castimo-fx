@@ -22,6 +22,8 @@ import {
   validateWithdrawAmount,
 } from './referrals';
 
+import { dailyNoticeText } from './profitShareRealized';
+
 export class ReferralError extends Error {
   status: number;
   constructor(message: string, status = 400) {
@@ -367,6 +369,20 @@ export async function notificationsFor(uid: string) {
       message: `You earned $${Number(c.amountUsdt).toFixed(2)} (level ${c.level}, ${c.ratePct}%).`,
       at: String(c.createdAt),
     });
+  }
+  // The daily Profit Share update (one per day, written by the billing service from the client's real closed trades).
+  const daily = (await queryEquals('ps_daily', 'userId', uid).catch(() => [])) as Doc[];
+  for (const d of daily.sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 7)) {
+    const text = dailyNoticeText({
+      date: String(d.date),
+      dayPnl: Number(d.dayPnl) || 0,
+      dayTrades: Number(d.dayTrades) || 0,
+      periodPnl: Number(d.periodPnl) || 0,
+      shareSoFarUsdt: Number(d.shareSoFarUsdt) || 0,
+      feePct: Number(d.feePct) || 50,
+      nextSettlementAt: d.nextSettlementAt ? String(d.nextSettlementAt) : null,
+    });
+    items.push({ id: `ps-${d.date}`, kind: 'personal', title: text.title, message: text.message, at: String(d.createdAt) });
   }
   const invoices = (await queryEquals('profit_invoices', 'userId', uid).catch(() => [])) as Doc[];
   for (const i of invoices) {

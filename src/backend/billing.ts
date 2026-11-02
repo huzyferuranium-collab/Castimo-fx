@@ -1,11 +1,13 @@
 /**
  * Real profit-share billing, run on the server from the broker's own numbers.
  *
- *  - When a client's account is broker-verified, a ledger is opened with their equity as the starting
- *    high-water mark (HWM).
- *  - Every settlement period the server takes the account's equity from the copier service and the period's deposits
- *    and withdrawals, works out 50% of NEW profit, and creates an invoice. If the deposits and withdrawals cannot be
- *    read, nothing is invoiced (profit would be confused with money paid in) and the sweep says so in the log.
+ *  - When a client's account is broker-verified, a ledger is opened (its start time is where counting begins).
+ *  - Profit is the net result of the trades that CLOSED on the account (profitShareRealized.ts / profitShareRun.ts), so
+ *    deposits and withdrawals can never be mistaken for profit. Every settlement period the server stores the closed
+ *    trades, takes 50% of the NEW profit above the high-water mark of cumulative realised profit, and creates an invoice.
+ *    If any closed trade cannot be read, nothing is invoiced for that client and the sweep says so in the log.
+ *  - Each day, shortly after 00:15 GMT, every profit-share client gets a "Profit Share update" in their notifications:
+ *    what closed the day before, the period so far, and the 50% share so far.
  *  - Clients pay USDT (TRC20) to the treasury wallet; the payment is checked on the TRON blockchain.
  *  - An invoice that stays unpaid past its due time stops copying for that client until it is paid.
  *
@@ -17,12 +19,11 @@ import {
   DEFAULT_FEE_PCT,
   DEFAULT_INVOICE_DUE_HOURS,
   Invoice,
-  MIN_INVOICE_USDT,
-  computeSettlement,
-  invoiceId,
   isSettlementDue,
   round2,
 } from './profitShare';
+import { RunDeps, dailyUpdateFor, dailyWindowOpen, previousUtcDay, settleClient } from './profitShareRun';
+import { settlementAllowed, upgradeLedger } from './profitShareRealized';
 import { readLimit } from './brokerVerification';
 import { accrueCommissions, recordEvent } from './referralService';
 import { commissionBaseUsdt } from './referrals';
@@ -96,8 +97,18 @@ export class BillingService {
   private manager = Mt5ConnectionManager.getInstance();
   private timer: NodeJS.Timeout | null = null;
   private sweeping = false;
-  /** Clients due for settlement in the current sweep whose deposits and withdrawals could not be read. */
-  private skippedForFlows = 0;
+  /** Clients whose closed trades could not be read in the current sweep, with the reason (never billed on a guess). */
+  private notBilled: string[] = [];
+  /** Daily updates already written or found today, so the database is asked about each client once a day. */
+  private dailyDone = new Set<string>();
+
+  /** What the profit-share code needs: Firestore for storage and the copier service for closed trades. */
+  private psDeps(): RunDeps {
+    return {
+      store: { getDoc, setDoc, createDoc },
+      fetchClosed: (userId) => this.manager.getClosedPositionsForBilling(userId),
+    };
+  }
 
   static getInstance(): BillingService {
     if (!this.instance) this.instance = new BillingService();
@@ -131,6 +142,8 @@ export class BillingService {
       currency: rec.currency,
       startEquity: round2(rec.equity),
       hwm: round2(rec.equity),
+      pnlCum: 0,
+      pnlHwm: 0,
       settledThrough: now,
       createdAt: now,
     };
@@ -149,7 +162,7 @@ export class BillingService {
   async sweep(): Promise<void> {
     if (this.sweeping || !billingEnabled()) return;
     this.sweeping = true;
-    this.skippedForFlows = 0;
+    this.notBilled = [];
     try {
       const cfg = billingConfig();
       for (const rec of uniqueVerifiedClients(this.manager)) {
@@ -159,8 +172,16 @@ export class BillingService {
             await this.applyBlocking(rec.userId);
             continue;
           }
-          const ledger = await this.openLedger(rec);
-          if (isSettlementDue(ledger.settledThrough, Date.now(), cfg.periodDays)) {
+          let ledger = await this.openLedger(rec);
+          const up = upgradeLedger(ledger, Date.now());
+          if (up.changed) {
+            ledger = up.ledger;
+            await setDoc('client_ledgers', rec.userId, ledger as any);
+            console.log(`💰 [BILLING] Ledger of ${rec.userId} moved to closed-trade billing; its first invoice is not made before ${ledger.settleAfter}.`);
+          }
+          // The daily update goes first, so it describes the period that is about to be closed.
+          await this.dailyUpdate(ledger, cfg);
+          if (isSettlementDue(ledger.settledThrough, Date.now(), cfg.periodDays) && settlementAllowed(ledger, Date.now())) {
             await this.settle(rec, ledger);
           }
           await this.applyBlocking(rec.userId);
@@ -168,9 +189,9 @@ export class BillingService {
           console.warn(`⚠️ [BILLING] Sweep failed for ${rec.userId}:`, e?.message);
         }
       }
-      if (this.skippedForFlows > 0) {
+      if (this.notBilled.length > 0) {
         console.warn(
-          `⚠️ [BILLING] ${this.skippedForFlows} profit-share client(s) were due for settlement but NOT invoiced: the copier service does not give their deposits and withdrawals, so profit cannot be told apart from money paid in. See DEPLOY.md.`
+          `⚠️ [BILLING] ${this.notBilled.length} profit-share client(s) were NOT billed or updated this round because their closed trades could not be read safely: ${this.notBilled.slice(0, 10).join('; ')}${this.notBilled.length > 10 ? '; …' : ''}`
         );
       }
     } finally {
@@ -178,60 +199,46 @@ export class BillingService {
     }
   }
 
+  /**
+   * Writes yesterday's "Profit Share update" for one client, once a day, from 00:15 GMT. Nothing is written when the
+   * closed trades cannot be read: the client is never shown a made-up figure.
+   */
+  private async dailyUpdate(ledger: ClientLedger, cfg: ReturnType<typeof billingConfig>): Promise<void> {
+    const now = new Date();
+    if (!dailyWindowOpen(now)) return;
+    const dayIso = previousUtcDay(now);
+    const mark = `${ledger.userId}_${dayIso.slice(0, 10)}`;
+    if (this.dailyDone.has(mark)) return;
+    const out = await dailyUpdateFor(this.psDeps(), ledger, { feePct: cfg.feePct, periodDays: cfg.periodDays, dayIso, now });
+    if (typeof out === 'string') {
+      // Forget older days so the set stays small.
+      for (const k of this.dailyDone) if (!k.endsWith(dayIso.slice(0, 10))) this.dailyDone.delete(k);
+      this.dailyDone.add(mark);
+    } else {
+      this.notBilled.push(`${ledger.userId.slice(0, 8)}…: ${out.skipped}`);
+    }
+  }
+
+  /** Ends the period for one profit-share client: invoices 50% of the new profit made by the trades that closed. */
   private async settle(rec: ClientConnectionRecord, ledger: ClientLedger): Promise<void> {
     const cfg = billingConfig();
     if (String(rec.currency).toUpperCase() !== 'USD') {
       console.warn(`⚠️ [BILLING] ${rec.userId} trades in ${rec.currency}; only USD accounts are billed automatically.`);
       return;
     }
-    const now = new Date();
-    // Equity is what the copier service last reported for the account (a few minutes old at most).
-    const equity = Number(rec.equity);
-    if (!Number.isFinite(equity) || equity <= 0) return;
-    // Profit is billed only when the period's deposits and withdrawals are known: otherwise a deposit would be
-    // billed as profit and a withdrawal would hide it. When they cannot be read, nothing is invoiced.
-    const flows = await this.manager.getAccountFlows(rec.userId, new Date(ledger.settledThrough), now);
-    if (flows === null) {
-      this.skippedForFlows += 1;
+    const out = await settleClient(this.psDeps(), ledger, {
+      accountLogin: rec.login,
+      equity: Number(rec.equity),
+      treasury: cfg.treasury,
+      feePct: cfg.feePct,
+      dueHours: cfg.dueHours,
+      now: new Date(),
+    });
+    if (out.kind === 'skipped') {
+      this.notBilled.push(`${rec.userId.slice(0, 8)}…: ${out.reason}`);
       return;
     }
-
-    const r = computeSettlement({ hwm: ledger.hwm, equity, flows, feePct: cfg.feePct });
-    const nowIso = now.toISOString();
-    let hwm = r.adjustedHwm; // small fees roll into the next period, so the HWM is not raised yet
-    let lastInvoiceId = ledger.lastInvoiceId;
-
-    if (r.fee >= MIN_INVOICE_USDT) {
-      const id = invoiceId(rec.userId, nowIso);
-      const invoice: Invoice = {
-        id,
-        userId: rec.userId,
-        accountLogin: rec.login,
-        currency: 'USD',
-        periodStart: ledger.settledThrough,
-        periodEnd: nowIso,
-        startHwm: ledger.hwm,
-        flows,
-        equityAtSettlement: round2(equity),
-        grossProfit: r.gain,
-        feePct: cfg.feePct,
-        amountDueUsdt: r.fee,
-        recipientAddress: cfg.treasury,
-        status: 'pending',
-        createdAt: nowIso,
-        dueAt: new Date(now.getTime() + cfg.dueHours * 3600 * 1000).toISOString(),
-      };
-      try {
-        await createDoc('profit_invoices', id, invoice as any);
-        console.log(`🧾 [BILLING] Invoice ${id}: ${r.fee} USDT for ${rec.userId}`);
-      } catch (e) {
-        if (!(e instanceof DocExistsError)) throw e;
-      }
-      hwm = r.newHwm;
-      lastInvoiceId = id;
-    }
-
-    await setDoc('client_ledgers', rec.userId, { ...ledger, hwm, settledThrough: nowIso, lastInvoiceId } as any);
+    if (out.invoice) console.log(`🧾 [BILLING] Invoice ${out.invoice.id}: ${out.invoice.amountDueUsdt} USDT for ${rec.userId} (${out.trades} closed trades)`);
   }
 
   /** Applies the client's own plan terms: pauses copying when they are not met, resumes when they are. */

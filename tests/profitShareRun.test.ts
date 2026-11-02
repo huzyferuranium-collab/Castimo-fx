@@ -1,0 +1,308 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { DocExistsError } from '../src/backend/firestoreAdmin.ts';
+import {
+  upgradeLedger, settlementAllowed, tradeNet, readClosedTrades, mergeDay, sumTrades, dayKey, dayKeysBetween, realizedState, shareOn, settleRealized, dailyNoticeText,
+} from '../src/backend/profitShareRealized.ts';
+import {
+  syncClosedTrades, settleClient, dailyUpdateFor, previousUtcDay, dailyWindowOpen,
+} from '../src/backend/profitShareRun.ts';
+
+const START = '2026-11-01T10:00:00.000Z';
+
+function pos(id: string, profit: number | null, closeTime: string | null, commission: number | null = null, swap: number | null = null): any {
+  return { id, symbol: 'EURUSD', side: 'BUY', volume: 0.1, openPrice: 1, closePrice: 1, stopLoss: null, takeProfit: null, profit, commission, swap, openTime: null, closeTime, rawOpenTime: null };
+}
+
+class FakeStore {
+  docs = new Map<string, any>();
+  writes = 0;
+  async getDoc(c: string, id: string) {
+    const d = this.docs.get(`${c}/${id}`);
+    return d ? structuredClone(d) : null;
+  }
+  async setDoc(c: string, id: string, data: Record<string, unknown>) {
+    this.writes++;
+    this.docs.set(`${c}/${id}`, structuredClone(data));
+  }
+  async createDoc(c: string, id: string, data: Record<string, unknown>) {
+    if (this.docs.has(`${c}/${id}`)) throw new DocExistsError();
+    this.writes++;
+    this.docs.set(`${c}/${id}`, structuredClone(data));
+  }
+}
+
+const ledger0 = () => ({ userId: 'u1', currency: 'USD', startEquity: 1000, hwm: 1000, settledThrough: START, createdAt: START });
+const ctx = (nowIso: string) => ({ accountLogin: '5012345', equity: 1100, treasury: 'TTreasury', feePct: 50, dueHours: 24, now: new Date(nowIso) });
+
+// ---------- pure parts ----------
+
+test('a trade result is profit + commission + swap, and unknown profit is never guessed', () => {
+  assert.equal(tradeNet({ profit: 120, commission: -2, swap: -1 }), 117);
+  assert.equal(tradeNet({ profit: 10, commission: null, swap: null }), 10);
+  assert.equal(tradeNet({ profit: -5.5, commission: -0.5, swap: 0 }), -6);
+  assert.equal(tradeNet({ profit: null, commission: -2, swap: 0 }), null);
+});
+
+test('only trades closed after the ledger started are taken, grouped by GMT day', () => {
+  const r = readClosedTrades(
+    [pos('old', 999, '2026-11-01T09:00:00Z'), pos('exact', 5, START), pos('a', 10, '2026-11-02T23:59:59Z'), pos('b', 20, '2026-11-03T00:00:01Z')],
+    START
+  );
+  assert.equal(r.counted, 2);
+  assert.equal(r.unreadable, 0);
+  assert.deepEqual([...r.byDay.keys()].sort(), ['20261102', '20261103']);
+  assert.equal(r.byDay.get('20261102')!['a'].net, 10);
+});
+
+test('a trade closed after the start whose result or close time is unreadable is counted as unreadable', () => {
+  const r = readClosedTrades([pos('x', null, '2026-11-02T10:00:00Z'), pos('y', 5, null), pos('before', null, '2026-10-30T10:00:00Z')], START);
+  assert.equal(r.unreadable, 2); // the unreadable trade from before the start does not matter
+  assert.equal(r.counted, 0);
+});
+
+test('merging never changes or doubles a trade that is already stored', () => {
+  const first = mergeDay(null, { t1: { net: 10, closeTime: '2026-11-02T10:00:00.000Z' } });
+  assert.equal(first.added, 1);
+  const second = mergeDay(first.merged, { t1: { net: 999, closeTime: '2026-11-02T10:00:00.000Z' }, t2: { net: 5, closeTime: '2026-11-02T11:00:00.000Z' } });
+  assert.equal(second.added, 1);
+  assert.equal(second.merged.t1.net, 10);
+  assert.equal(second.merged.t2.net, 5);
+});
+
+test('period sums include the end and exclude the start', () => {
+  const day = {
+    a: { net: 10, closeTime: '2026-11-02T10:00:00.000Z' },
+    b: { net: 20, closeTime: '2026-11-03T10:00:00.000Z' },
+    c: { net: 40, closeTime: '2026-11-04T10:00:00.000Z' },
+  };
+  assert.deepEqual(sumTrades([day], '2026-11-02T10:00:00.000Z', '2026-11-04T10:00:00.000Z'), { pnl: 60, trades: 2 });
+  assert.deepEqual(sumTrades([day, null, undefined], '2026-11-01T00:00:00.000Z', '2026-11-05T00:00:00.000Z'), { pnl: 70, trades: 3 });
+});
+
+test('day keys', () => {
+  assert.equal(dayKey('2026-11-02T23:59:59Z'), '20261102');
+  assert.deepEqual(dayKeysBetween('2026-11-01T22:00:00Z', '2026-11-03T01:00:00Z'), ['20261101', '20261102', '20261103']);
+  assert.deepEqual(dayKeysBetween('2026-11-03T00:00:00Z', '2026-11-01T00:00:00Z'), []);
+});
+
+test('50% of new profit; nothing while a loss is being recovered; the mark moves only when a fee is invoiced', () => {
+  let s = realizedState({});
+  let r = settleRealized(s, 147, 50);
+  assert.deepEqual([r.gain, r.fee, r.invoiceable, r.next], [147, 73.5, true, { pnlCum: 147, pnlHwm: 147 }]);
+  s = r.next;
+  r = settleRealized(s, -40, 50);
+  assert.deepEqual([r.gain, r.fee, r.invoiceable, r.next], [0, 0, false, { pnlCum: 107, pnlHwm: 147 }]);
+  s = r.next;
+  r = settleRealized(s, 30, 50); // 137: still below 147
+  assert.equal(r.fee, 0);
+  s = r.next;
+  r = settleRealized(s, 70, 50); // 207: 60 above the mark
+  assert.deepEqual([r.gain, r.fee, r.invoiceable, r.next], [60, 30, true, { pnlCum: 207, pnlHwm: 207 }]);
+});
+
+test('a fee under $1 rolls into the next period instead of being lost or billed as dust', () => {
+  let r = settleRealized(realizedState({}), 1.5, 50);
+  assert.equal(r.fee, 0.75);
+  assert.equal(r.invoiceable, false);
+  assert.deepEqual(r.next, { pnlCum: 1.5, pnlHwm: 0 });
+  r = settleRealized(r.next, 1, 50);
+  assert.equal(r.gain, 2.5);
+  assert.equal(r.fee, 1.25);
+  assert.equal(r.invoiceable, true);
+});
+
+test('bad numbers are refused', () => {
+  assert.throws(() => shareOn({ pnlCum: 0, pnlHwm: 0 }, NaN, 50));
+  assert.throws(() => shareOn({ pnlCum: 0, pnlHwm: 0 }, 10, 101));
+  assert.deepEqual(realizedState({ pnlCum: NaN as any }), { pnlCum: 0, pnlHwm: 0 });
+});
+
+test('the daily text uses only the stored figures', () => {
+  const base = { date: '2026-11-03', feePct: 50, periodPnl: 0, shareSoFarUsdt: 0, dayPnl: 0, dayTrades: 0 };
+  assert.equal(dailyNoticeText({ ...base, dayTrades: 3, dayPnl: 38.2, periodPnl: 38.2, shareSoFarUsdt: 19.1, nextSettlementAt: '2026-11-08T10:00:00Z' }).message,
+    'On 3 Nov (GMT) 3 trades closed: +$38.20. Your 50% share of the new profit so far this period is $19.10, invoiced around 8 Nov.');
+  assert.equal(dailyNoticeText({ ...base, dayTrades: 1, dayPnl: -12, periodPnl: -12 }).message,
+    'On 3 Nov (GMT) 1 trade closed: -$12.00. Nothing is due: any loss is recovered before a new share is charged.');
+  assert.equal(dailyNoticeText(base).message, 'No trades closed on 3 Nov (GMT). Nothing is due yet.');
+  assert.equal(dailyNoticeText(base).title, 'Profit Share update');
+});
+
+test('the daily run window opens at 00:15 GMT and reports the day before', () => {
+  assert.equal(dailyWindowOpen(new Date('2026-11-03T00:14:59Z')), false);
+  assert.equal(dailyWindowOpen(new Date('2026-11-03T00:15:00Z')), true);
+  assert.equal(dailyWindowOpen(new Date('2026-11-03T18:00:00Z')), true);
+  assert.equal(dayKey(previousUtcDay(new Date('2026-11-03T00:20:00Z'))), '20261102');
+  assert.equal(dayKey(previousUtcDay(new Date('2026-11-01T05:00:00Z'))), '20261031');
+  assert.equal(dayKey(previousUtcDay(new Date('2027-01-01T05:00:00Z'))), '20261231');
+});
+
+// ---------- the whole flow, with fakes ----------
+
+test('syncing stores each closed trade once, however often it is repeated', async () => {
+  const store = new FakeStore();
+  const list = [pos('t1', 120, '2026-11-02T09:00:00Z'), pos('t2', -20, '2026-11-03T09:00:00Z', -2)];
+  const deps = { store, fetchClosed: async () => ({ positions: list, skipped: 0 }) };
+  const a = await syncClosedTrades(deps, 'u1', START);
+  assert.deepEqual(a, { ok: true, reason: '', added: 2, skippedRows: 0 });
+  const writes = store.writes;
+  const b = await syncClosedTrades(deps, 'u1', START);
+  assert.deepEqual(b, { ok: true, reason: '', added: 0, skippedRows: 0 });
+  assert.equal(store.writes, writes); // nothing rewritten
+});
+
+test('syncing stores nothing when a trade cannot be read, or the service is unreachable, or there is no account', async () => {
+  const store = new FakeStore();
+  const bad = await syncClosedTrades({ store, fetchClosed: async () => ({ positions: [pos('t1', 50, '2026-11-02T09:00:00Z'), pos('t2', null, '2026-11-02T10:00:00Z')], skipped: 0 }) }, 'u1', START);
+  assert.equal(bad.ok, false);
+  assert.equal(store.docs.size, 0);
+  const down = await syncClosedTrades({ store, fetchClosed: async () => { throw new Error('busy'); } }, 'u1', START);
+  assert.equal(down.ok, false);
+  const none = await syncClosedTrades({ store, fetchClosed: async () => null }, 'u1', START);
+  assert.equal(none.ok, false);
+  assert.equal(store.docs.size, 0);
+});
+
+test('three periods: invoice 50% of new profit, nothing while recovering, then invoice again above the old high', async () => {
+  const store = new FakeStore();
+  let all = [
+    pos('before', 999, '2026-11-01T09:00:00Z'), // closed before the account was connected: never billed
+    pos('t1', 120, '2026-11-02T09:00:00Z'),
+    pos('t2', -20, '2026-11-03T09:00:00Z', -2),
+    pos('t3', 50, '2026-11-05T09:00:00Z', null, -1),
+  ];
+  const deps = { store, fetchClosed: async () => ({ positions: all, skipped: 0 }) };
+
+  // period 1: 120 + (-22) + 49 = 147 -> fee 73.50
+  const o1 = await settleClient(deps, ledger0(), ctx('2026-11-08T10:00:00.000Z'));
+  assert.equal(o1.kind, 'settled');
+  if (o1.kind !== 'settled') return;
+  assert.equal(o1.periodPnl, 147);
+  assert.equal(o1.trades, 3);
+  assert.ok(o1.invoice);
+  assert.equal(o1.invoice!.amountDueUsdt, 73.5);
+  assert.equal(o1.invoice!.grossProfit, 147);
+  assert.equal(o1.invoice!.feePct, 50);
+  assert.equal(o1.invoice!.flows, 0);
+  assert.equal(o1.invoice!.basis, 'closed_trades');
+  assert.equal(o1.invoice!.status, 'pending');
+  assert.equal(o1.invoice!.dueAt, '2026-11-09T10:00:00.000Z');
+  assert.equal(o1.invoice!.periodStart, START);
+  assert.equal(o1.invoice!.id, 'inv-u1-20261108');
+  assert.deepEqual([o1.ledger.pnlCum, o1.ledger.pnlHwm, o1.ledger.settledThrough, o1.ledger.lastInvoiceId], [147, 147, '2026-11-08T10:00:00.000Z', 'inv-u1-20261108']);
+  assert.ok(store.docs.get('profit_invoices/inv-u1-20261108'));
+  assert.deepEqual(store.docs.get('client_ledgers/u1').pnlHwm, 147);
+
+  // period 2: -100 + 60 = -40 -> nothing to pay, the high-water mark stays at 147
+  all = [...all, pos('t4', -100, '2026-11-10T09:00:00Z'), pos('t5', 60, '2026-11-12T09:00:00Z')];
+  const o2 = await settleClient(deps, o1.ledger, ctx('2026-11-15T10:00:00.000Z'));
+  assert.equal(o2.kind, 'settled');
+  if (o2.kind !== 'settled') return;
+  assert.equal(o2.invoice, null);
+  assert.equal(o2.periodPnl, -40);
+  assert.deepEqual([o2.ledger.pnlCum, o2.ledger.pnlHwm], [107, 147]);
+  assert.equal([...store.docs.keys()].filter((k) => k.startsWith('profit_invoices/')).length, 1);
+
+  // period 3: +100 -> cumulative 207, which is 60 above the old high -> fee 30 (earlier profit is not billed twice)
+  all = [...all, pos('t6', 100, '2026-11-18T09:00:00Z')];
+  const o3 = await settleClient(deps, o2.ledger, ctx('2026-11-22T10:00:00.000Z'));
+  assert.equal(o3.kind, 'settled');
+  if (o3.kind !== 'settled') return;
+  assert.equal(o3.invoice!.amountDueUsdt, 30);
+  assert.equal(o3.invoice!.grossProfit, 60);
+  assert.deepEqual([o3.ledger.pnlCum, o3.ledger.pnlHwm], [207, 207]);
+});
+
+test('a period that cannot be read is not billed and the ledger does not move', async () => {
+  const store = new FakeStore();
+  const deps = { store, fetchClosed: async () => ({ positions: [pos('t1', 100, '2026-11-02T09:00:00Z'), pos('t2', null, '2026-11-03T09:00:00Z')], skipped: 0 }) };
+  const o = await settleClient(deps, ledger0(), ctx('2026-11-08T10:00:00.000Z'));
+  assert.equal(o.kind, 'skipped');
+  assert.equal(store.docs.size, 0);
+});
+
+test('running the same settlement twice cannot create a second invoice', async () => {
+  const store = new FakeStore();
+  const deps = { store, fetchClosed: async () => ({ positions: [pos('t1', 200, '2026-11-02T09:00:00Z')], skipped: 0 }) };
+  const first = await settleClient(deps, ledger0(), ctx('2026-11-08T10:00:00.000Z'));
+  const again = await settleClient(deps, ledger0(), ctx('2026-11-08T10:00:00.000Z')); // e.g. a restart before the ledger was saved
+  assert.equal(first.kind, 'settled');
+  assert.equal(again.kind, 'settled');
+  assert.equal([...store.docs.keys()].filter((k) => k.startsWith('profit_invoices/')).length, 1);
+  assert.equal(store.docs.get('profit_invoices/inv-u1-20261108').amountDueUsdt, 100);
+});
+
+test('money moved in or out of the account cannot change the bill (only closed trades are read)', async () => {
+  const mk = (equity: number) => ({ store: new FakeStore(), fetchClosed: async () => ({ positions: [pos('t1', 80, '2026-11-02T09:00:00Z')], skipped: 3 }) , equity });
+  const a = mk(1100);
+  const b = mk(5000); // the client deposited a lot
+  const oa = await settleClient(a, ledger0(), { ...ctx('2026-11-08T10:00:00.000Z'), equity: a.equity });
+  const ob = await settleClient(b, ledger0(), { ...ctx('2026-11-08T10:00:00.000Z'), equity: b.equity });
+  assert.equal(oa.kind === 'settled' && oa.invoice!.amountDueUsdt, 40);
+  assert.equal(ob.kind === 'settled' && ob.invoice!.amountDueUsdt, 40);
+});
+
+test('daily update: the day, the period so far, and the share so far; written once', async () => {
+  const store = new FakeStore();
+  const deps = {
+    store,
+    fetchClosed: async () => ({
+      positions: [pos('t1', 120, '2026-11-02T09:00:00Z'), pos('t2', -20, '2026-11-03T09:00:00Z', -2), pos('t3', 50, '2026-11-05T09:00:00Z')],
+      skipped: 0,
+    }),
+  };
+  const c = { feePct: 50, periodDays: 7, dayIso: '2026-11-03T12:00:00.000Z', now: new Date('2026-11-04T00:20:00Z') };
+  assert.equal(await dailyUpdateFor(deps, ledger0(), c), 'created');
+  const d = store.docs.get('ps_daily/u1_20261103');
+  assert.equal(d.date, '2026-11-03');
+  assert.equal(d.dayTrades, 1);
+  assert.equal(d.dayPnl, -22);
+  assert.equal(d.periodPnl, 98); // 120 - 22, up to the end of 3 Nov (the 5 Nov trade is not included yet)
+  assert.equal(d.shareSoFarUsdt, 49);
+  assert.equal(d.nextSettlementAt, '2026-11-08T10:00:00.000Z');
+  assert.equal(d.userId, 'u1');
+  const writes = store.writes;
+  assert.equal(await dailyUpdateFor(deps, ledger0(), c), 'exists');
+  assert.equal(store.writes, writes);
+});
+
+test('daily update: a quiet day still gets an update; days before the account was connected, or unreadable data, get none', async () => {
+  const store = new FakeStore();
+  const deps = { store, fetchClosed: async () => ({ positions: [pos('t1', 40, '2026-11-02T09:00:00Z')], skipped: 0 }) };
+  const base = { feePct: 50, periodDays: 7, now: new Date('2026-11-04T00:20:00Z') };
+
+  assert.equal(await dailyUpdateFor(deps, ledger0(), { ...base, dayIso: '2026-11-03T12:00:00.000Z' }), 'created');
+  const quiet = store.docs.get('ps_daily/u1_20261103');
+  assert.equal(quiet.dayTrades, 0);
+  assert.equal(quiet.dayPnl, 0);
+  assert.equal(quiet.periodPnl, 40);
+  assert.equal(quiet.shareSoFarUsdt, 20);
+
+  const early = await dailyUpdateFor(deps, ledger0(), { ...base, dayIso: '2026-10-31T12:00:00.000Z' });
+  assert.equal(early, 'before_start');
+  assert.equal(store.docs.has('ps_daily/u1_20261031'), false);
+
+  const broken = { store, fetchClosed: async () => ({ positions: [pos('t9', null, '2026-11-02T20:00:00Z')], skipped: 0 }) };
+  const out = await dailyUpdateFor(broken, ledger0(), { ...base, dayIso: '2026-11-02T12:00:00.000Z' });
+  assert.ok(typeof out === 'object' && 'skipped' in out);
+  assert.equal(store.docs.has('ps_daily/u1_20261102'), false);
+});
+
+test('a ledger from before closed-trade billing starts at 0 and waits 2 days for its first invoice; new ledgers are untouched', () => {
+  const now = Date.parse('2026-11-10T10:00:00.000Z');
+  const old = { userId: 'u1', settledThrough: START };
+  const up = upgradeLedger(old, now);
+  assert.equal(up.changed, true);
+  assert.deepEqual([up.ledger.pnlCum, up.ledger.pnlHwm, up.ledger.settleAfter], [0, 0, '2026-11-12T10:00:00.000Z']);
+  assert.equal(settlementAllowed(up.ledger, now), false);
+  assert.equal(settlementAllowed(up.ledger, Date.parse('2026-11-12T09:59:59.000Z')), false);
+  assert.equal(settlementAllowed(up.ledger, Date.parse('2026-11-12T10:00:00.000Z')), true);
+
+  const fresh = { userId: 'u2', pnlCum: 0, pnlHwm: 0 };
+  const same = upgradeLedger(fresh, now);
+  assert.equal(same.changed, false);
+  assert.equal(same.ledger, fresh);
+  assert.equal(settlementAllowed(fresh, now), true);
+  // upgrading twice does not push the date back
+  assert.equal(upgradeLedger(up.ledger, now + 5 * 86_400_000).changed, false);
+});

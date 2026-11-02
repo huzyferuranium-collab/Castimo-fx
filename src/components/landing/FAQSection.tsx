@@ -24,7 +24,14 @@ const FAQ_ITEMS: FAQItem[] = [
     category: 'profit_share',
     question: 'How does the 50% profit share work?',
     answer:
-      'Choose a flat $100 monthly plan or the 50% Profit Share. With Profit Share nothing is paid upfront: we earn only on new net profit above your previous high-water mark. If there is no new profit, you owe nothing. Deposits and withdrawals never count as profit.',
+      'Choose a flat $100 monthly plan or the 50% Profit Share. With Profit Share nothing is paid upfront: we earn only on the new net profit of trades that have closed, above your previous high-water mark. Losses are recovered before anything is charged, and if there is no new profit you owe nothing. Open trades are not charged until they close, and deposits and withdrawals never count as profit.',
+  },
+  {
+    id: 'ps-daily-update',
+    category: 'profit_share',
+    question: 'Will I be told how my profit share is building up?',
+    answer:
+      'Yes. Every day after midnight GMT, a Profit Share update appears in your notifications: the trades that closed the day before, the net result for the period so far, and your 50% share so far. Invoices are made at the end of each period, and you have 24 hours to pay.',
   },
   {
     id: 'ps-24h-window',
