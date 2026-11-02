@@ -77,8 +77,8 @@ export const TradeBars: React.FC<{ trades: CopiedTrade[]; max?: number }> = ({ t
 export const SideDonut: React.FC<{ trades: CopiedTrade[]; size?: number }> = ({ trades, size = 112 }) => {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
   const buys = trades.filter((t) => t.direction === 'BUY').length;
-  const sells = trades.length - buys;
-  const n = trades.length || 1;
+  const sells = trades.filter((t) => t.direction === 'SELL').length;
+  const n = buys + sells || 1;
   const b = buys / n;
   const gap = buys > 0 && sells > 0 ? 0.02 : 0;
 

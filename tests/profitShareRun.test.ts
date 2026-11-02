@@ -55,6 +55,18 @@ test('only trades closed after the ledger started are taken, grouped by GMT day'
   assert.equal(r.byDay.get('20261102')!['a'].net, 10);
 });
 
+test('billing refuses to go on when a real trade in the answer could not be read, instead of leaving it out', async () => {
+  const store = new FakeStore();
+  const deps = { store, fetchClosed: async () => ({ positions: [pos('t1', 50, '2026-11-02T09:00:00Z')], skipped: 1, skippedTrades: 1 }) };
+  const r = await syncClosedTrades(deps, 'u1', START);
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /1 closed trade\(s\) could not be read/);
+  assert.equal(store.writes, 0, 'nothing is stored or billed on a partial reading');
+  // lines that are not trades (a deposit, say) do not stop billing
+  const ok = await syncClosedTrades({ store, fetchClosed: async () => ({ positions: [pos('t1', 50, '2026-11-02T09:00:00Z')], skipped: 2, skippedTrades: 0 }) }, 'u1', START);
+  assert.equal(ok.ok, true);
+});
+
 test('a trade closed after the start whose result or close time is unreadable is counted as unreadable', () => {
   const r = readClosedTrades([pos('x', null, '2026-11-02T10:00:00Z'), pos('y', 5, null), pos('before', null, '2026-10-30T10:00:00Z')], START);
   assert.equal(r.unreadable, 2); // the unreadable trade from before the start does not matter

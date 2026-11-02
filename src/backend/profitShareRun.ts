@@ -64,6 +64,11 @@ export async function syncClosedTrades(deps: RunDeps, userId: string, sinceIso: 
   }
   if (!result) return { ok: false, reason: 'the account is not connected at the copier service', added: 0, skippedRows: 0 };
 
+  // A row that names a symbol and a size is a real trade. If it could not be read at all (no id) it must not be left out
+  // silently: the client is not billed until it can be read. Lines that are not trades (a deposit, say) are not counted here.
+  if ((result.skippedTrades ?? 0) > 0) {
+    return { ok: false, reason: `${result.skippedTrades} closed trade(s) could not be read (no trade id)`, added: 0, skippedRows: result.skipped };
+  }
   const read = readClosedTrades(result.positions, sinceIso);
   if (read.unreadable > 0) {
     return { ok: false, reason: `${read.unreadable} closed trade(s) have no readable profit or close time`, added: 0, skippedRows: 0 };

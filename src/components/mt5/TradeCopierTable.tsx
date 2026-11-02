@@ -109,6 +109,7 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
         ) : (
           filteredTrades.map((trade) => {
             const isBuy = trade.direction === 'BUY';
+            const hasSide = trade.direction === 'BUY' || trade.direction === 'SELL';
             const isProfit = trade.pnl >= 0;
 
             return (
@@ -119,17 +120,17 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
                       className={`inline-flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold ${
                         isBuy
                           ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                          : hasSide ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30' : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
                       }`}
                     >
-                      {isBuy ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+                      {isBuy ? <ArrowUpRight className="w-4 h-4" /> : hasSide ? <ArrowDownRight className="w-4 h-4" /> : <span>–</span>}
                     </span>
                     <div>
                       <div className="flex items-center gap-1.5">
                         <span className="font-mono font-bold text-white text-sm">{trade.symbol}</span>
                         <span
                           className={`text-[10px] font-bold uppercase px-1.5 py-0.2 rounded ${
-                            isBuy ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'
+                            isBuy ? 'text-emerald-400 bg-emerald-500/10' : hasSide ? 'text-rose-400 bg-rose-500/10' : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
                           }`}
                         >
                           {trade.direction} {trade.volume.toFixed(2)}L
@@ -217,6 +218,7 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
             ) : (
               filteredTrades.map((trade) => {
                 const isBuy = trade.direction === 'BUY';
+            const hasSide = trade.direction === 'BUY' || trade.direction === 'SELL';
                 const isProfit = trade.pnl >= 0;
 
                 return (
@@ -241,14 +243,10 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold ${
                           isBuy
                             ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                            : hasSide ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
                         }`}
                       >
-                        {isBuy ? (
-                          <TrendingUp className="w-3 h-3" />
-                        ) : (
-                          <TrendingDown className="w-3 h-3" />
-                        )}
+                        {isBuy ? <TrendingUp className="w-3 h-3" /> : hasSide ? <TrendingDown className="w-3 h-3" /> : <span>–</span>}
                         {trade.direction}
                       </span>
                     </td>

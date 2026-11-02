@@ -204,6 +204,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
         ) : (
           filteredTrades.map((trade) => {
             const isBuy = trade.direction === 'BUY';
+            const hasSide = trade.direction === 'BUY' || trade.direction === 'SELL';
             const isProfit = trade.pnl >= 0;
             const openTimeFormatted = formatTimestamp(trade.openTime);
             const closeTimeFormatted = trade.closeTime ? formatTimestamp(trade.closeTime) : null;
@@ -216,17 +217,17 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
                       className={`inline-flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold ${
                         isBuy
                           ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                          : hasSide ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30' : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
                       }`}
                     >
-                      {isBuy ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+                      {isBuy ? <ArrowUpRight className="w-4 h-4" /> : hasSide ? <ArrowDownRight className="w-4 h-4" /> : <span>–</span>}
                     </span>
                     <div>
                       <div className="flex items-center gap-1.5">
                         <span className="font-mono font-bold text-white text-sm">{trade.symbol}</span>
                         <span
                           className={`text-[10px] font-bold uppercase px-1.5 py-0.2 rounded ${
-                            isBuy ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'
+                            isBuy ? 'text-emerald-400 bg-emerald-500/10' : hasSide ? 'text-rose-400 bg-rose-500/10' : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
                           }`}
                         >
                           {trade.direction} {trade.volume.toFixed(2)}L
@@ -298,6 +299,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
             ) : (
               filteredTrades.map((trade) => {
                 const isBuy = trade.direction === 'BUY';
+            const hasSide = trade.direction === 'BUY' || trade.direction === 'SELL';
                 const isProfit = trade.pnl >= 0;
                 const openTimeFormatted = formatTimestamp(trade.openTime);
                 const closeTimeFormatted = trade.closeTime ? formatTimestamp(trade.closeTime) : null;
@@ -311,16 +313,16 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
                           className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold ${
                             isBuy
                               ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                              : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                              : hasSide ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40' : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
                           }`}
                         >
-                          {isBuy ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                          {isBuy ? <ArrowUpRight className="w-3.5 h-3.5" /> : hasSide ? <ArrowDownRight className="w-3.5 h-3.5" /> : <span>–</span>}
                         </span>
                         <div>
                           <span className="font-bold text-white text-xs">{trade.symbol}</span>
                           <span
                             className={`ml-1.5 text-[9px] font-bold uppercase px-1.5 py-0.2 rounded ${
-                              isBuy ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'
+                              isBuy ? 'text-emerald-400 bg-emerald-500/10' : hasSide ? 'text-rose-400 bg-rose-500/10' : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
                             }`}
                           >
                             {trade.direction}

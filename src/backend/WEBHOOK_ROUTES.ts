@@ -600,7 +600,7 @@ tradeRouter.get('/my-trades', requireUser, async (req: Request, res: Response) =
       id: p.id,
       masterTradeId: '',
       symbol: p.symbol,
-      direction: p.side,
+      direction: p.side ?? '',
       volume: p.volume,
       openPrice: p.openPrice ?? 0,
       currentPrice: status === 'CLOSED' ? p.closePrice ?? 0 : 0,

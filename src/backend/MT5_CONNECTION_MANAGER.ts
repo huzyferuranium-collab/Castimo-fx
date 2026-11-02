@@ -159,7 +159,7 @@ interface ReadResult {
 export interface MasterTrade {
   id: string;
   symbol: string;
-  side: 'BUY' | 'SELL';
+  side: 'BUY' | 'SELL' | null;
   volume: number;
   openPrice: number | null;
   openedAt: string | null;
@@ -1303,12 +1303,13 @@ export class Mt5ConnectionManager {
    */
   private noteUnreadTrades(who: string, accountId: string, res: PositionsResult, reportedOpen: number | null | undefined): void {
     const missing = res.positions.length === 0 && typeof reportedOpen === 'number' && reportedOpen > 0;
-    if (!res.skipped && !missing) return;
+    const noSide = res.positions.filter((p) => p.side === null).length;
+    if (!res.skipped && !missing && !noSide) return;
     const last = this.unreadNotedAt.get(accountId) ?? 0;
     if (Date.now() - last < 10 * 60_000) return;
     this.unreadNotedAt.set(accountId, Date.now());
     console.warn(
-      `⚠️ [COPIER] Open trades of ${who} not fully read: ${res.positions.length} read, ${res.skipped} unreadable` +
+      `⚠️ [COPIER] Open trades of ${who} not fully read: ${res.positions.length} read${noSide ? ` (${noSide} without a readable buy/sell)` : ''}, ${res.skipped} unreadable` +
         (typeof reportedOpen === 'number' ? `, the account list says ${reportedOpen} open` : '') +
         `. The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 900)}`
     );
@@ -1562,11 +1563,11 @@ export class Mt5ConnectionManager {
             (reported !== null ? ` (the account list says ${reported} open)` : '') +
             '.' +
             (first
-              ? ` First: ${first.side} ${first.volume} ${first.symbol}, opened "${first.rawOpenTime ?? 'no time'}" (check this matches your master's time zone).`
+              ? ` First: ${first.side ?? '(buy/sell not readable)'} ${first.volume} ${first.symbol}, opened "${first.rawOpenTime ?? 'no time'}" (check this matches your master's time zone).`
               : missing
               ? ' Trades are open but could not be read, so they will not show on the dashboard.'
               : ' None open right now, so the trade format is not yet confirmed.') +
-            (missing || res.skipped ? ` The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 900)}` : '')
+            (missing || res.skipped || res.positions.some((p) => p.side === null) ? ` The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 900)}` : '')
         );
       } catch (e: any) {
         add('Master open trades', false, `${String(e?.message || e)} Trades will not show on the dashboard until this works.`);

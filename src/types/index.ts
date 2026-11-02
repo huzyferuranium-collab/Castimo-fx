@@ -145,7 +145,8 @@ export interface CopiedTrade {
   id: string;
   masterTradeId: string;
   symbol: string;
-  direction: 'BUY' | 'SELL';
+  /** Empty when the copier service did not say buy or sell in a way we can be sure of. */
+  direction: 'BUY' | 'SELL' | '';
   volume: number;
   openPrice: number;
   currentPrice: number;

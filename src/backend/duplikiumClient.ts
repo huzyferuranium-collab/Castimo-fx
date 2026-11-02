@@ -84,7 +84,8 @@ export interface DuplikiumAccount {
 export interface DuplikiumPosition {
   id: string;
   symbol: string;
-  side: 'BUY' | 'SELL';
+  /** Null when the answer does not say buy or sell in words we can be sure of: the trade is still listed, without a direction. */
+  side: 'BUY' | 'SELL' | null;
   volume: number;
   openPrice: number | null;
   closePrice: number | null;
@@ -103,6 +104,8 @@ export interface PositionsResult {
   positions: DuplikiumPosition[];
   /** Entries that could not be read (for example no recognisable buy/sell). They are left out, never invented. */
   skipped: number;
+  /** Of the skipped entries, those that name a symbol and a size: real trades whose details could not be read (not, say, a deposit line). Billing refuses to go on without them. */
+  skippedTrades?: number;
   /** What the answer looked like (field names and kinds only), for the logs when something could not be read. Not enumerable. */
   readonly layout?: string;
 }
@@ -248,8 +251,8 @@ export function toIso(v: unknown): string | null {
 
 /**
  * Reads one open or closed position. Several spellings are accepted for each field because the position
- * calls are the least documented part of the service. A position without a recognisable id, symbol,
- * buy/sell side and size is rejected (null): it is left out rather than shown with made-up values.
+ * calls are the least documented part of the service. A position without a recognisable id, symbol and size is
+ * rejected (null). A side that is not written in words is left empty (null), never guessed.
  */
 const POS_ID_KEYS = ['ticket', 'position_id', 'positionId', 'position_ticket', 'order_id', 'orderId', 'order', 'position', 'id', 'trade_id', 'tradeId', 'deal', 'identifier'];
 const POS_SYMBOL_KEYS = ['symbol', 'instrument', 'pair', 'symbol_name', 'symbolName'];
@@ -297,7 +300,7 @@ export function normalizePosition(raw: any): DuplikiumPosition | null {
   const symbol = str(firstScalar(raw, POS_SYMBOL_KEYS));
   const side = readSide(firstScalar(raw, POS_SIDE_KEYS));
   const volume = num(firstScalar(raw, POS_VOLUME_KEYS));
-  if (!id || !symbol || !side || volume === null || volume <= 0) return null;
+  if (!id || !symbol || volume === null || volume <= 0) return null;
   const openRaw = firstDefined(raw, ['open_time', 'opentime', 'time_open', 'open_date', 'openTime', 'opened_at', 'openedAt', 'open_at', 'time']);
   const closeRaw = firstDefined(raw, ['close_time', 'closetime', 'time_close', 'close_date', 'closeTime', 'closed_at', 'closedAt']);
   return {
@@ -386,17 +389,20 @@ export function readPositions(json: any, opts: ReadPositionsOptions = {}): Posit
   const positions: DuplikiumPosition[] = [];
   const seen = new Set<string>();
   let skipped = 0;
+  let skippedTrades = 0;
   for (const raw of list) {
     const owner = raw && typeof raw === 'object' ? str(firstScalar(raw, POS_ACCOUNT_KEYS)) : '';
     if (opts.accountId && owner && owner !== String(opts.accountId)) continue; // another account's trade: never shown here
     const p = normalizePosition(raw);
-    if (!p) skipped++;
-    else if (!seen.has(p.id)) {
+    if (!p) {
+      skipped++;
+      if (looksLikePosition(raw) && (num(firstScalar(raw, POS_VOLUME_KEYS)) ?? 0) > 0) skippedTrades++;
+    } else if (!seen.has(p.id)) {
       seen.add(p.id);
       positions.push(p);
     }
   }
-  const result: PositionsResult = { positions, skipped };
+  const result: PositionsResult = { positions, skipped, skippedTrades };
   // Kept beside the result (not enumerable) so a caller can describe an answer it could not fully read.
   Object.defineProperty(result, 'layout', { value: describeAnswer(json), enumerable: false });
   return result;

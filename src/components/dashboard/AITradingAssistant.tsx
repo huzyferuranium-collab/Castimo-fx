@@ -6,9 +6,10 @@ export type ConsoleState = 'SEARCHING' | 'TRADE' | 'NO_TRADE' | 'UNAVAILABLE';
 export interface MasterTrade {
   id: string;
   symbol: string;
-  side: 'BUY' | 'SELL';
+  /** Null when the service did not say buy or sell in a way we can be sure of. */
+  side: 'BUY' | 'SELL' | null;
   volume: number;
-  openPrice: number;
+  openPrice: number | null;
   openedAt: string | null;
 }
 
@@ -51,7 +52,7 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, t
   const first = trades[0];
   const isSignal = state === 'TRADE' && !!first;
   const isAnalyzing = state === 'SEARCHING';
-  const signal = isSignal ? first.side : null;
+  const signal = isSignal ? first.side : null; // null: no trade, or a trade whose direction is not readable
   const statusLabel =
     state === 'TRADE' ? 'TRADE FOUND' : state === 'NO_TRADE' ? 'NO ACTIVE TRADE' : state === 'UNAVAILABLE' ? 'DATA UNAVAILABLE' : 'SEARCHING';
   const symbol = first?.symbol || '';
@@ -262,16 +263,18 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, t
 
           {/* Trade found (replaces the old confidence figure) */}
           <div className="flex items-center gap-1.5 shrink-0">
-            {isSignal && signal ? (
+            {isSignal ? (
               <span
                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-black border ${
                   signal === 'BUY'
                     ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/40'
-                    : 'bg-rose-500/20 text-rose-600 dark:text-rose-300 border-rose-500/40'
+                    : signal === 'SELL'
+                    ? 'bg-rose-500/20 text-rose-600 dark:text-rose-300 border-rose-500/40'
+                    : 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/40'
                 }`}
               >
-                {signal === 'BUY' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                <span>TRADE FOUND {signal}</span>
+                {signal === 'BUY' ? <ArrowUpRight className="w-3 h-3" /> : signal === 'SELL' ? <ArrowDownRight className="w-3 h-3" /> : <Zap className="w-3 h-3" />}
+                <span>TRADE FOUND{signal ? ` ${signal}` : ''}</span>
               </span>
             ) : (
               <span className="flex items-center gap-1 text-[11px] font-bold text-slate-500 dark:text-slate-400">
@@ -286,9 +289,9 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, t
           <ul className="space-y-1 pt-0.5">
             {trades.map((t) => (
               <li key={t.id} className="flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-300">
-                <span className={t.side === 'SELL' ? 'font-bold text-rose-500' : 'font-bold text-emerald-500'}>{t.side}</span>
+                <span className={t.side === 'SELL' ? 'font-bold text-rose-500' : t.side === 'BUY' ? 'font-bold text-emerald-500' : 'font-bold text-slate-400'}>{t.side ?? 'OPEN'}</span>
                 <span>{t.symbol}</span>
-                <span className="text-slate-500">{t.volume} lot @ {t.openPrice}</span>
+                <span className="text-slate-500">{t.volume} lot{t.openPrice !== null ? ` @ ${t.openPrice}` : ''}</span>
               </li>
             ))}
           </ul>

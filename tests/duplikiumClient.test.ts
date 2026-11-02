@@ -226,13 +226,14 @@ test('a position is read under several spellings; unreadable ones are skipped, n
     positions: [
       { ticket: 555, symbol: 'XAUUSD', type: 'Buy', volume: '0.10', open_price: '2650.5', profit: '12.3', commission: '-0.7', swap: '0', sl: 0, tp: '2700', open_time: '2026-10-30 08:15:00' },
       { position_id: 'p2', symbol: 'EURUSD', side: 'SELL', lots: 1, price_open: 1.1, close_price: 1.09, close_time: '2026-10-30T09:00:00Z', open_time: '2026-10-30T08:00:00Z' },
-      { ticket: 3, symbol: 'GBPUSD', volume: 1 }, // no buy/sell side
+      { ticket: 3, symbol: 'GBPUSD', volume: 1 }, // no buy/sell side: kept, without a direction
       { ticket: 4, symbol: 'GBPUSD', type: 'buy', volume: 0 }, // no size
       'junk',
     ],
   });
-  assert.equal(r.positions.length, 2);
-  assert.equal(r.skipped, 2, 'the two position rows without a side or a size; text that is not a row is ignored');
+  assert.equal(r.positions.length, 3);
+  assert.equal(r.positions[2].side, null);
+  assert.equal(r.skipped, 1, 'the row without a size; text that is not a row is ignored');
   const [a, b] = r.positions;
   assert.equal(a.id, '555');
   assert.equal(a.side, 'BUY');
@@ -251,8 +252,8 @@ test('the list of positions is found whatever it is called, and an empty answer 
   assert.equal(readPositions([{ ticket: 1, symbol: 'X', type: 'buy', volume: 1 }]).positions.length, 1);
   assert.equal(readPositions({ trades: [{ ticket: 1, symbol: 'X', type: 'sell', volume: 1 }] }).positions.length, 1);
   assert.equal(readPositions({ whatever: [{ ticket: 1, symbol: 'X', type: 'sell', volume: 1 }] }).positions.length, 1);
-  assert.deepEqual(readPositions({}), { positions: [], skipped: 0 });
-  assert.deepEqual(readPositions(null), { positions: [], skipped: 0 });
+  assert.deepEqual(readPositions({}), { positions: [], skipped: 0, skippedTrades: 0 });
+  assert.deepEqual(readPositions(null), { positions: [], skipped: 0, skippedTrades: 0 });
   assert.equal(normalizePosition({ ticket: 1, symbol: 'X', type: 'buy', volume: 'abc' }), null);
 });
 
@@ -288,8 +289,9 @@ test('buy or sell is read only from words; a number is never turned into a side'
   assert.equal(readSide(1), null);
   assert.equal(readSide('1'), null);
   const r = readPositions({ positions: [{ ticket: 9, symbol: 'XAUUSD', type: 1, volume: 0.03 }] });
-  assert.equal(r.positions.length, 0);
-  assert.equal(r.skipped, 1, 'counted as unreadable, so the dashboard says "could not be read", not "no trade"');
+  assert.equal(r.positions.length, 1, 'the trade is still listed');
+  assert.equal(r.positions[0].side, null, 'but without a direction: a number is not guessed');
+  assert.equal(r.skipped, 0);
 });
 
 test('an unreadable answer is described by field names and kinds only, with the side value shown', () => {
@@ -302,9 +304,23 @@ test('an unreadable answer is described by field names and kinds only, with the 
   assert.equal(describeAnswer({ error: null, list: [] }), '{error:null, list:[]}');
 });
 
+test('rows that are real trades but unreadable are counted apart from lines that are not trades', () => {
+  const r = readPositions({
+    positions: [
+      { ticket: 1, symbol: 'EURUSD', type: 'buy', volume: 1, profit: 5 },
+      { symbol: 'EURUSD', type: 'buy', volume: 1, profit: 7 }, // a trade with no id: cannot be stored once, so billing must not go on
+      { type: 'balance', profit: 100, comment: 'deposit' }, // not a trade
+      { ticket: 2, symbol: 'EURUSD', type: 'buy', volume: 0 }, // not a trade either (no size)
+    ],
+  });
+  assert.equal(r.positions.length, 1);
+  assert.equal(r.skipped, 3);
+  assert.equal(r.skippedTrades, 1);
+});
+
 test('getOpenPositions asks for one account', async () => {
   const { c, requests } = client({ 'access/getToken.php': TOKEN(1), 'position/getOpenPositions.php': { body: { positions: [] } } });
-  assert.deepEqual(await c.getOpenPositions('M1'), { positions: [], skipped: 0 });
+  assert.deepEqual(await c.getOpenPositions('M1'), { positions: [], skipped: 0, skippedTrades: 0 });
   assert.deepEqual(form(requests[1]), { account_id: 'M1' });
 });
 

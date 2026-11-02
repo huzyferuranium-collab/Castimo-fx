@@ -819,13 +819,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                     .slice(0, 4)
                     .map((t) => (
                       <li key={t.id} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-indigo-500/[0.06] transition">
-                        <IconTile tone={t.direction === 'BUY' ? 'mint' : 'ruby'} size="w-9 h-9">
-                          {t.direction === 'BUY' ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+                        <IconTile tone={t.direction === 'BUY' ? 'mint' : t.direction === 'SELL' ? 'ruby' : 'mint'} size="w-9 h-9">
+                          {t.direction === 'BUY' ? <ArrowUpRight className="w-4 h-4" /> : t.direction === 'SELL' ? <ArrowDownRight className="w-4 h-4" /> : <Activity className="w-4 h-4" />}
                         </IconTile>
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-bold text-slate-900 dark:text-white">{t.symbol}</div>
                           <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                            {t.direction} · {t.volume} lots · {t.status === 'OPEN' ? 'Open' : 'Closed'}
+                            {t.direction ? `${t.direction} · ` : ''}{t.volume} lots · {t.status === 'OPEN' ? 'Open' : 'Closed'}
                           </div>
                         </div>
                         <div className={`font-mono text-sm font-extrabold ${(t.pnl || 0) >= 0 ? '!text-emerald-600 dark:!text-emerald-300' : '!text-rose-600 dark:!text-rose-300'}`}>
