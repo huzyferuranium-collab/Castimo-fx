@@ -15,7 +15,7 @@ import { tradeRouter } from './src/backend/WEBHOOK_ROUTES';
 import { referralRouter } from './src/backend/REFERRAL_ROUTES';
 import { emailCodeRouter } from './src/backend/EMAIL_CODE_ROUTES';
 import { Mt5ConnectionManager } from './src/backend/MT5_CONNECTION_MANAGER';
-import { BillingService } from './src/backend/billing';
+import { BillingService, billingEnabled } from './src/backend/billing';
 import { buildAssetLinks } from './src/backend/assetLinks';
 import { securityHeaders } from './src/backend/securityHeaders';
 import { rateLimit, trustProxyHops, isReadOnly } from './src/backend/rateLimit';
@@ -131,6 +131,8 @@ async function startServer() {
         } else {
           console.warn('⚠️ [SERVER] FIREBASE_SERVICE_ACCOUNT is not set: connected accounts cannot be remembered across restarts.');
         }
+        // With billing on, nobody's payment standing is known until the first billing check: do not switch an unpaid client's copying back on at start-up.
+        connectionManager.holdCopyingUntilBillingKnown = billingEnabled();
         await connectionManager.initialize();
 
         BillingService.getInstance().start();

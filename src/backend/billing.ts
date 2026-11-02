@@ -13,42 +13,49 @@
  *
  * Money records live in Firestore and can only be written by this server (service account).
  */
-import { Mt5ConnectionManager, ClientConnectionRecord } from './MT5_CONNECTION_MANAGER';
+import { Mt5ConnectionManager, type ClientConnectionRecord } from './MT5_CONNECTION_MANAGER.ts';
 import {
-  ClientLedger,
+  type ClientLedger,
   DEFAULT_FEE_PCT,
   DEFAULT_INVOICE_DUE_HOURS,
-  Invoice,
+  type Invoice,
   isSettlementDue,
   round2,
-} from './profitShare';
-import { RunDeps, dailyUpdateFor, dailyWindowOpen, previousUtcDay, settleClient } from './profitShareRun';
-import { settlementAllowed, upgradeLedger } from './profitShareRealized';
-import { readLimit } from './brokerVerification';
-import { accrueCommissions, recordEvent } from './referralService';
-import { commissionBaseUsdt } from './referrals';
+} from './profitShare.ts';
+import { type RunDeps, dailyUpdateFor, dailyWindowOpen, previousUtcDay, settleClient } from './profitShareRun.ts';
+import { settlementAllowed, upgradeLedger } from './profitShareRealized.ts';
+import { readLimit } from './brokerVerification.ts';
+import { accrueCommissions, recordEvent } from './referralService.ts';
+import { commissionBaseUsdt } from './referrals.ts';
 import {
   DEFAULT_SUBSCRIPTION_PERIOD_DAYS,
   DEFAULT_SUBSCRIPTION_PRICE_USDT,
-  PlanRecord,
-  ServiceModel,
+  type PlanRecord,
+  type ServiceModel,
   canSelectModel,
   billingStanding,
   daysLeft,
   isServiceModel,
   nextPeriod,
   subscriptionActive,
-} from './servicePlan';
-import { checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron';
-import {
-  DocExistsError,
-  createDoc,
-  getDoc,
-  isFirestoreAdminConfigured,
-  listAll,
-  queryEquals,
-  setDoc,
-} from './firestoreAdmin';
+} from './servicePlan.ts';
+import { checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron.ts';
+import * as firestore from './firestoreAdmin.ts';
+
+const { DocExistsError } = firestore;
+
+/** The Firestore functions billing uses. Tests swap in a fake with useBillingDbForTests; otherwise it is the real one. */
+export type BillingDb = Pick<typeof firestore, 'createDoc' | 'getDoc' | 'isFirestoreAdminConfigured' | 'listAll' | 'queryEquals' | 'setDoc'>;
+let db: BillingDb = firestore;
+export function useBillingDbForTests(fake: BillingDb | null): void {
+  db = fake ?? firestore;
+}
+const createDoc: BillingDb['createDoc'] = (c, id, data) => db.createDoc(c, id, data);
+const getDoc: BillingDb['getDoc'] = (c, id) => db.getDoc(c, id);
+const isFirestoreAdminConfigured = (): boolean => db.isFirestoreAdminConfigured();
+const listAll: BillingDb['listAll'] = (c) => db.listAll(c);
+const queryEquals: BillingDb['queryEquals'] = (c, f, v) => db.queryEquals(c, f, v);
+const setDoc: BillingDb['setDoc'] = (c, id, d) => db.setDoc(c, id, d);
 
 export class BillingError extends Error {
   status: number;
@@ -96,6 +103,7 @@ export class BillingService {
   private static instance: BillingService | null = null;
   private manager = Mt5ConnectionManager.getInstance();
   private timer: NodeJS.Timeout | null = null;
+  private firstSweepTimer: NodeJS.Timeout | null = null;
   private sweeping = false;
   /** Clients whose closed trades could not be read in the current sweep, with the reason (never billed on a guess). */
   private notBilled: string[] = [];
@@ -115,6 +123,13 @@ export class BillingService {
     return this.instance;
   }
 
+  /** Tests only: a billing service that works on the given (fake-backed) connection manager. */
+  static forTests(manager: Mt5ConnectionManager): BillingService {
+    const b = new BillingService();
+    b.manager = manager;
+    return b;
+  }
+
   /** Starts the periodic sweep. Safe to call when billing is not configured (it then does nothing). */
   start(): void {
     if (!billingEnabled()) {
@@ -124,13 +139,25 @@ export class BillingService {
     this.manager.hasBillingHistory = async (userId) => Boolean(await getDoc('client_ledgers', userId));
     this.manager.onClientVerified = (rec) =>
       void (async () => {
+        // Judge the client's payment standing first, so a client who connects or is restored while overdue is held back at once.
         const plan = await this.getPlan(rec.userId);
+        await this.applyBlocking(rec.userId, plan).catch((e) => console.warn('[BILLING] standing:', e?.message));
         if (plan?.model === 'subscription') return; // subscribers have no profit-share ledger
         await this.openLedger(rec);
       })().catch((e) => console.warn('[BILLING] ledger:', e?.message));
-    setTimeout(() => void this.sweep(), 60_000);
+    // Hold back anyone who is overdue right away (a restart must not give them copying back while the first full sweep waits).
+    void this.blockingPass().catch((e) => console.warn('[BILLING] first check:', e?.message));
+    this.firstSweepTimer = setTimeout(() => void this.sweep(), 60_000);
     this.timer = setInterval(() => void this.sweep(), 10 * 60_000);
     console.log('💰 [BILLING] Profit-share billing is ON.');
+  }
+
+  /** Stops the periodic sweep (used by tests; the server never needs it). */
+  stop(): void {
+    if (this.timer) clearInterval(this.timer);
+    if (this.firstSweepTimer) clearTimeout(this.firstSweepTimer);
+    this.timer = null;
+    this.firstSweepTimer = null;
   }
 
   private async openLedger(rec: ClientConnectionRecord): Promise<ClientLedger> {
@@ -158,20 +185,42 @@ export class BillingService {
     return ledger;
   }
 
-  /** One pass: settle clients whose period is up, then apply blocks for overdue invoices. */
+  /**
+   * Pass 1 of every sweep, and fast on purpose (no calls to the copier service): applies each client's own plan terms,
+   * so anyone whose invoice is unpaid past 24 hours is held back, and anyone who has paid is released. Returns the plans
+   * it read (a client missing from the result could not be read and is tried again next time).
+   */
+  private async blockingPass(): Promise<Map<string, PlanRecord | null>> {
+    const plans = new Map<string, PlanRecord | null>();
+    let allJudged = true;
+    for (const rec of uniqueVerifiedClients(this.manager)) {
+      try {
+        const plan = await this.getPlan(rec.userId);
+        await this.applyBlocking(rec.userId, plan);
+        plans.set(rec.userId, plan);
+      } catch (e: any) {
+        allJudged = false;
+        console.warn(`⚠️ [BILLING] Could not check the payment standing of ${rec.userId}:`, e?.message);
+      }
+    }
+    // Everyone present has now been judged: the start-up hold on switching copying ON is no longer needed.
+    // (If anyone could not be read it stays, and the next sweep tries again.)
+    if (allJudged) this.manager.holdCopyingUntilBillingKnown = false;
+    return plans;
+  }
+
+  /** One sweep: first the payment-standing check for everyone, then the slower work (daily updates and settlements). */
   async sweep(): Promise<void> {
     if (this.sweeping || !billingEnabled()) return;
     this.sweeping = true;
     this.notBilled = [];
     try {
       const cfg = billingConfig();
+      const plans = await this.blockingPass();
       for (const rec of uniqueVerifiedClients(this.manager)) {
+        if (!plans.has(rec.userId)) continue;
+        if (plans.get(rec.userId)?.model === 'subscription') continue; // subscribers have no profit-share ledger
         try {
-          const plan = await this.getPlan(rec.userId);
-          if (plan?.model === 'subscription') {
-            await this.applyBlocking(rec.userId);
-            continue;
-          }
           let ledger = await this.openLedger(rec);
           const up = upgradeLedger(ledger, Date.now());
           if (up.changed) {
@@ -184,7 +233,6 @@ export class BillingService {
           if (isSettlementDue(ledger.settledThrough, Date.now(), cfg.periodDays) && settlementAllowed(ledger, Date.now())) {
             await this.settle(rec, ledger);
           }
-          await this.applyBlocking(rec.userId);
         } catch (e: any) {
           console.warn(`⚠️ [BILLING] Sweep failed for ${rec.userId}:`, e?.message);
         }
@@ -242,8 +290,8 @@ export class BillingService {
   }
 
   /** Applies the client's own plan terms: pauses copying when they are not met, resumes when they are. */
-  async applyBlocking(userId: string): Promise<void> {
-    const plan = await this.getPlan(userId);
+  async applyBlocking(userId: string, knownPlan?: PlanRecord | null): Promise<void> {
+    const plan = knownPlan !== undefined ? knownPlan : await this.getPlan(userId);
     // A subscriber is never judged by profit-share invoices, so they are not even read.
     const invoices = plan?.model === 'subscription' ? [] : ((await queryEquals('profit_invoices', 'userId', userId)) as unknown as Invoice[]);
     this.manager.setBillingBlocked(userId, billingStanding(plan, invoices, Date.now()).blocked);

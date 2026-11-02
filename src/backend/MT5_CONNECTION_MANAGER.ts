@@ -202,6 +202,12 @@ export class Mt5ConnectionManager {
   /** True if the user has billing history; their account is then never cleaned up automatically. */
   public hasBillingHistory: ((userId: string) => Promise<boolean>) | null = null;
   /**
+   * Set (before initialize) when billing is on. After a restart nobody's payment standing is known yet, so the start-up
+   * check does not switch copying ON for a client the service currently holds back: an unpaid client stays held back
+   * until the billing check has judged them (seconds later), instead of getting copying back at every restart.
+   */
+  public holdCopyingUntilBillingKnown = false;
+  /**
    * Whether this very account was verified for the user in the past, according to what we saved:
    * 'yes', 'no' (sure it was not), or 'unknown'. Anyone in doubt is treated as already connected.
    */
@@ -680,8 +686,10 @@ export class Mt5ConnectionManager {
     record.billingBlocked = this.clientPool.get(link.userId)?.billingBlocked;
 
     // Switch copying on (or leave it held back for a paused / unpaid client) and check that it really took.
+    // A client restored after a restart, whose payment standing billing has not judged yet, is left as the service has
+    // them: billing decides within seconds (and switches them on if they are in good standing).
     try {
-      await this.applyCopyState(record);
+      if (!(link.verifiedBefore && this.copyingAwaitsBilling(record))) await this.applyCopyState(record);
     } catch (e: any) {
       const err = new BrokerVerificationError('VERIFICATION_UNAVAILABLE', 'Account verification is temporarily unavailable. Please try again in a few minutes.');
       err.ref = 'COPY_SETTINGS';
@@ -913,6 +921,11 @@ export class Mt5ConnectionManager {
     rec.copyApplied = want;
   }
 
+  /** True while the start-up hold is on and billing has not yet judged this client, so switching copying ON would be a guess. */
+  private copyingAwaitsBilling(rec: ClientConnectionRecord): boolean {
+    return this.holdCopyingUntilBillingKnown && rec.billingBlocked === undefined && desiredCopierStatus(rec) === COPIER.ON;
+  }
+
   /** The copy size set on Render (DUPLIKIUM_RISK_TYPE and DUPLIKIUM_RISK_VALUE), or null when it is not set. */
   private envCopySize(): { riskFactorType: number; riskFactorValue: number } | null {
     const envType = process.env.DUPLIKIUM_RISK_TYPE;
@@ -980,6 +993,7 @@ export class Mt5ConnectionManager {
           rec.copyApplied = desiredCopierStatus(rec);
           continue;
         }
+        if (this.copyingAwaitsBilling(rec)) continue;
         try {
           await this.applyCopyState(rec);
         } catch (e: any) {

@@ -5,14 +5,14 @@
  * One server instance is assumed: money changes for one user run one at a time (see `locked`).
  */
 import { randomInt } from 'node:crypto';
-import { DocExistsError, createDoc, getDoc, isFirestoreAdminConfigured, listAll, queryEquals, queryEqualsWithIds, setDoc } from './firestoreAdmin';
-import { checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron';
+import { DocExistsError, createDoc, getDoc, isFirestoreAdminConfigured, listAll, queryEquals, queryEqualsWithIds, setDoc } from './firestoreAdmin.ts';
+import { checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron.ts';
 import {
   REFERRAL_RATES_PCT,
   WITHDRAW_FEE_PCT,
   WITHDRAW_MIN_USDT,
   PROCESSING_HOURS,
-  WithdrawalStatus,
+  type WithdrawalStatus,
   availableBalance,
   canMoveStatus,
   commissionLines,
@@ -20,9 +20,9 @@ import {
   maskName,
   processingWindow,
   validateWithdrawAmount,
-} from './referrals';
+} from './referrals.ts';
 
-import { dailyNoticeText } from './profitShareRealized';
+import { dailyNoticeText } from './profitShareRealized.ts';
 
 export class ReferralError extends Error {
   status: number;
