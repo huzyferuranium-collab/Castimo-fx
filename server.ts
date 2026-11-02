@@ -16,6 +16,7 @@ import { referralRouter } from './src/backend/REFERRAL_ROUTES';
 import { emailCodeRouter } from './src/backend/EMAIL_CODE_ROUTES';
 import { Mt5ConnectionManager } from './src/backend/MT5_CONNECTION_MANAGER';
 import { BillingService } from './src/backend/billing';
+import { buildAssetLinks } from './src/backend/assetLinks';
 import { saveClientRecord, loadSavedStatus, verifiedTerminalLookup } from './src/backend/clientStore';
 import { getDoc, isFirestoreAdminConfigured } from './src/backend/firestoreAdmin';
 
@@ -53,6 +54,13 @@ async function startServer() {
       service: 'CASTIMOFX_MT5_CORE',
       timestamp: new Date().toISOString(),
     });
+  });
+
+  // Lets the Android app (Google Play) prove it belongs to this website. Served only when both Render settings are valid.
+  app.get('/.well-known/assetlinks.json', (_req, res) => {
+    const links = buildAssetLinks(process.env);
+    if (!links) return res.status(404).json({ error: 'Not configured' });
+    res.type('application/json').set('Cache-Control', 'public, max-age=300').send(JSON.stringify(links));
   });
 
   if (isProduction) {

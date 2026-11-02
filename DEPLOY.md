@@ -81,6 +81,19 @@ Turn it on by setting on Render: `RESEND_API_KEY` (from resend.com) and `EMAIL_F
 The server needs `FIREBASE_SERVICE_ACCOUNT` too, and that service account must be allowed to edit Firebase Authentication users (the default Firebase Admin one is).
 Until both are set, the code option is simply not shown and the link keeps working. Publish the updated `firestore.rules` as well.
 
+## Install on a phone, and the Android app (Google Play)
+The site is installable: it has a web app manifest (`public/manifest.webmanifest`), icons (`public/icons`), and a tiny service worker (`public/sw.js`) whose
+only job is to show `public/offline.html` when the connection drops. It deliberately caches nothing else, so balances, invoices and payments are always live.
+Phones then offer "Install app" / "Add to Home Screen" in the browser menu.
+
+To publish it on Google Play as an Android app (a Trusted Web Activity that opens castimofx.com full screen):
+1. Create the package at pwabuilder.com from `https://castimofx.com` (Android package). Note the package name you choose, e.g. `com.castimofx.app`.
+2. In Render set `ANDROID_PACKAGE_NAME` (that package name) and `ANDROID_SHA256_FINGERPRINTS` (the SHA-256 certificate fingerprint(s), written `AB:CD:...`, 32 pairs;
+   several can be separated by commas or new lines: the app-signing key from Google Play Console -> Setup -> App signing, plus the PWABuilder/test key if you test with it).
+3. The server then serves `/.well-known/assetlinks.json` itself. Until both settings are valid it answers "not found", so nothing wrong is ever served.
+4. Google Play still needs: a developer account (new personal accounts must run a closed test with 12 testers for 14 days first), a privacy policy link, the Data safety form,
+   the Financial features declaration, an in-app way to delete an account, and a review of Google's Payments policy for USDT payments.
+
 ## Payments wallet
 Add `VITE_TREASURY_ADDRESS` = your real TRON (TRC20) USDT address in Render's environment variables, then redeploy.
 Until it is set, the site shows "Payment address not set yet" and refuses payments, so nobody can send money to a wrong address.
