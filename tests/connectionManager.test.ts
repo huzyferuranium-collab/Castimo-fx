@@ -163,6 +163,20 @@ test('when Duplikium cannot be reached the master is not shown as connected', as
   assert.match(m.getMasterNote(), /NETWORK/);
 });
 
+test('a brief request limit from the copier service does not turn the master into "not connected"', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  assert.equal(m.isConnected(), true);
+  const real = fake.getAccounts.bind(fake);
+  fake.getAccounts = async () => {
+    throw new DuplikiumError('RATE_LIMIT', 'busy', { detail: 'You reached the request limit (2/1 per second)' });
+  };
+  assert.equal(await m.refreshAll(), true, 'the last reading is kept');
+  assert.equal(m.isConnected(), true);
+  fake.getAccounts = real;
+  assert.equal(await m.refreshAll(), true);
+});
+
 // ---------- connecting ----------
 
 test('a new client is added from the template, frozen first, then switched on and checked', async () => {

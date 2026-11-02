@@ -329,10 +329,27 @@ export class RateLimiter {
     sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
     maxWaitMs = 30_000
   ) {
-    this.limits = limits;
+    // Its own copy: what is learned from the service below must never change the shared defaults.
+    this.limits = Object.fromEntries(Object.entries(limits).map(([k, v]) => [k, { ...v }])) as Record<LimitClass, Window>;
     this.now = now;
     this.sleep = sleep;
     this.maxWaitMs = maxWaitMs;
+  }
+
+  /**
+   * The service told us the real limit for this kind of call (for example "2/1 per second"): from now on we stay inside it.
+   * Never raises a limit, and never goes below 1.
+   */
+  tighten(cls: LimitClass, unit: 'second' | 'minute' | 'hour', max: number): void {
+    if (!Number.isFinite(max) || max < 1) return;
+    const key = unit === 'second' ? 'perSec' : unit === 'minute' ? 'perMin' : 'perHour';
+    const w = this.limits[cls];
+    if (max < w[key]) w[key] = Math.floor(max);
+  }
+
+  /** Waits (using the same clock as the limiter, so tests can fake it). */
+  async pause(ms: number): Promise<void> {
+    await this.sleep(ms);
   }
 
   /** Milliseconds until a call of this class may go, 0 if it may go now. */
@@ -345,7 +362,7 @@ export class RateLimiter {
       const inWin = arr.filter((x) => t - x < windowMs);
       if (inWin.length >= max) wait = Math.max(wait, inWin[inWin.length - max] + windowMs - t);
     };
-    check(1000, w.perSec);
+    check(1100, w.perSec); // a little over a second, so two calls can never land in the same second at the service
     check(60_000, w.perMin);
     check(3_600_000, w.perHour);
     return wait;
@@ -506,7 +523,7 @@ export class DuplikiumClient implements CopierApi {
     return json;
   }
 
-  private async call(path: string, cls: LimitClass, form: Record<string, unknown>, retried = false, lenient = false): Promise<any> {
+  private async call(path: string, cls: LimitClass, form: Record<string, unknown>, retried = false, lenient = false, rateRetried = false): Promise<any> {
     const token = await this.ensureToken();
     await this.limiter.acquire(cls);
     const body = new URLSearchParams();
@@ -528,11 +545,21 @@ export class DuplikiumClient implements CopierApi {
       // The token may have expired early: sign in again once and retry.
       if (!retried) {
         this.token = '';
-        return this.call(path, cls, form, true, lenient);
+        return this.call(path, cls, form, true, lenient, rateRetried);
       }
       throw new DuplikiumError('AUTH', 'The copier service did not accept our login.', { status: res.status, code: errCode(json) });
     }
-    if (res.status === 429) throw new DuplikiumError('RATE_LIMIT', 'The copier service is busy right now. Please try again in a minute.', { status: 429 });
+    const limit = res.status === 429 || (message && RATE_LIMIT_WORDS.test(message)) ? parseRateLimit(message) : undefined;
+    if (limit) {
+      // The service named its real limit ("2/1 per second"): remember it so we never go over it again.
+      if (limit.unit && limit.max) this.limiter.tighten(cls, limit.unit, limit.max);
+      // A per-second slip is over in a moment: wait and try once more before giving up.
+      if (limit.unit === 'second' && !rateRetried) {
+        await this.limiter.pause(1300);
+        return this.call(path, cls, form, retried, lenient, true);
+      }
+      throw new DuplikiumError('RATE_LIMIT', 'The copier service is busy right now. Please try again in a minute.', { status: res.status, detail: message.slice(0, 200) });
+    }
     if (message) throw new DuplikiumError('API', message, { status: res.status, code: errCode(json) });
     if (res.status >= 400) throw new DuplikiumError('API', `The copier service answered with status ${res.status}.`, { status: res.status });
     return json;
@@ -651,6 +678,14 @@ export class DuplikiumClient implements CopierApi {
   async getClosedPositions(accountId: string): Promise<PositionsResult> {
     return readPositions(await this.call('position/getClosedPositions.php', 'closed', { account_id: accountId }));
   }
+}
+
+const RATE_LIMIT_WORDS = /request limit|rate limit|too many requests/i;
+
+/** Reads "(2/1 per second)" out of the service's own wording: 1 call is allowed, 2 were made. */
+export function parseRateLimit(message: string): { unit?: 'second' | 'minute' | 'hour'; max?: number } {
+  const m = String(message ?? '').match(/\(\s*\d+\s*\/\s*(\d+)\s*per\s*(second|minute|hour)\s*\)/i);
+  return m ? { max: Number(m[1]), unit: m[2].toLowerCase() as 'second' | 'minute' | 'hour' } : {};
 }
 
 function errMessage(json: any): string {

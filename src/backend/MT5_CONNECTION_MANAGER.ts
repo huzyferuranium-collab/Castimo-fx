@@ -310,6 +310,11 @@ export class Mt5ConnectionManager {
       void this.reconcileCopyState(false);
       return this.masterState === 'CONNECTED';
     } catch (e: any) {
+      if (e instanceof DuplikiumError && e.kind === 'RATE_LIMIT') {
+        // The service asked us to slow down for a moment. That is not a disconnection: keep the last reading and try again at the next refresh.
+        console.warn(`⚠️ [COPIER] The copier service asked us to slow down (${e.detail || e.message}). Keeping the last reading.`);
+        return this.masterState === 'CONNECTED';
+      }
       this.serviceError = e instanceof DuplikiumError ? `${e.kind}: ${e.message}` : String(e?.message || e);
       // Do not keep showing "connected" for a service we cannot read. Client figures stay as last read.
       this.masterState = 'ERROR';

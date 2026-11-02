@@ -396,3 +396,45 @@ test('other calls stay strict: plain text where JSON is expected is still an unr
   const { c } = client({ 'access/getToken.php': TOKEN(1), 'account/getAccounts.php': { status: 200, body: 'OK' } });
   await assert.rejects(c.getAccounts(), (e: any) => e.kind === 'BAD_RESPONSE');
 });
+
+// ---------- the service's own request limit ----------
+
+import { parseRateLimit } from '../src/backend/duplikiumClient.ts';
+
+test('the real limit is read from the service\'s own words', () => {
+  assert.deepEqual(parseRateLimit('API: You reached the request limit (2/1 per second) for this endpoint(/webservice/v4/account/getAccounts.php) with 1 accounts'), { max: 1, unit: 'second' });
+  assert.deepEqual(parseRateLimit('You reached the request limit (31/2 per minute)'), { max: 2, unit: 'minute' });
+  assert.deepEqual(parseRateLimit('limit (9/5 per Hour)'), { max: 5, unit: 'hour' });
+  assert.deepEqual(parseRateLimit('something else'), {});
+});
+
+test('a per-second request limit is waited out once, learned, and the call then succeeds', async () => {
+  const sleeps: number[] = [];
+  const t = { now: 1_800_000_000_000 };
+  const lim = new RateLimiter(DEFAULT_LIMITS, () => t.now, async (ms) => { sleeps.push(ms); t.now += ms; });
+  const hit = { status: 200, body: { code: 5, error: 'You reached the request limit (2/1 per second) for this endpoint(/webservice/v4/account/getAccounts.php) with 1 accounts' } };
+  const p = pretend({ 'access/getToken.php': TOKEN(1), 'account/getAccounts.php': [hit, { body: { accounts: [] } }] });
+  const c = new DuplikiumClient({ user: 'u', password: 'p', transport: p.transport, now: () => t.now, limiter: lim });
+  assert.deepEqual(await c.getAccounts(), []);
+  assert.equal(p.counts['account/getAccounts.php'], 1, 'asked twice (counter starts at 0)');
+  assert.ok(sleeps.includes(1300), 'it waited before trying again');
+  // learned: the next two calls are now at least a second apart (accounts were allowed 5 per second before)
+  const before = t.now;
+  await c.getAccounts();
+  await c.getAccounts();
+  assert.ok(t.now - before >= 1000, 'two further calls were spaced by at least a second');
+});
+
+test('a request limit that keeps happening is a calm "busy" error, never a disconnection message', async () => {
+  const hit = { status: 429, body: { error: 'You reached the request limit (40/2 per minute) with 1 accounts' } };
+  const { c } = client({ 'access/getToken.php': TOKEN(1), 'account/getAccounts.php': hit });
+  await assert.rejects(c.getAccounts(), (e: any) => e.kind === 'RATE_LIMIT' && /request limit/.test(e.detail));
+});
+
+test('what is learned about the limit never changes the shared defaults', () => {
+  const before = JSON.stringify(DEFAULT_LIMITS);
+  const lim = new RateLimiter(DEFAULT_LIMITS);
+  lim.tighten('accounts', 'second', 1);
+  lim.tighten('accounts', 'minute', 999); // never raises
+  assert.equal(JSON.stringify(DEFAULT_LIMITS), before);
+});
