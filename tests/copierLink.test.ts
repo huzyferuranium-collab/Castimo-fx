@@ -72,6 +72,9 @@ test('copying: on for active clients, close-only when paused or unpaid, frozen b
   assert.equal(desiredCopierStatus({ status: 'IDLE', isBrokerVerified: true }), COPIER.CLOSE_ONLY);
   assert.equal(desiredCopierStatus({ status: 'ACTIVE', billingBlocked: true, isBrokerVerified: true }), COPIER.CLOSE_ONLY);
   assert.equal(desiredCopierStatus({ status: 'ACTIVE', isBrokerVerified: false }), COPIER.FROZEN);
+  // connected but below the minimum equity: nothing new is copied, and it follows closes only
+  assert.equal(desiredCopierStatus({ status: 'ACTIVE', lowFunds: true, isBrokerVerified: true }), COPIER.CLOSE_ONLY);
+  assert.equal(desiredCopierStatus({ status: 'ACTIVE', lowFunds: false, isBrokerVerified: true }), COPIER.ON);
 });
 
 test('the account list is read at the normal pace, never faster than half of what the service allows, and calmly after a request limit', async () => {

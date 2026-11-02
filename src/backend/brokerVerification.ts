@@ -24,7 +24,6 @@ export type BrokerErrorCode =
   | 'ALREADY_LINKED'
   | 'ALREADY_CONNECTED'
   | 'IS_MASTER_ACCOUNT'
-  | 'MIN_EQUITY'
   | 'UNSUPPORTED_CURRENCY'
   | 'CAPACITY';
 
@@ -94,31 +93,28 @@ export function validateSubmittedCredentials(input: {
   return { login, password, server };
 }
 
-/** Smallest equity (in USD) a client needs to START a new connection. */
+/** Smallest equity (in USD) an account needs for trades to be copied to it. Below it the account still connects, it just does not copy yet. */
 export const DEFAULT_MIN_CONNECT_EQUITY = 200;
 
 /**
- * Eligibility for a NEW connection only. It is checked once, when the client connects, using the
- * broker's own figures. It is never used later to disconnect: an account that connected with enough
- * equity stays connected if its equity falls, until the client disconnects it.
- * Only USD accounts are accepted, because the minimum and the profit share are measured in USD.
+ * What a NEW connection needs. Only USD accounts are accepted, because the minimum and the profit share are measured in USD.
+ * Equity is not a reason to refuse anyone: a smaller account connects and simply is not copied yet (see isBelowCopyMinimum).
  */
-export function checkConnectEligibility(
-  v: { equity: number; currency: string },
-  minEquity: number = DEFAULT_MIN_CONNECT_EQUITY
-): void {
+export function checkConnectEligibility(v: { equity: number; currency: string }): void {
   if (String(v.currency).toUpperCase() !== 'USD') {
     throw new BrokerVerificationError(
       'UNSUPPORTED_CURRENCY',
       `Right now we can only connect accounts held in US dollars (USD), and this one is in ${v.currency}.`
     );
   }
-  if (!Number.isFinite(v.equity) || v.equity < minEquity) {
-    throw new BrokerVerificationError(
-      'MIN_EQUITY',
-      `Your account equity is $${Math.max(0, Number.isFinite(v.equity) ? v.equity : 0).toFixed(2)}. A minimum of $${minEquity.toFixed(2)} is needed to connect, so please add funds and try again.`
-    );
-  }
+}
+
+/**
+ * True while an account has less equity than copying needs. When the figure cannot be read we also hold copying back
+ * (nothing is copied to an account whose equity nobody can see); the account is released as soon as it is readable and big enough.
+ */
+export function isBelowCopyMinimum(equity: number, minEquity: number = DEFAULT_MIN_CONNECT_EQUITY): boolean {
+  return !Number.isFinite(equity) || equity < minEquity;
 }
 
 // ---------- reading the broker's answer ----------

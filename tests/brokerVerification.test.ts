@@ -10,6 +10,7 @@ import {
   hasFigures,
   BrokerVerificationError,
   checkConnectEligibility,
+  isBelowCopyMinimum,
 } from '../src/backend/brokerVerification.ts';
 import { DuplikiumError, type DuplikiumAccount } from '../src/backend/duplikiumClient.ts';
 
@@ -121,7 +122,7 @@ test('copier service errors become calm, correct client messages and never leak 
   assert.equal(odd.code, 'BROKER_UNREACHABLE');
   assert.ok(!odd.message.includes('secret'));
   // An error that is already a client-safe error passes through unchanged
-  const mine = new BrokerVerificationError('MIN_EQUITY', 'x');
+  const mine = new BrokerVerificationError('TRADING_NOT_ALLOWED', 'x');
   assert.equal(translateCopierError(mine, creds), mine);
 });
 
@@ -171,31 +172,29 @@ test('parseClientAccountName reads user and login back from the account name', (
   assert.equal(parseClientAccountName('Master HFM'), null);
 });
 
-test('new connections need at least $200 equity (checked once, at connect time)', () => {
-  assert.equal(code(() => checkConnectEligibility({ equity: 199.99, currency: 'USD' })), 'MIN_EQUITY');
-  assert.equal(code(() => checkConnectEligibility({ equity: 0, currency: 'USD' })), 'MIN_EQUITY');
-  assert.equal(code(() => checkConnectEligibility({ equity: NaN, currency: 'USD' })), 'MIN_EQUITY');
-  assert.equal(code(() => checkConnectEligibility({ equity: 200, currency: 'USD' })), 'NO_ERROR');
+test('no account is refused for having little equity: it connects and simply is not copied yet', () => {
+  for (const equity of [199.99, 0, 1, NaN, 200, 5000.5]) {
+    assert.equal(code(() => checkConnectEligibility({ equity, currency: 'USD' })), 'NO_ERROR', `equity ${equity}`);
+  }
   assert.equal(code(() => checkConnectEligibility({ equity: 5000.5, currency: 'usd' })), 'NO_ERROR');
 });
 
+test('copying needs at least $200 equity, and an unreadable figure holds copying back', () => {
+  assert.equal(isBelowCopyMinimum(199.99), true);
+  assert.equal(isBelowCopyMinimum(0), true);
+  assert.equal(isBelowCopyMinimum(NaN), true);
+  assert.equal(isBelowCopyMinimum(200), false);
+  assert.equal(isBelowCopyMinimum(5000.5), false);
+});
+
 test('the minimum can be changed or switched off with the limit argument', () => {
-  assert.equal(code(() => checkConnectEligibility({ equity: 49, currency: 'USD' }, 50)), 'MIN_EQUITY');
-  assert.equal(code(() => checkConnectEligibility({ equity: 49, currency: 'USD' }, 0)), 'NO_ERROR');
+  assert.equal(isBelowCopyMinimum(49, 50), true);
+  assert.equal(isBelowCopyMinimum(50, 50), false);
+  assert.equal(isBelowCopyMinimum(49, 0), false);
 });
 
 test('only USD accounts can connect', () => {
   assert.equal(code(() => checkConnectEligibility({ equity: 900, currency: 'EUR' })), 'UNSUPPORTED_CURRENCY');
-});
-
-test('the equity message names the amount and the minimum', () => {
-  try {
-    checkConnectEligibility({ equity: 150, currency: 'USD' });
-    assert.fail('should have thrown');
-  } catch (e: any) {
-    assert.match(e.message, /\$150\.00/);
-    assert.match(e.message, /\$200\.00/);
-  }
 });
 
 test('an unreadable answer from the copier service is a calm, retryable hiccup on our side: it never removes the client\'s account', async () => {

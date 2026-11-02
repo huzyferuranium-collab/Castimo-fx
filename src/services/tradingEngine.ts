@@ -492,7 +492,7 @@ class TradingEngine {
       return { riskStatus: 'normal' };
     }
 
-    // The $200 minimum applies only when a client first connects (checked by the server).
+    // The minimum equity decides only whether a NEW account starts copying (the server holds it back and starts it by itself).
     // A connected account is never blocked or disconnected because its equity falls.
 
     if (openTrades.length >= this.riskSettings.maxOpenPositions) {
@@ -1051,6 +1051,8 @@ class TradingEngine {
       tradeAllowed: c.tradeAllowed,
       investorMode: c.investorMode,
       verificationTimestamp: c.verificationTimestamp,
+      copyHeld: c.lowFunds ? 'low_funds' : undefined,
+      copyMinimumUsd: typeof c.copyMinimumUsd === 'number' ? c.copyMinimumUsd : undefined,
       copiedFromMasterAccount: this.masterAccount.accountNumber,
       masterAccountName: this.masterAccount.accountName,
       lastPing: new Date().toISOString(),
@@ -1136,6 +1138,8 @@ class TradingEngine {
           verificationTimestamp: c.verificationTimestamp,
           connectionState: c.connectionState,
           linkLatencyMs: c.latencyMs,
+          copyHeld: c.lowFunds ? 'low_funds' : undefined,
+          copyMinimumUsd: typeof c.copyMinimumUsd === 'number' ? c.copyMinimumUsd : undefined,
           copiedFromMasterAccount: this.masterAccount.accountNumber,
           masterAccountName: this.masterAccount.accountName,
         };
@@ -1170,6 +1174,8 @@ class TradingEngine {
             verificationTimestamp: mappedAcc.verificationTimestamp,
             connectionState: mappedAcc.connectionState,
             linkLatencyMs: mappedAcc.linkLatencyMs,
+            copyHeld: mappedAcc.copyHeld,
+            copyMinimumUsd: mappedAcc.copyMinimumUsd,
           };
         }
       }

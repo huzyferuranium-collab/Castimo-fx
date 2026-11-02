@@ -78,9 +78,9 @@ const FAQ_ITEMS: FAQItem[] = [
   {
     id: 'sec-risk-floor',
     category: 'custody_security',
-    question: 'What is the minimum equity to connect?',
+    question: 'Can I connect with less than $200?',
     answer:
-      'At least $200.00 USD of equity in your MT5 account. This is checked once, when you connect. After that, your account stays connected until you disconnect it yourself.',
+      'Yes. You can connect any USD MT5 account at any time. Trades are copied once the account has at least $200.00 USD of equity. Until then your account shows as connected but not copying, and copying starts by itself when you add funds, with nothing to press. Once copying has started, it is not stopped because your equity later falls.',
   },
 ];
 

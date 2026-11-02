@@ -200,7 +200,7 @@ export const RiskManagementControls: React.FC<RiskManagementControlsProps> = ({
           <div>
             <span className="text-[10px] text-slate-500 uppercase font-bold block">Safety Floor Margin</span>
             <span className="text-sm font-black text-emerald-400 font-mono">+${safetyBufferAboveFloor} USD</span>
-            <span className="text-[10px] text-slate-500 block">Above the $200 connection minimum</span>
+            <span className="text-[10px] text-slate-500 block">Above the $200 minimum for copying</span>
           </div>
         </div>
 
@@ -374,8 +374,8 @@ export const RiskManagementControls: React.FC<RiskManagementControlsProps> = ({
         <div className="p-3.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-200 flex items-start gap-2.5">
           <ShieldAlert className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
           <div className="leading-relaxed">
-            <span className="font-bold text-purple-300">Connection rule: </span>
-            A <code className="bg-purple-950/60 px-1 py-0.2 rounded font-mono text-purple-200">$200.00 USD</code> minimum equity is required to start a new connection. It is checked once, on the server, when the client connects. A connected account stays connected if its equity later falls.
+            <span className="font-bold text-purple-300">Copying rule: </span>
+            Any USD account can connect. Trades are copied once it has <code className="bg-purple-950/60 px-1 py-0.2 rounded font-mono text-purple-200">$200.00 USD</code> of equity; until then it shows as connected but not copying, and copying starts by itself when the account reaches the minimum. An account that has started copying is not stopped if its equity later falls.
           </div>
         </div>
 

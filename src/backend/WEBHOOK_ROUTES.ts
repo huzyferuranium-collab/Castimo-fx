@@ -59,6 +59,9 @@ function toPublicClient(c: any) {
     verificationTimestamp: c.verificationTimestamp,
     lastSync: c.lastSync,
     billingBlocked: Boolean(c.billingBlocked),
+    // True while the account is connected but below the minimum equity, so no trades are copied to it yet.
+    lowFunds: Boolean(c.lowFunds),
+    copyMinimumUsd: typeof c.copyMinimumUsd === 'number' ? c.copyMinimumUsd : undefined,
     connectionState: c.connectionState,
     connectionStatus: c.connectionStatus,
     latencyMs: c.latencyMs,
@@ -79,7 +82,6 @@ const STATUS_BY_CODE: Record<string, number> = {
   ALREADY_LINKED: 409,
   ALREADY_CONNECTED: 409,
   IS_MASTER_ACCOUNT: 409,
-  MIN_EQUITY: 422,
   UNSUPPORTED_CURRENCY: 422,
   CAPACITY: 503,
 };
@@ -152,8 +154,8 @@ tradeRouter.post('/toggle-mirror', requireUser, async (req: Request, res: Respon
           error: 'This login cannot place trades, so copying cannot be activated.',
         });
       }
-      // Safety floor, using the equity the broker reported.
-      if (client.equity < 25.0) {
+      // Safety floor, using the equity the broker reported. (An account below the copy minimum is already not copying, so it is not told off here.)
+      if (!client.lowFunds && client.equity < 25.0) {
         return res.status(403).json({
           success: false,
           error: `Cannot activate trade copying: account equity ($${client.equity.toFixed(2)}) is below the required safety floor ($25.00).`,
@@ -185,8 +187,11 @@ tradeRouter.post('/toggle-mirror', requireUser, async (req: Request, res: Respon
       userId: updated.userId,
       accountId: updated.accountId,
       status: updated.status,
+      lowFunds: Boolean(updated.lowFunds),
       message:
-        newState === 'ACTIVE'
+        newState === 'ACTIVE' && updated.lowFunds
+          ? `Copying is switched on. Your account has less than the $${(updated.copyMinimumUsd ?? 0).toFixed(2)} needed for copying, so trades start by themselves as soon as it reaches that.`
+          : newState === 'ACTIVE'
           ? 'Trade copying activated. New trades on the master account will now be copied to your account.'
           : 'Trade copying paused. New master trades will not be opened on your account. Trades already open still follow the master\'s closes.',
       updatedAt: updated.lastSync,

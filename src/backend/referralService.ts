@@ -23,6 +23,7 @@ import {
 } from './referrals.ts';
 
 import { dailyNoticeText } from './profitShareRealized.ts';
+import { copyNoticeFor } from './copyNotice.ts';
 
 export class ReferralError extends Error {
   status: number;
@@ -384,6 +385,9 @@ export async function notificationsFor(uid: string) {
     });
     items.push({ id: `ps-${d.date}`, kind: 'personal', title: text.title, message: text.message, at: String(d.createdAt) });
   }
+  // An account that is connected but below the minimum equity says so plainly (and says when copying starts).
+  const copyNotice = copyNoticeFor((await getDoc('mt5_accounts', uid).catch(() => null)) as Doc | null);
+  if (copyNotice) items.push({ id: copyNotice.id, kind: 'personal', title: copyNotice.title, message: copyNotice.message, at: copyNotice.at });
   const invoices = (await queryEquals('profit_invoices', 'userId', uid).catch(() => [])) as Doc[];
   for (const i of invoices) {
     items.push({

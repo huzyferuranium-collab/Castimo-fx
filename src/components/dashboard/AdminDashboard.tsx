@@ -659,7 +659,7 @@ export const AdminDashboard: React.FC = () => {
                 <h4 className="text-sm font-semibold text-white">Risk</h4>
                 <div className="px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 grid grid-cols-2 gap-2 text-xs font-mono">
                   <div className="min-w-0">
-                    <span className="text-[10px] text-slate-500 block">Connection minimum</span>
+                    <span className="text-[10px] text-slate-500 block">Minimum to copy</span>
                     <span className="font-bold text-red-400">
                       {riskRules ? `$${riskRules.connectMinimum.usd.toFixed(2)} USD` : riskRules === undefined ? '…' : 'Not available'}
                     </span>
@@ -673,7 +673,7 @@ export const AdminDashboard: React.FC = () => {
                 </div>
                 <div className="text-[11px] text-slate-400 leading-relaxed space-y-1.5">
                   <p>
-                    <strong className="text-slate-300">Connection minimum:</strong> checked once, when a client first connects. A connected account is never paused because its equity falls.{' '}
+                    <strong className="text-slate-300">Minimum to copy:</strong> any USD account can connect. Below this equity it shows as connected but not copying, and copying starts by itself once it reaches the minimum. An account that has started copying is never paused because its equity falls.{' '}
                     {riskRules?.connectMinimum.source === 'setting'
                       ? 'Set by MIN_CONNECT_EQUITY on Render.'
                       : 'This is the built-in default. Change it with MIN_CONNECT_EQUITY on Render.'}

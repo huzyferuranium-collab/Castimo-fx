@@ -33,6 +33,7 @@ import { DISCONNECT_GRACE_MS, decideLink, desiredCopierStatus, nextRefreshDelayM
 import {
   BrokerVerificationError,
   checkConnectEligibility,
+  isBelowCopyMinimum,
   classifyState,
   clientAccountName,
   countClientAccounts,
@@ -82,6 +83,14 @@ export interface ClientConnectionRecord {
   verificationTimestamp: string;
   /** True while the client has an overdue invoice or no paid plan: copying is held back. */
   billingBlocked?: boolean;
+  /**
+   * True while the account has less equity than copying needs: it is connected, but no new trades are copied to it.
+   * Set when a new account connects below the minimum, and cleared (for good) the first time its equity reaches it.
+   * It is never set again afterwards: an account that has been copying is not stopped because its equity later falls.
+   */
+  lowFunds?: boolean;
+  /** The minimum equity copying needs, as applied to this account (for the message the client sees). */
+  copyMinimumUsd?: number;
   connectionState?: ConnectionState;
   /** The service's own state word for the account, e.g. CONNECTED. */
   connectionStatus?: string;
@@ -199,6 +208,8 @@ export class Mt5ConnectionManager {
   public onClientSaved: ((record: ClientConnectionRecord) => void) | null = null;
   /** Looks up the pause/resume choice the client last made. */
   public loadSavedStatus: ((userId: string) => Promise<'ACTIVE' | 'IDLE' | null>) | null = null;
+  /** Looks up whether the client's account was last saved as "connected, not copying yet" (below the minimum equity). */
+  public loadSavedLowFunds: ((userId: string) => Promise<boolean>) | null = null;
   /** True if the user has billing history; their account is then never cleaned up automatically. */
   public hasBillingHistory: ((userId: string) => Promise<boolean>) | null = null;
   /**
@@ -422,6 +433,8 @@ export class Mt5ConnectionManager {
     if (acc.equity !== null) rec.equity = acc.equity;
     if (acc.freeMargin !== null) rec.freeMargin = acc.freeMargin;
     if (acc.currency) rec.currency = acc.currency;
+    // The account has reached the minimum equity (a deposit, or the minimum was lowered): copying starts by itself.
+    if (rec.lowFunds && acc.equity !== null && !isBelowCopyMinimum(rec.equity, this.minEquity())) this.releaseLowFunds(rec);
     rec.connectionState = this.stateFor(acc);
     rec.connectionStatus = acc.state || 'NONE';
     rec.lastHeartbeat = toIso(acc.lastUpdate) ?? rec.lastHeartbeat;
@@ -434,6 +447,23 @@ export class Mt5ConnectionManager {
         : kind === 'disconnected'
           ? 'The copier service cannot sign in to your account right now.'
           : undefined;
+  }
+
+  /** An account held back for low equity has reached the minimum: save that and switch copying on at the service (the periodic check retries if that fails). */
+  private releaseLowFunds(rec: ClientConnectionRecord): void {
+    rec.lowFunds = false;
+    rec.copyMinimumUsd = this.minEquity();
+    console.log(`✅ [COPIER] #${rec.login} now has the minimum equity ($${rec.equity.toFixed(2)}): copying starts.`);
+    try {
+      this.registerClient(rec);
+    } catch {
+      // saving is best-effort
+    }
+    if (this.api && !this.copyingAwaitsBilling(rec)) {
+      void this.applyCopyState(rec).catch((e: any) =>
+        console.warn(`⚠️ [COPIER] Could not start copying for ${mask(rec.userId)} yet: ${String(e?.message || e).slice(0, 160)}`)
+      );
+    }
   }
 
   private dropFromPool(userId: string): void {
@@ -460,7 +490,7 @@ export class Mt5ConnectionManager {
     return readLimit(process.env.MIN_CONNECT_EQUITY, DEFAULT_MIN_CONNECT_EQUITY);
   }
 
-  /** For the admin page: the minimum equity a NEW client needs to connect, and whether it was set on Render or is the built-in default. */
+  /** For the admin page: the minimum equity an account needs for trades to be copied to it, and whether it was set on Render or is the built-in default. */
   public getConnectMinimum(): { usd: number; source: 'setting' | 'default' } {
     const raw = process.env.MIN_CONNECT_EQUITY;
     const n = Number(raw);
@@ -719,12 +749,18 @@ export class Mt5ConnectionManager {
   /** The account is logged in and its figures are real: apply our rules and put it into service. */
   private async completeConnection(link: PendingLink, acc: DuplikiumAccount): Promise<ClientConnectionRecord> {
     const verified = verifyCopierAccount(acc, { login: link.login, server: link.server });
-    // Minimum equity applies to NEW connections only; someone reconnecting is never judged again.
-    if (!link.verifiedBefore) checkConnectEligibility(verified, this.minEquity());
+    // Only the currency can refuse a NEW connection. A small account is never turned away: it connects and is simply not copied yet.
+    if (!link.verifiedBefore) checkConnectEligibility(verified);
 
     const status: 'ACTIVE' | 'IDLE' = link.verifiedBefore ? ((await this.loadSavedStatus?.(link.userId).catch(() => null)) ?? 'ACTIVE') : 'ACTIVE';
     const record = this.buildClientRecord(link, acc, verified, status);
     record.billingBlocked = this.clientPool.get(link.userId)?.billingBlocked;
+    // Below the minimum equity: connected, but copying stays off until the account reaches it. Someone restored after a restart keeps
+    // what was saved (and if we cannot tell, they are not held back: nobody is judged in doubt).
+    const min = this.minEquity();
+    record.copyMinimumUsd = min;
+    const heldBefore = link.verifiedBefore ? Boolean(await this.loadSavedLowFunds?.(link.userId).catch(() => false)) : true;
+    record.lowFunds = heldBefore && isBelowCopyMinimum(verified.equity, min);
 
     // Switch copying on (or leave it held back for a paused / unpaid client) and check that it really took.
     // A client restored after a restart, whose payment standing billing has not judged yet, is left as the service has
@@ -743,7 +779,8 @@ export class Mt5ConnectionManager {
     this.onClientVerified?.(record);
     if (!link.verifiedBefore) this.onNewConnection?.(link.userId);
     console.log(
-      `${link.verifiedBefore ? '♻️' : '✅'} [COPIER] ${link.verifiedBefore ? 'Restored' : 'Connected'} #${record.login} (${record.status}): ${verified.accountType}, equity $${verified.equity.toFixed(2)}`
+      `${link.verifiedBefore ? '♻️' : '✅'} [COPIER] ${link.verifiedBefore ? 'Restored' : 'Connected'} #${record.login} (${record.status}): ${verified.accountType}, equity $${verified.equity.toFixed(2)}` +
+        (record.lowFunds ? ` - connected, not copying yet (below the $${min.toFixed(2)} minimum)` : '')
     );
     return record;
   }
@@ -1101,7 +1138,7 @@ export class Mt5ConnectionManager {
   public getActiveClients(): ClientConnectionRecord[] {
     const unique = new Map<string, ClientConnectionRecord>();
     for (const record of this.clientPool.values()) {
-      if (record.status === 'ACTIVE' && record.isBrokerVerified && !record.billingBlocked) unique.set(record.userId, record);
+      if (record.status === 'ACTIVE' && record.isBrokerVerified && !record.billingBlocked && !record.lowFunds) unique.set(record.userId, record);
     }
     return Array.from(unique.values());
   }

@@ -39,7 +39,7 @@ If a setting is missing the server does not guess: connecting clients is refused
 ## Test
 Sign in with a real client account and connect one HFM **demo** MT5 login. A wrong password or a fake number must be rejected. A right one shows the
 balance the broker reports (Duplikium refreshes balances after each trade and about every five minutes, so a figure can be a few minutes old).
-Accounts must be USD with at least `MIN_CONNECT_EQUITY` (default $200). Read-only (investor) passwords are refused.
+Accounts must be USD. An account below `MIN_CONNECT_EQUITY` (default $200) still connects, but shows "connected, not copying yet" and is held at "close only" at Duplikium until its equity reaches the minimum, when copying starts by itself. Read-only (investor) passwords are refused.
 
 ## What the server does with a client
 - **Connect:** the client gives login, server and trading password. The password goes to Duplikium to log in; the server keeps only Duplikium's

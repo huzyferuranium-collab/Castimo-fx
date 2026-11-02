@@ -19,7 +19,7 @@ import { BillingService, billingEnabled } from './src/backend/billing';
 import { buildAssetLinks } from './src/backend/assetLinks';
 import { securityHeaders } from './src/backend/securityHeaders';
 import { rateLimit, trustProxyHops, isReadOnly } from './src/backend/rateLimit';
-import { saveClientRecord, loadSavedStatus, verifiedTerminalLookup } from './src/backend/clientStore';
+import { saveClientRecord, loadSavedStatus, loadSavedLowFunds, verifiedTerminalLookup } from './src/backend/clientStore';
 import { getDoc, isFirestoreAdminConfigured } from './src/backend/firestoreAdmin';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -126,6 +126,7 @@ async function startServer() {
         const connectionManager = Mt5ConnectionManager.getInstance();
         connectionManager.onClientSaved = (rec) => void saveClientRecord(rec).catch((e) => console.warn('[STORE] save failed:', e?.message));
         connectionManager.loadSavedStatus = loadSavedStatus;
+        connectionManager.loadSavedLowFunds = loadSavedLowFunds;
         if (isFirestoreAdminConfigured()) {
           connectionManager.wasVerified = verifiedTerminalLookup((uid) => getDoc('mt5_accounts', uid));
         } else {

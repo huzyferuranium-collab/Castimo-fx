@@ -14,12 +14,16 @@ export interface SavableClient {
   brokerName?: string;
   accountType?: string;
   currency?: string;
+  /** Connected but below the minimum equity, so no trades are copied yet. */
+  lowFunds?: boolean;
+  copyMinimumUsd?: number;
 }
 
 export async function saveClientRecord(rec: SavableClient): Promise<void> {
   if (!isFirestoreAdminConfigured()) return;
   const existing = (await getDoc('mt5_accounts', rec.userId).catch(() => null)) as any;
   const now = new Date().toISOString();
+  const wasHeld = existing?.copyHeld === 'LOW_FUNDS';
   await setDoc('mt5_accounts', rec.userId, {
     userId: rec.userId,
     accountId: rec.accountId,
@@ -30,8 +34,20 @@ export async function saveClientRecord(rec: SavableClient): Promise<void> {
     currency: rec.currency ?? '',
     mirrorStatus: rec.status === 'IDLE' ? 'IDLE' : 'ACTIVE',
     connectedAt: existing?.connectedAt || now,
+    // "Connected, not copying yet": kept so a restart does not forget it, and so the client's notifications can say it.
+    copyHeld: rec.lowFunds ? 'LOW_FUNDS' : null,
+    copyMinimumUsd: typeof rec.copyMinimumUsd === 'number' ? rec.copyMinimumUsd : existing?.copyMinimumUsd ?? null,
+    copyHeldSince: rec.lowFunds ? (wasHeld && existing?.copyHeldSince ? existing.copyHeldSince : now) : null,
+    copyStartedAt: rec.lowFunds ? null : wasHeld ? now : existing?.copyStartedAt ?? null,
     updatedAt: now,
   });
+}
+
+/** Whether the client's account was last saved as connected-but-not-copying (below the minimum equity). */
+export async function loadSavedLowFunds(userId: string): Promise<boolean> {
+  if (!isFirestoreAdminConfigured()) return false;
+  const doc = (await getDoc('mt5_accounts', userId).catch(() => null)) as any;
+  return doc?.copyHeld === 'LOW_FUNDS';
 }
 
 /** The copy on/off choice the client last made, so a server restart does not undo it. */

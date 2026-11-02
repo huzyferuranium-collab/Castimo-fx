@@ -238,18 +238,100 @@ test('a read-only (investor) password is refused and the account removed', async
   assert.deepEqual(fake.deleted, ['D1']);
 });
 
-test('below the minimum equity: refused with the figures, removed, and copying never switched on', async () => {
+test('below the minimum equity: the account connects and is kept, but copying is never switched on', async () => {
+  const { fake, m, events } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+  await m.refreshAll();
+  const rec = await m.provisionClientTerminal(creds(), () => {});
+  assert.equal(rec.isBrokerVerified, true);
+  assert.equal(rec.lowFunds, true, 'told apart as connected but not copying');
+  assert.equal(rec.copyMinimumUsd, 200);
+  assert.deepEqual(fake.deleted, [], 'a small account is not removed');
+  assert.deepEqual(events.newConn, ['u1'], 'it is a real new connection');
+  assert.equal(fake.copier.get('D1'), -1, 'held at close only at the copier service');
+  assert.ok(fake.settingCalls.every((c) => c.copierStatus !== 1), 'copying was never switched on');
+  assert.deepEqual(m.getActiveClients(), [], 'not counted among the accounts being copied');
+});
+
+test('an account that reaches the minimum starts copying by itself, and is saved as such', async () => {
+  const { fake, m, events } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+  await m.refreshAll();
+  await m.provisionClientTerminal(creds(), () => {});
+  assert.equal(fake.copier.get('D1'), -1);
+  const saves = events.saved.length;
+
+  // a deposit arrives: the next read of the account list sees it
+  fake.accounts.get('D1')!.equity = 250;
+  fake.accounts.get('D1')!.balance = 250;
+  await m.refreshAll();
+  await sleep(30);
+
+  const rec = m.getClientConnection('u1')!;
+  assert.equal(rec.lowFunds, false);
+  assert.equal(fake.copier.get('D1'), 1, 'copying is switched on at the copier service');
+  assert.ok(events.saved.length > saves, 'the change is saved so a restart remembers it');
+  assert.equal(m.getActiveClients().length, 1);
+});
+
+test('exactly the minimum is enough, and one cent less is not', async () => {
+  const a = setup({ fresh: { equity: 200, balance: 200, freeMargin: 200 } });
+  await a.m.refreshAll();
+  assert.equal((await a.m.provisionClientTerminal(creds(), () => {})).lowFunds, false);
+  assert.equal(a.fake.copier.get('D1'), 1);
+
+  const b = setup({ fresh: { equity: 199.99, balance: 199.99, freeMargin: 199.99 } });
+  await b.m.refreshAll();
+  assert.equal((await b.m.provisionClientTerminal(creds(), () => {})).lowFunds, true);
+  assert.equal(b.fake.copier.get('D1'), -1);
+});
+
+test('an account that was copying is never stopped because its equity later falls', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  await m.provisionClientTerminal(creds(), () => {});
+  assert.equal(fake.copier.get('D1'), 1);
+  fake.accounts.get('D1')!.equity = 120;
+  fake.accounts.get('D1')!.balance = 120;
+  await m.refreshAll();
+  await sleep(30);
+  assert.equal(m.getClientConnection('u1')!.lowFunds, false);
+  assert.equal(fake.copier.get('D1'), 1, 'still copying');
+});
+
+test('a paused client below the minimum who then reaches it stays paused', async () => {
   const { fake, m } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
   await m.refreshAll();
+  await m.provisionClientTerminal(creds(), () => {});
+  await m.setCopyStatus('u1', 'IDLE');
+  fake.accounts.get('D1')!.equity = 400;
+  await m.refreshAll();
+  await sleep(30);
+  assert.equal(fake.copier.get('D1'), -1, 'the client chose to pause, so reaching the minimum does not switch copying on');
+});
+
+test('the minimum can be changed on Render, and a waiting account is released when it is lowered', async () => {
+  const before = process.env.MIN_CONNECT_EQUITY;
   try {
-    await m.provisionClientTerminal(creds(), () => {});
-    assert.fail('should have refused');
-  } catch (e: any) {
-    assert.equal(e.code, 'MIN_EQUITY');
-    assert.match(e.message, /\$150\.00/);
+    process.env.MIN_CONNECT_EQUITY = '100';
+    const lowered = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+    await lowered.m.refreshAll();
+    assert.equal((await lowered.m.provisionClientTerminal(creds(), () => {})).lowFunds, false, '$150 is enough when the minimum is $100');
+
+    process.env.MIN_CONNECT_EQUITY = '300';
+    const raised = setup({ fresh: { equity: 250, balance: 250, freeMargin: 250 } });
+    await raised.m.refreshAll();
+    const rec = await raised.m.provisionClientTerminal(creds(), () => {});
+    assert.equal(rec.lowFunds, true);
+    assert.equal(rec.copyMinimumUsd, 300);
+
+    process.env.MIN_CONNECT_EQUITY = '200'; // lowered again: the waiting account is released on the next read
+    await raised.m.refreshAll();
+    await sleep(30);
+    assert.equal(raised.m.getClientConnection('u1')!.lowFunds, false);
+    assert.equal(raised.fake.copier.get('D1'), 1);
+  } finally {
+    if (before === undefined) delete process.env.MIN_CONNECT_EQUITY;
+    else process.env.MIN_CONNECT_EQUITY = before;
   }
-  assert.deepEqual(fake.deleted, ['D1']);
-  assert.ok(fake.settingCalls.every((c) => c.copierStatus !== 1), 'copying was never switched on');
 });
 
 test('accounts that are not in US dollars are refused', async () => {
@@ -604,6 +686,47 @@ test('a returning client below the minimum equity is restored, not judged again'
   m2.wasVerified = async () => 'yes';
   await m2.initialize();
   assert.equal(m2.getClientConnection('u1')!.equity, 90);
+  assert.equal(m2.getClientConnection('u1')!.lowFunds, false, 'it was copying before, so a restart does not stop it');
+  await sleep(30);
+  assert.equal(fake.copier.get('D1'), 1);
+});
+
+test('after a restart, an account saved as "not copying yet" is still held back until it reaches the minimum', async () => {
+  const { fake, m } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+  await m.refreshAll();
+  await m.provisionClientTerminal(creds(), () => {});
+  assert.equal(fake.copier.get('D1'), -1);
+
+  const m2 = Mt5ConnectionManager.forTests(fake, { masterId: 'MASTER', templateId: 'TEMPLATE' });
+  m2.wasVerified = async () => 'yes';
+  m2.loadSavedLowFunds = async () => true;
+  await m2.initialize();
+  await sleep(30);
+  assert.equal(m2.getClientConnection('u1')!.lowFunds, true);
+  assert.equal(fake.copier.get('D1'), -1, 'still not copying after the restart');
+
+  // and once funded, a restart releases it straight away
+  fake.accounts.get('D1')!.equity = 260;
+  const m3 = Mt5ConnectionManager.forTests(fake, { masterId: 'MASTER', templateId: 'TEMPLATE' });
+  m3.wasVerified = async () => 'yes';
+  m3.loadSavedLowFunds = async () => true;
+  await m3.initialize();
+  await sleep(30);
+  assert.equal(m3.getClientConnection('u1')!.lowFunds, false);
+  assert.equal(fake.copier.get('D1'), 1);
+});
+
+test('if the saved "not copying yet" note cannot be read, nobody is held back in doubt', async () => {
+  const { fake, m } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+  await m.refreshAll();
+  await m.provisionClientTerminal(creds(), () => {});
+  const m2 = Mt5ConnectionManager.forTests(fake, { masterId: 'MASTER', templateId: 'TEMPLATE' });
+  m2.wasVerified = async () => 'yes';
+  m2.loadSavedLowFunds = async () => {
+    throw new Error('database down');
+  };
+  await m2.initialize();
+  assert.equal(m2.getClientConnection('u1')!.lowFunds, false);
 });
 
 test('an account found at Duplikium that was never verified is finished as a new connection (or given up on)', async () => {

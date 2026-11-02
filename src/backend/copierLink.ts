@@ -64,10 +64,10 @@ export function decideLink(
 }
 
 /** What copying should be doing for a client: the one switch we control on the copier service. */
-export function desiredCopierStatus(rec: { status: string; billingBlocked?: boolean; isBrokerVerified: boolean }): number {
-  // Not (yet) verified: frozen. Paused or unpaid: only follow the master's closes, so nothing is left stranded.
+export function desiredCopierStatus(rec: { status: string; billingBlocked?: boolean; lowFunds?: boolean; isBrokerVerified: boolean }): number {
+  // Not (yet) verified: frozen. Paused, unpaid, or not yet at the minimum equity: only follow the master's closes, so nothing is left stranded.
   if (!rec.isBrokerVerified) return COPIER.FROZEN;
-  return rec.status === 'ACTIVE' && !rec.billingBlocked ? COPIER.ON : COPIER.CLOSE_ONLY;
+  return rec.status === 'ACTIVE' && !rec.billingBlocked && !rec.lowFunds ? COPIER.ON : COPIER.CLOSE_ONLY;
 }
 
 /**

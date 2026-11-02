@@ -106,6 +106,10 @@ export interface Mt5Account {
   accountHolderName?: string;
   brokerName?: string;
   isBrokerVerified?: boolean;
+  /** 'low_funds': connected, but below the minimum equity, so no trades are copied yet. Starts by itself once the account reaches it. */
+  copyHeld?: 'low_funds';
+  /** The minimum equity copying needs (USD), as the server applies it. */
+  copyMinimumUsd?: number;
   /** Link health reported by the server, like the master's: CONNECTED, RECONNECTING or ERROR. */
   connectionState?: 'CONNECTED' | 'RECONNECTING' | 'ERROR';
   linkLatencyMs?: number;

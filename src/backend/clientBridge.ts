@@ -142,8 +142,6 @@ export function friendlyHint(code: BrokerErrorCode | string): string {
       return 'Your broker is a little slow right now. Nothing is lost: wait a minute, then press Connect again and it will carry on from where it stopped.';
     case 'VERIFICATION_UNAVAILABLE':
       return 'Nothing is wrong with your account. We had a small hiccup on our side. Your details are still here: please press Connect again in a few minutes.';
-    case 'MIN_EQUITY':
-      return 'Once your account has the minimum, press Connect again. We will be glad to have you.';
     case 'UNSUPPORTED_CURRENCY':
       return 'You can connect any account held in US dollars (USD).';
     case 'TRADING_NOT_ALLOWED':
@@ -170,7 +168,6 @@ export const rejectsForGood = new Set<BrokerErrorCode | string>([
   'BROKER_SERVER_NOT_FOUND',
   'LOGIN_MISMATCH',
   'TRADING_NOT_ALLOWED',
-  'MIN_EQUITY',
   'UNSUPPORTED_CURRENCY',
   'BAD_BROKER_RESPONSE',
 ]);

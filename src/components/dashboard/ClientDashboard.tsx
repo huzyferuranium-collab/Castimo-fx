@@ -337,6 +337,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const isConnected = account.status === 'copying' || account.status === 'connected';
   const isBlockedUnpaid = account.status === 'blocked_unpaid';
   const isRiskBlocked = account.status === 'blocked' || account.riskStatus === 'blocked';
+  // Connected, but below the minimum equity: nothing is copied yet, and it starts by itself once the account reaches the minimum.
+  const copyHeld = isConnected && account.copyHeld === 'low_funds';
+  const copyMinText = typeof account.copyMinimumUsd === 'number' ? `$${account.copyMinimumUsd.toFixed(2)}` : 'the minimum';
   // The two plans never mix: a monthly subscriber has no 50% invoices and sees none of the 50% screens.
   const isSubscriber = planView?.model === 'subscription';
   const subscriptionRunning = Boolean(planView?.subscription?.active);
@@ -408,9 +411,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         subtitle={isConnected ? `MT5 #${account.accountNumber}` : 'Not Connected'}
         accentColor="emerald"
         statusBadge={{
-          text: isConnected ? 'Mirroring Live' : isBlockedUnpaid ? 'Unpaid' : 'Disconnected',
-          variant: isConnected ? 'success' : isBlockedUnpaid ? 'danger' : 'warning',
-          pulsing: isConnected,
+          text: copyHeld ? 'Connected · Not copying' : isConnected ? 'Mirroring Live' : isBlockedUnpaid ? 'Unpaid' : 'Disconnected',
+          variant: copyHeld ? 'warning' : isConnected ? 'success' : isBlockedUnpaid ? 'danger' : 'warning',
+          pulsing: isConnected && !copyHeld,
         }}
       />
 
@@ -426,7 +429,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             profile: { tone: 'magenta', art: 'badge', subtitle: 'Your account details.' },
             settlement_due: { tone: 'gold', art: 'coins', subtitle: 'Your profit-share invoice.' },
           };
-          const look = looks[activeSection] || { tone: 'royal' as Tone, art: undefined, subtitle: isConnected ? 'MT5 trade mirroring active' : '' };
+          const look = looks[activeSection] || { tone: 'royal' as Tone, art: undefined, subtitle: copyHeld ? 'MT5 connected. Copying starts once your account has the minimum.' : isConnected ? 'MT5 trade mirroring active' : '' };
           return (
             <SectionBanner
               tone={look.tone}
@@ -463,6 +466,20 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             >
               Go to payment
             </button>
+          </div>
+        )}
+
+        {/* Connected, but below the minimum equity: said kindly, with what happens next */}
+        {copyHeld && (
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 animate-in fade-in">
+            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-bold text-sm text-amber-600 dark:text-amber-300">Connected, but not copying yet</h4>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                Your account is safely connected. Trades from the master account start copying as soon as your account equity reaches {copyMinText}
+                {' '}(it is ${account.equity.toFixed(2)} now). Add funds at your broker whenever you are ready: there is nothing else to do, we start copying by ourselves.
+              </p>
+            </div>
           </div>
         )}
 
@@ -507,7 +524,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
               name={(userProfile?.displayName || 'Trader').split(' ')[0]}
               state={isConnected ? 'connected' : pending?.kind === 'working' ? 'connecting' : pending?.kind === 'failed' ? 'failed' : 'disconnected'}
               headline={
-                isConnected
+                copyHeld
+                  ? 'Connected, not copying yet'
+                  : isConnected
                   ? 'Your account is mirroring trades'
                   : pending?.kind === 'working'
                     ? 'Your MT5 terminal is connecting'
@@ -516,7 +535,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                       : 'Ready to start copying'
               }
               detail={
-                isConnected
+                copyHeld
+                  ? `MT5 #${account.accountNumber} is linked. Copying starts as soon as your account equity reaches ${copyMinText}.`
+                  : isConnected
                   ? `MT5 #${account.accountNumber}${account.brokerName || account.brokerServer ? ` · ${account.brokerName || account.brokerServer}` : ''} is linked and copying.`
                   : pending?.kind === 'working'
                     ? 'This updates by itself as soon as your account is ready. You do not need to keep this page open.'
@@ -531,6 +552,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                     ? { label: 'Connecting…', pulse: true }
                     : { label: 'Not connected' },
                 ...(isConnected && account.isBrokerVerified ? [{ label: 'Broker verified' }] : []),
+                ...(copyHeld ? [{ label: 'Not copying yet' }] : []),
                 ...(isConnected && account.connectionState === 'RECONNECTING' ? [{ label: 'Reconnecting…' }] : []),
                 ...(isConnected && account.connectionState === 'ERROR' ? [{ label: 'Link problem' }] : []),
                 ...(planView

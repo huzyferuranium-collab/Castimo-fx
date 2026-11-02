@@ -49,6 +49,8 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
   const [password, setPassword] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [success, setSuccess] = useState(false);
+  // Set when the account connected but is below the minimum equity: nothing copies yet, and it starts by itself once it reaches it.
+  const [heldMin, setHeldMin] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [errorHint, setErrorHint] = useState<string | null>(null);
   const [errorRef, setErrorRef] = useState<string | null>(null);
@@ -114,11 +116,15 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
         setBackground(true);
         return;
       }
+      const connected = tradingEngine.getMt5Account();
+      const held = connected.copyHeld === 'low_funds';
+      setHeldMin(held ? (typeof connected.copyMinimumUsd === 'number' ? `$${connected.copyMinimumUsd.toFixed(2)}` : 'the minimum') : null);
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
+        setHeldMin(null);
         onClose();
-      }, 1500);
+      }, held ? 6000 : 1500);
     } catch (err: any) {
       if (err instanceof ConnectError && err.code === 'TERMS_NOT_ACCEPTED') {
         if (justAgreed.current) {
@@ -186,7 +192,13 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                 <CheckCircle2 className="w-8 h-8" />
               </div>
               <h4 className="text-base font-bold text-white">Account connected</h4>
-              <p className="text-xs text-slate-400">Trades from the master account now copy to #{accountNumber}.</p>
+              {heldMin ? (
+                <p className="text-xs text-slate-400">
+                  #{accountNumber} is connected but not copying yet. Trades start by themselves as soon as the account has {heldMin}: add funds at your broker whenever you are ready.
+                </p>
+              ) : (
+                <p className="text-xs text-slate-400">Trades from the master account now copy to #{accountNumber}.</p>
+              )}
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
