@@ -501,6 +501,15 @@ export class BillingService {
   private payNowBusy = new Set<string>();
 
   /**
+   * The client's connected account, found the same way the dashboard finds it: from memory, or looked up again at the copier
+   * service when the server has just restarted (after a deploy) and has not restored everyone yet.
+   */
+  private async connectedRecord(userId: string): Promise<ClientConnectionRecord | null> {
+    const rec = this.manager.getClientConnection(userId) ?? (await this.manager.restoreClientForUser(userId).catch(() => undefined));
+    return rec && rec.isBrokerVerified && rec.userId === userId ? rec : null;
+  }
+
+  /**
    * What a profit-share client can pay right now, before the daily settlement: 50% of the new profit from closed trades, allowed
    * when that profit is at least MIN_INVOICE_PROFIT_USD, no trade is open on the account, and no earlier invoice is still unpaid.
    */
@@ -508,8 +517,8 @@ export class BillingService {
     const cfg = billingConfig();
     const base = { minProfitUsd: cfg.minProfitUsd, feePct: cfg.feePct, periodPnl: 0, gain: 0, fee: 0, trades: 0, openTrades: 0 };
     if (!billingEnabled()) return { ...base, canPay: false, reason: 'Payments are not open yet.' };
-    const rec = this.manager.getAllClientRecords().find((r) => r.userId === userId && r.isBrokerVerified);
-    if (!rec) return { ...base, canPay: false, reason: 'Connect your MT5 account first.' };
+    const rec = await this.connectedRecord(userId);
+    if (!rec) return { ...base, canPay: false, reason: 'Your MT5 account is not connected right now. If it was just reconnected, wait a minute and this updates by itself.' };
     const plan = await this.getPlan(userId);
     if (plan?.model === 'subscription') return { ...base, canPay: false, reason: 'You are on the monthly plan: there is no profit share to pay.' };
     if (String(rec.currency).toUpperCase() !== 'USD') return { ...base, canPay: false, reason: 'Only USD accounts can pay the profit share here.' };
@@ -542,7 +551,7 @@ export class BillingService {
     try {
       const view = await this.payableNow(userId);
       if (!view.canPay) throw new BillingError(view.reason || 'Nothing can be paid right now.', 409);
-      const rec = this.manager.getAllClientRecords().find((r) => r.userId === userId && r.isBrokerVerified)!;
+      const rec = (await this.connectedRecord(userId))!;
       const cfg = billingConfig();
       const ledger = await this.openLedger(rec);
       const out = await settleClient(this.psDeps(), ledger, {
