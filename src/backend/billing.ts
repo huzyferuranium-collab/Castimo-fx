@@ -160,8 +160,8 @@ export class BillingService {
   private dailyEquityDone = new Set<string>();
 
   /**
-   * The daily equity commission: on each of the first 20 working days of the month (UTC), every connected Monthly Plan client
-   * with an active plan earns their three referrers 1% / 0.5% / 0.5% of the client's equity. Runs every 10 minutes and credits
+   * The daily equity commission: on each of the first 20 working days of the month (UTC), every connected 50% Profit Share client
+   * earns their three referrers 1% / 0.5% / 0.5% of the client's equity (as the copier service reports it at that moment). Runs every 10 minutes and credits
    * each client once a day (the credits have fixed ids). A disconnected account earns nothing that day.
    */
   async dailyEquityPass(now = Date.now()): Promise<void> {
@@ -177,8 +177,8 @@ export class BillingService {
       if (!Number.isFinite(equity) || equity <= 0 || String(rec.currency).toUpperCase() !== 'USD') continue;
       try {
         const plan = await this.getPlan(rec.userId);
-        if (plan?.model !== 'subscription' || !subscriptionActive(plan, now)) {
-          this.dailyEquityDone.add(mark); // not on an active Monthly Plan today
+        if (plan?.model !== 'profit_share') {
+          this.dailyEquityDone.add(mark); // Monthly Plan clients earn their referrers the one-time plan commission instead
           continue;
         }
         credited += await accrueDailyEquityCommission(rec.userId, equity, day);
@@ -475,8 +475,9 @@ export class BillingService {
       periodEnd: period.end,
       at: new Date(now).toISOString(),
     });
-    // Commission is a share of the plan fee, not of any extra the client happened to send.
-    await this.creditReferrers(userId, commissionBaseUsdt(cfg.subscriptionPriceUsdt, check.amountUsdt), 'subscription', `sub-${txHash}`);
+    // Commission is a share of the plan fee, not of any extra the client happened to send, and is paid ONCE per client: on the
+    // first Monthly Plan payment. The id is fixed per client, so a renewal can never credit it again.
+    await this.creditReferrers(userId, commissionBaseUsdt(cfg.subscriptionPriceUsdt, check.amountUsdt), 'subscription', `sub-first-${userId}`);
     await recordEvent('SUBSCRIBED', userId, `sub-${txHash}`);
     await this.applyBlocking(userId);
     return updated;

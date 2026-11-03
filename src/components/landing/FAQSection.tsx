@@ -52,21 +52,21 @@ const FAQ_ITEMS: FAQItem[] = [
     category: 'referrals',
     question: 'How do the 3-phase referral commissions work?',
     answer:
-      'Commission is earned on the $100 Monthly Plan only (Profit Share payments earn none). When a trader in your network pays it:\n• Phase 1 (your direct referrals): 10%\n• Phase 2 (their referrals): 5%\n• Phase 3 (the next level): 5%\nOnly verified payments earn commission.\n\nDaily commission (Monthly Plan clients): every working day, while a referred client\u2019s MT5 account is connected, you earn 1% (Phase 1), 0.5% (Phase 2) or 0.5% (Phase 3) of that client\u2019s equity. It is paid on the first 20 working days of every month.',
+      'Monthly Plan clients: commission is paid once, on the client\u2019s first $100 Monthly Plan payment (renewals earn nothing):\n• Phase 1 (your direct referrals): 10%\n• Phase 2 (their referrals): 5%\n• Phase 3 (the next level): 5%\nOnly verified payments earn commission.\n\nDaily commission (50% Profit Share clients): every working day, while a referred client\u2019s MT5 account stays connected, you earn 1% (Phase 1), 0.5% (Phase 2) or 0.5% (Phase 3) of that client\u2019s equity. It is paid on the first 20 working days of every month.',
   },
   {
     id: 'ref-math-example',
     category: 'referrals',
     question: 'Can you give an example?',
     answer:
-      'Monthly Plan: a trader you invited pays the $100 plan fee.\n• Phase 1 (you): 10% = $10.00 USDT\n• Phase 2: 5% = $5.00 USDT\n• Phase 3: 5% = $5.00 USDT\n\nDaily commission: a Monthly Plan trader you invited has $1,000 equity and stays connected.\n• Phase 1 (you): 1% = $10.00 a day\n• Phase 2: 0.5% = $5.00 a day\n• Phase 3: 0.5% = $5.00 a day\nPaid on 20 working days a month.\n\nCommissions come from the platform’s share, never from client capital.',
+      'Monthly Plan (paid once, on the first payment): a trader you invited pays the $100 plan fee.\n• Phase 1 (you): 10% = $10.00 USDT\n• Phase 2: 5% = $5.00 USDT\n• Phase 3: 5% = $5.00 USDT\n\nDaily commission: a 50% Profit Share trader you invited has $1,000 equity and stays connected.\n• Phase 1 (you): 1% = $10.00 a day\n• Phase 2: 0.5% = $5.00 a day\n• Phase 3: 0.5% = $5.00 a day\nPaid on 20 working days a month.\n\nCommissions come from the platform’s share, never from client capital.',
   },
   {
     id: 'ref-payout-methods',
     category: 'referrals',
     question: 'How are referral commissions paid out?',
     answer:
-      'Commissions are credited to your Referral Hub once a referred client’s $100 Monthly Plan payment is verified, and the daily commission is added each paid working day. You can withdraw from $50 to your own TRC20 USDT wallet, with a 10% processing fee. Requests made before Thursday 23:59 GMT join that week’s cycle and are processed within 24 hours after it.',
+      'Commissions are credited to your Referral Hub once a referred client’s first $100 Monthly Plan payment is verified, and the daily commission for 50% Profit Share clients is added each paid working day. You can withdraw from $50 to your own TRC20 USDT wallet, with a 10% processing fee. Requests made before Thursday 23:59 GMT join that week’s cycle and are processed within 24 hours after it.',
   },
   {
     id: 'sec-broker-custody',

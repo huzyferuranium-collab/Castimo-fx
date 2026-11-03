@@ -2,7 +2,8 @@
  * Referral and withdrawal rules (pure functions, no I/O, unit-tested).
  *
  *  - Three levels. Level 1 earns 10%, level 2 earns 5%, level 3 earns 5% of what the referred client
- *    ACTUALLY PAYS for the $100 Monthly Plan (a verified subscription payment). Profit Share invoices earn no commission.
+ *    pays for the $100 Monthly Plan, ONCE per client (the first verified payment; renewals earn nothing). Profit Share clients
+ *    earn their referrers the daily equity commission instead (see DAILY_EQUITY_RATES_PCT).
  *  - A withdrawal request must be at least $50 (gross). A 10% processing fee is taken from it.
  *  - Requests made before Thursday 23:59 GMT join that week's cycle. Later ones join the next week's.
  *    GMT/UTC is the only clock used, and the server's time is the only time that counts.
@@ -11,7 +12,7 @@
 export const REFERRAL_RATES_PCT = [10, 5, 5] as const;
 
 /**
- * Daily equity commission (Monthly Plan clients): each paid day, the three referrers above a connected client earn these
+ * Daily equity commission (50% Profit Share clients): each paid day, the three referrers above a connected client earn these
  * percentages of that client's equity, as the copier service reports it. Paid on the first 20 working days (Mon-Fri, UTC)
  * of every month; working days after the 20th earn nothing, and the count starts again on the 1st.
  */

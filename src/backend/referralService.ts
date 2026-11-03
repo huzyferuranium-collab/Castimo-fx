@@ -145,7 +145,7 @@ export async function accrueCommissions(
 }
 
 /**
- * Credits one day's equity commission for a connected Monthly Plan client. Safe to call many times a day: each credit has a
+ * Credits one day's equity commission for a connected 50% Profit Share client. Safe to call many times a day: each credit has a
  * fixed id per client, day and level, so it can only exist once. Returns how many credits were new.
  */
 export async function accrueDailyEquityCommission(sourceUid: string, equityUsd: number, dayKey: string): Promise<number> {
