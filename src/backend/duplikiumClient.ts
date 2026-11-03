@@ -111,6 +111,8 @@ export interface PositionsResult {
 }
 
 export interface DuplikiumSetting {
+  /** What the row looked like (field names and kinds, status values), for the administrator's check. Not enumerable. */
+  readonly layout?: string;
   idMaster: string | null;
   idSlave: string | null;
   idGroup: string | null;
@@ -222,14 +224,17 @@ export function normalizeAccount(raw: any): DuplikiumAccount | null {
 
 export function normalizeSetting(raw: any): DuplikiumSetting | null {
   if (!raw || typeof raw !== 'object') return null;
-  return {
+  const row: DuplikiumSetting = {
     idMaster: strOrNull(raw.id_master),
     idSlave: strOrNull(raw.id_slave),
     idGroup: strOrNull(raw.id_group),
+    // Duplikium also sends the status as text ("on", "close only"...); the number is used when there is one.
     copierStatus: num(raw.copier_status),
     riskFactorType: num(raw.risk_factor_type),
     riskFactorValue: num(raw.risk_factor_value),
   };
+  Object.defineProperty(row, 'layout', { value: describeAnswer(raw), enumerable: false });
+  return row;
 }
 
 function firstDefined(raw: any, keys: string[]): unknown {
@@ -262,6 +267,8 @@ const POS_SIDE_KEYS = ['type', 'side', 'action', 'direction', 'cmd', 'order_type
 const POS_VOLUME_KEYS = ['volume', 'lots', 'lot', 'size', 'quantity', 'qty', 'lot_size'];
 /** Counters of a paged answer (how many rows exist, which page this is): numbers, safe to show. */
 const PAGING_KEYS = ['recordsTotal', 'recordsFiltered', 'draw', 'start', 'length', 'total', 'count'];
+/** Status fields of an answer (success flags, codes, copier status): short values, safe to show. */
+const STATUS_KEYS = ['success', 'code', 'copier_status', 'copier_status_string', 'risk_factor_type', 'risk_factor_value', 'order_side'];
 const POS_ACCOUNT_KEYS = ['account_id', 'accountId', 'id_account'];
 
 /** The first of these fields that holds a plain value (text or number). Objects and lists are never read as a value. */
@@ -383,7 +390,7 @@ export function describeAnswer(json: any, depth = 0): string {
   const shown = entries.slice(0, 16).map(([k, v]) => {
     const name = /^\d{3,}$/.test(k) ? '#id' : k;
     if (v !== null && typeof v === 'object') return `${name}:${describeAnswer(v, depth + 1)}`;
-    const reveal = (POS_SIDE_KEYS.includes(k) || POS_SYMBOL_KEYS.includes(k) || PAGING_KEYS.includes(k)) && (typeof v === 'number' || (typeof v === 'string' && v.length <= 24));
+    const reveal = (POS_SIDE_KEYS.includes(k) || POS_SYMBOL_KEYS.includes(k) || PAGING_KEYS.includes(k) || STATUS_KEYS.includes(k)) && (typeof v === 'number' || typeof v === 'boolean' || (typeof v === 'string' && v.length <= 24));
     return `${name}:${kindOf(v)}${reveal ? `=${JSON.stringify(v)}` : ''}`;
   });
   return `{${shown.join(', ')}${entries.length > 16 ? `, …${entries.length - 16} more` : ''}}`;
@@ -909,7 +916,16 @@ export class DuplikiumClient implements CopierApi {
     };
     const form: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(row)) form[`0[${k}]`] = v;
-    await this.call('settings/setSettings.php', 'settings', form, false, true);
+    const answer = await this.call('settings/setSettings.php', 'settings', form, false, true);
+    // The documented answers are { success, code } and { code, error } (an error is thrown by call()). An answer that says
+    // success false is a refusal too. What the answer looked like is written to the log once, so it can be checked.
+    if (answer && typeof answer === 'object' && answer.success === false) {
+      throw new DuplikiumError('API', `The copier service did not accept the setting${answer.code !== undefined ? ` (code ${String(answer.code).slice(0, 20)})` : ''}.`);
+    }
+    if (!setAnswerNoted) {
+      setAnswerNoted = true;
+      console.log(`ℹ️ [DUPLIKIUM] A settings change was answered: ${describeAnswer(answer)}`);
+    }
   }
 
   // ----- positions -----
@@ -949,6 +965,8 @@ export class DuplikiumClient implements CopierApi {
     return readPositions(await this.positionsJson('position/getClosedPositions.php', 'closed', accountId), { accountId, skipGroups: /^open|pending/i });
   }
 }
+
+let setAnswerNoted = false;
 
 const RATE_LIMIT_WORDS = /request limit|rate limit|too many requests/i;
 

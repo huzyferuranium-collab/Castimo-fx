@@ -7,6 +7,7 @@ import {
   DEFAULT_LIMITS,
   normalizeAccount,
   normalizePosition,
+  normalizeSetting,
   readSide,
   describeAnswer,
   readPositions,
@@ -298,7 +299,7 @@ test('an unreadable answer is described by field names and kinds only, with the 
   const r = readPositions({ success: true, positions: { '3426236597': { ticket: 3426236597, symbol: 'XAUUSD', type: 1, volume: 0.03, profit: 0.8, password: 'x' } } });
   assert.equal(
     r.layout,
-    '{success:boolean, positions:{#id:{ticket:number, symbol:string="XAUUSD", type:number=1, volume:number, profit:number, password:string}}}'
+    '{success:boolean=true, positions:{#id:{ticket:number, symbol:string="XAUUSD", type:number=1, volume:number, profit:number, password:string}}}'
   );
   assert.ok(!Object.keys(r).includes('layout'));
   assert.equal(describeAnswer({ error: null, list: [] }), '{error:null, list:[]}');
@@ -351,6 +352,18 @@ test('if the service refuses the paging fields, the plain call is made', async (
 test('an empty paged answer shows its counters, and rows that are plain lists show their values', () => {
   assert.equal(describeAnswer({ data: [], recordsTotal: 14, recordsFiltered: 14 }), '{data:[], recordsTotal:number=14, recordsFiltered:number=14}');
   assert.equal(describeAnswer({ data: [[3426236597, 'XAUUSD', 'Sell', 0.03]] }), '{data:[1× row(4 values): 3426236597, "XAUUSD", "Sell", 0.03]}');
+});
+
+test('a settings change answered with success false is a refusal; the answer is described once in the log', async () => {
+  const { c } = client({ 'access/getToken.php': TOKEN(1), 'settings/setSettings.php': { body: { success: false, code: 403 } } });
+  await assert.rejects(() => c.setSettings({ idMaster: 'M', idSlave: 'S', copierStatus: 1 }), /did not accept the setting \(code 403\)/);
+});
+
+test('a settings row remembers what it looked like, without showing it as a field', () => {
+  const row = normalizeSetting({ id_master: 'M', id_slave: '', id_group: 'G', risk_factor_type: 0, risk_factor_value: 1, copier_status_string: 'on', password: 'x' })!;
+  assert.equal(row.copierStatus, null);
+  assert.equal(row.layout, '{id_master:string, id_slave:string, id_group:string, risk_factor_type:number=0, risk_factor_value:number=1, copier_status_string:string="on", password:string}');
+  assert.ok(!Object.keys(row).includes('layout'));
 });
 
 test('times and numbers are read carefully', () => {

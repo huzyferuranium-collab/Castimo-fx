@@ -28,6 +28,7 @@ import {
   type DuplikiumAccount,
   type DuplikiumPosition,
   type PositionsResult,
+  type DuplikiumSetting,
 } from './duplikiumClient.ts';
 import { ProvisionGate, HandedOff, friendlyHint, rejectsForGood, type Stage } from './clientBridge.ts';
 import { DISCONNECT_GRACE_MS, GONE_GRACE_MS, decideLink, desiredCopierStatus, nextReadDelayMs, type LinkMemory } from './copierLink.ts';
@@ -1115,10 +1116,16 @@ export class Mt5ConnectionManager {
     const want = desiredCopierStatus(rec);
     const risk = await this.riskSettings();
     await this.api.setSettings({ idMaster: this.masterId, idSlave: rec.accountId, copierStatus: want, ...risk });
-    const rows = await this.api.getSettings({ idMaster: this.masterId, idSlave: rec.accountId });
-    const got = rows.find((r) => r.idSlave === rec.accountId)?.copierStatus;
+    // Read by the account alone: a row with no master named applies to every master, so it counts too (the master is not part of the filter).
+    const rows = await this.api.getSettings({ idSlave: rec.accountId });
+    const got = this.settingFor(rows, rec.accountId)?.copierStatus;
     if (got !== want) throw new DuplikiumError('API', `Copier status did not change (wanted ${want}, service reports ${got ?? 'nothing'}).`);
     rec.copyApplied = want;
+  }
+
+  /** The copy setting row that applies to this account: its own row for our master, otherwise one that names no master (all masters). */
+  private settingFor(rows: DuplikiumSetting[], accountId: string): DuplikiumSetting | undefined {
+    return rows.find((r) => r.idSlave === accountId && r.idMaster === this.masterId) ?? rows.find((r) => r.idSlave === accountId && !r.idMaster);
   }
 
   /** True while the start-up hold is on and billing has not yet judged this client, so switching copying ON would be a guess. */
@@ -1182,9 +1189,16 @@ export class Mt5ConnectionManager {
     this.reconciling = true;
     this.lastReconcileAt = Date.now();
     try {
-      const rows = await this.api.getSettings({ idMaster: this.masterId });
+      // All rows (an empty filter is allowed), so a row that names no master is seen too. If that is refused, the master's rows.
+      let rows: DuplikiumSetting[];
+      try {
+        rows = await this.api.getSettings({});
+      } catch (e) {
+        if (e instanceof DuplikiumError && e.kind === 'API') rows = await this.api.getSettings({ idMaster: this.masterId });
+        else throw e;
+      }
       const bySlave = new Map<string, number | null>();
-      for (const r of rows) if (r.idSlave) bySlave.set(r.idSlave, r.copierStatus);
+      for (const r of rows) if (r.idSlave && (r.idMaster === this.masterId || !r.idMaster)) bySlave.set(r.idSlave, r.copierStatus);
       const seen = new Set<string>();
       for (const rec of Array.from(this.clientPool.values())) {
         if (seen.has(rec.accountId) || !rec.isBrokerVerified) continue;
@@ -1610,11 +1624,33 @@ export class Mt5ConnectionManager {
         add(
           'Client template',
           r.riskFactorType !== null && r.riskFactorValue !== null,
-          `copier status ${r.copierStatus ?? '?'}, copy size type ${r.riskFactorType ?? '?'}, value ${r.riskFactorValue ?? '?'}. Every client gets this copy size.`
+          `copier status ${r.copierStatus ?? '?'}, copy size type ${r.riskFactorType ?? '?'}${r.riskFactorType === 0 ? ' (auto risk based on equity)' : ''}, value ${r.riskFactorValue ?? '?'}. Every client gets this copy size.` +
+            (r.copierStatus === null ? ` The row did not state a copier status. It looked like: ${String(r.layout ?? 'unknown').slice(0, 600)}` : '')
         );
       }
     } catch (e: any) {
       add('Client template', false, String(e?.message || e));
+    }
+
+    // One client account: what Duplikium holds for it, so a copy setting that cannot be confirmed can be understood.
+    const sample = accounts.find((a) => a.type === 'slave' && a.accountId !== this.masterId);
+    if (sample) {
+      try {
+        const rows = await this.api.getSettings({ idSlave: sample.accountId });
+        const row = this.settingFor(rows, sample.accountId);
+        add(
+          'Client copy setting',
+          true,
+          `#${sample.login || '?'} (${sample.groupId ? 'on a template' : 'no template'}): ` +
+            (row
+              ? `its own setting says copier status ${row.copierStatus ?? '?'}. The row looked like: ${String(row.layout ?? 'unknown').slice(0, 600)}`
+              : rows.length
+              ? `${rows.length} row(s) came back but none for our master. They looked like: ${String(rows[0].layout ?? 'unknown').slice(0, 600)}`
+              : 'it has no setting of its own; it follows its template.')
+        );
+      } catch (e: any) {
+        add('Client copy setting', false, String(e?.message || e));
+      }
     }
 
     if (this.masterId) {

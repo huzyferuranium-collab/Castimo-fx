@@ -1178,6 +1178,34 @@ test('the connection check also reads the master\'s closed trades and shows the 
   assert.match(t.detail, /type:number=1/);
 });
 
+test('a copy setting that names no master still counts when it is read back (it applies to every master)', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  await m.provisionClientTerminal(creds('u1', '5551234'), () => {});
+  fake.getSettings = async (f: any) => {
+    if (f.idGroup) return [fake.templateRow];
+    return [{ idMaster: null, idSlave: 'D1', idGroup: null, copierStatus: -1, riskFactorType: 0, riskFactorValue: 1 }];
+  };
+  m.setBillingBlocked('u1', true);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(m.getClientConnection('u1')?.copyApplied, -1, 'confirmed from the row that names no master');
+});
+
+test('the connection check shows what Duplikium holds for one client account, and the template row when it states no status', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  await m.provisionClientTerminal(creds('u1', '5551234'), () => {});
+  fake.templateRow = { idMaster: null, idSlave: null, idGroup: 'T', copierStatus: null, riskFactorType: 0, riskFactorValue: 1 };
+  Object.defineProperty(fake.templateRow, 'layout', { value: '{id_group:string, risk_factor_type:number=0}', enumerable: false });
+  const empty = await m.runConnectionCheck();
+  const t = empty.steps.find((s: any) => s.name === 'Client template')!;
+  assert.match(t.detail, /auto risk based on equity/);
+  assert.match(t.detail, /did not state a copier status/);
+  const c = empty.steps.find((s: any) => s.name === 'Client copy setting')!;
+  assert.equal(c.ok, true);
+  assert.match(c.detail, /#5551234/);
+});
+
 // ---------- administrator tools ----------
 
 test('the admin list shows client accounts only, never the master', async () => {
