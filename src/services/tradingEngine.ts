@@ -941,7 +941,7 @@ class TradingEngine {
     if (!r.success) return { success: false, message: r.error || 'Verification failed.', error: r.error };
     return {
       success: true,
-      message: `Payment verified on the TRON network. $${pending.amountDueUsdt.toFixed(2)} USDT received.`,
+      message: `Payment verified on the TRON network. Invoice of $${pending.amountDueUsdt.toFixed(2)} USDT is paid.`,
       amountSettled: pending.amountDueUsdt,
       txHash: cleanHash,
       invoiceId: pending.id,

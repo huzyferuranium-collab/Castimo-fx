@@ -153,12 +153,12 @@ export const ProfitSharePaymentModal: React.FC<ProfitSharePaymentModalProps> = (
                 </div>
                 <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2.5">
                   <div className="p-2.5 bg-slate-900 rounded-lg border border-slate-800/80 text-center font-mono text-xs text-emerald-300 break-all select-all">
-                    {CASTIMO_TREASURY_ADDRESS || 'Payment address not set yet'}
+                    {(invoice?.recipientAddress || CASTIMO_TREASURY_ADDRESS) || 'Payment address not set yet'}
                   </div>
                   <button
                     type="button"
-                    disabled={!CASTIMO_TREASURY_ADDRESS}
-                    onClick={() => copyToClipboard(CASTIMO_TREASURY_ADDRESS)}
+                    disabled={!(invoice?.recipientAddress || CASTIMO_TREASURY_ADDRESS)}
+                    onClick={() => copyToClipboard(invoice?.recipientAddress || CASTIMO_TREASURY_ADDRESS)}
                     className="w-full py-2 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-medium text-xs flex items-center justify-center gap-2 transition cursor-pointer border border-slate-700 disabled:opacity-50"
                   >
                     {copied ? (

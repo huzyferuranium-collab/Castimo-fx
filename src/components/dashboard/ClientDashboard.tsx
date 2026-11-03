@@ -138,6 +138,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
 
   // 50% Profit Share Remittance & Transaction Hash State
   const [invoices, setInvoices] = useState<ProfitShareInvoice[]>(tradingEngine.getProfitInvoices());
+  // The address the server checks a payment against is the one stored on the unpaid invoice; it is shown, so the two always match.
+  const payToAddress = invoices.find((i) => i.status !== 'paid')?.recipientAddress || CASTIMO_TREASURY_ADDRESS;
   const [txHashInput, setTxHashInput] = useState<string>('');
   const [isVerifyingHash, setIsVerifyingHash] = useState<boolean>(false);
   const [hashResult, setHashResult] = useState<{
@@ -1039,12 +1041,12 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
 
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <div className="flex-1 px-3 py-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-mono text-emerald-300 select-all truncate">
-                    {CASTIMO_TREASURY_ADDRESS || 'Payment address not set yet'}
+                    {payToAddress || 'Payment address not set yet'}
                   </div>
 
                   <button
                     type="button"
-                    onClick={() => handleCopyAddress(CASTIMO_TREASURY_ADDRESS)}
+                    onClick={() => handleCopyAddress(payToAddress)}
                     className="px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shrink-0 shadow-sm"
                   >
                     {copyFeedback ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
