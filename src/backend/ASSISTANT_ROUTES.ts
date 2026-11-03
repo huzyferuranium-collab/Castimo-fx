@@ -9,7 +9,9 @@ import {
   AssistantError,
   type ClientFacts,
   allowMessage,
-  askGemini,
+  askWithFallback,
+  builtInAnswer,
+  type KnowledgeFacts,
   assistantConfigured,
   buildSystemPrompt,
   cleanHistory,
@@ -80,8 +82,7 @@ assistantRouter.post('/chat', async (req: Request, res: Response) => {
         .json({ success: false, error: `You have sent a lot of messages. Please wait ${Math.ceil(limit.retryAfterSeconds / 60)} minute(s) and try again.` });
     }
     const cfg = billingConfig();
-    const system = buildSystemPrompt(
-      {
+    const knowledge: KnowledgeFacts = {
         feePct: cfg.feePct,
         minProfitUsd: cfg.minProfitUsd,
         toleranceUsdt: cfg.paymentToleranceUsdt,
@@ -95,16 +96,20 @@ assistantRouter.post('/chat', async (req: Request, res: Response) => {
         withdrawFeePct: WITHDRAW_FEE_PCT,
         supportWhatsapp: (process.env.SUPPORT_WHATSAPP || '').trim(),
         supportEmail: (process.env.SUPPORT_EMAIL || '').trim(),
-      },
-      facts
-    );
-    const reply = await askGemini({
-      apiKey: String(process.env.GEMINI_API_KEY).trim(),
-      model: (process.env.GEMINI_MODEL || '').trim() || 'gemini-flash-latest',
-      system,
-      history,
-    });
-    return res.status(200).json({ success: true, reply });
+    };
+    const system = buildSystemPrompt(knowledge, facts);
+    try {
+      const { text } = await askWithFallback({
+        apiKey: String(process.env.GEMINI_API_KEY).trim(),
+        preferred: (process.env.GEMINI_MODEL || '').trim(),
+        system,
+        history,
+      });
+      return res.status(200).json({ success: true, reply: text });
+    } catch (e: any) {
+      // Gemini could not answer (key, model or quota; the reason is in the log): a built-in answer from our own rules instead.
+      return res.status(200).json({ success: true, reply: builtInAnswer(history[history.length - 1].text, knowledge, facts), fallback: true });
+    }
   } catch (e: any) {
     if (e instanceof AssistantError) return res.status(e.status).json({ success: false, error: e.message });
     console.error('❌ [API /assistant/chat]', e?.message || e);

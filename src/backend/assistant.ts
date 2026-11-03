@@ -149,7 +149,8 @@ export async function askGemini(opts: { apiKey: string; model: string; system: s
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: opts.system }] },
         contents: opts.history.map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.text }] })),
-        generationConfig: { temperature: 0.3, maxOutputTokens: 700 },
+        // Room for "thinking" models too: their hidden reasoning counts against this limit.
+        generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
       }),
       signal: AbortSignal.timeout(25_000),
     });
@@ -158,9 +159,14 @@ export async function askGemini(opts: { apiKey: string; model: string; system: s
   }
   const data = await res.json().catch(() => null);
   if (!res.ok) {
-    if (res.status === 429) throw new AssistantError('The assistant is busy right now. Please try again in a minute.', 429);
-    console.warn(`⚠️ [ASSISTANT] Gemini answered ${res.status}: ${String(data?.error?.message || '').slice(0, 200)}`);
-    throw new AssistantError('The assistant is not available right now. Please try again later.', 502);
+    const why = String(data?.error?.message || data?.error?.status || '').replace(/AIza[0-9A-Za-z_-]+/g, '***').slice(0, 300);
+    const err = new AssistantError(
+      res.status === 429 ? 'The assistant is busy right now. Please try again in a minute.' : 'The assistant is not available right now. Please try again later.',
+      res.status === 429 ? 429 : 502
+    );
+    (err as any).geminiStatus = res.status;
+    (err as any).geminiWhy = why;
+    throw err;
   }
   const text = (data?.candidates?.[0]?.content?.parts ?? [])
     .map((p: any) => (typeof p?.text === 'string' ? p.text : ''))
@@ -187,4 +193,84 @@ export function allowMessage(key: { uid?: string; ip: string }, now = Date.now()
 
 export function assistantConfigured(env: Record<string, string | undefined> = process.env): boolean {
   return Boolean((env.GEMINI_API_KEY || '').trim()) && (env.ASSISTANT_OFF || '').trim() !== '1';
+}
+
+// ---------- choosing a model that works with this key ----------
+
+/** Tried in order until one answers. A free AI Studio key cannot use every model, and old models are shut down over time. */
+export const MODEL_CANDIDATES = ['gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.5-flash-lite'];
+
+let workingModel = '';
+
+/** Why a model was refused, for the log: never the key. */
+function noteFailure(model: string, e: any): void {
+  console.warn(`⚠️ [ASSISTANT] Gemini model ${model} refused (HTTP ${e?.geminiStatus ?? '?'}): ${e?.geminiWhy || e?.message || e}`);
+}
+
+/**
+ * Asks the configured model (GEMINI_MODEL) or the first candidate that works, and remembers it. A key problem (401/403 that
+ * is not about a model) stops the search at once, since no other model would work either.
+ */
+export async function askWithFallback(opts: { apiKey: string; preferred?: string; system: string; history: ChatMessage[]; fetchImpl?: FetchLike }): Promise<{ text: string; model: string }> {
+  const order = [workingModel, opts.preferred || '', ...MODEL_CANDIDATES].filter((m, i, a) => m && a.indexOf(m) === i);
+  let last: any = null;
+  for (const model of order) {
+    try {
+      const text = await askGemini({ apiKey: opts.apiKey, model, system: opts.system, history: opts.history, fetchImpl: opts.fetchImpl });
+      if (workingModel !== model) console.log(`✅ [ASSISTANT] Answering with Gemini model ${model}.`);
+      workingModel = model;
+      return { text, model };
+    } catch (e: any) {
+      last = e;
+      noteFailure(model, e);
+      if (model === workingModel) workingModel = '';
+      const why = String(e?.geminiWhy || '').toLowerCase();
+      const keyProblem = (e?.geminiStatus === 400 && /api key|api_key/.test(why)) || ((e?.geminiStatus === 401 || e?.geminiStatus === 403) && !/model|quota|limit|billing|free tier/.test(why));
+      if (keyProblem) break;
+      if (!e?.geminiStatus && !(e instanceof AssistantError)) break; // not an answer from Google at all
+    }
+  }
+  throw last ?? new AssistantError('The assistant is not available right now. Please try again later.', 502);
+}
+
+export function resetWorkingModelForTests(): void {
+  workingModel = '';
+}
+
+// ---------- built-in answers (used when Gemini cannot answer) ----------
+
+/** A short, correct answer from the platform's rules for the most common questions, so a client is never left without help. */
+export function builtInAnswer(question: string, k: KnowledgeFacts, c: ClientFacts): string {
+  const q = question.toLowerCase();
+  const help = supportLine(k);
+  if (/not copy|no trade|isn.?t copy|not working|why.*copy|copying/.test(q)) {
+    const mine = c.signedIn && c.connected
+      ? c.copying === 'below_minimum'
+        ? `Your account is connected, but copying starts once your equity reaches ${k.minEquityUsd} USD.`
+        : c.copying === 'reading_balance'
+        ? 'Your account just connected. The balance appears within about 5 minutes and copying starts by itself.'
+        : c.copying === 'unpaid_invoice'
+        ? 'Copying is paused because a profit-share invoice is unpaid. Pay it on the 50% Profit Share tab and copying resumes.'
+        : c.copying === 'paused_by_client'
+        ? 'Copying is paused on your account. Switch it back on from your dashboard.'
+        : 'Your account is connected and copying. Trades appear when the master account opens a trade.'
+      : `Copying needs a connected MT5 account (trading password, exact server) with at least ${k.minEquityUsd} USD equity, and no overdue invoice.`;
+    return `${mine} ${help}`;
+  }
+  if (/txid|hash|transaction id/.test(q)) {
+    return 'After sending USDT on the TRON (TRC20) network, open your wallet\'s transaction details (in Binance: Wallet, Transaction History, Withdrawal) and copy the TxID: 64 letters and numbers. Paste it into "Verify payment" on the 50% Profit Share tab. Wait 1-2 minutes after sending so the network confirms it.';
+  }
+  if (/pay|invoice|usdt|tron|trc|share|50/.test(q)) {
+    return `You pay ${k.feePct}% of the new profit from closed trades. Every 24 hours an invoice is made when that profit is at least ${k.minProfitUsd} USD, or press "Pay my share now" when no trade is open. Send USDT on TRON (TRC20) to the address on the 50% Profit Share tab, then paste the TXID into "Verify payment". Up to ${k.toleranceUsdt} USDT less is accepted for exchange fees. Unpaid after ${k.dueHours} hours, copying pauses.`;
+  }
+  if (/refer|commission|withdraw|invite/.test(q)) {
+    return `Share your link from the Referral Hub. Monthly Plan clients you refer earn you ${k.referralPlanPct.join('% / ')}% of their first ${k.subscriptionPriceUsdt} USDT payment (levels 1 / 2 / 3). 50% Profit Share clients earn you ${k.referralDailyPct.join('% / ')}% of their equity every business day while connected. Save a TRON address under Withdraw and request at least ${k.withdrawMinUsdt} USDT (${k.withdrawFeePct}% fee).`;
+  }
+  if (/connect|mt5|server|password|login|account/.test(q)) {
+    return 'Confirm your email, accept the terms and choose a plan. Then press Connect and enter your MT5 account number, your TRADING password (not the investor password) and the exact server shown on your MT5 login screen. Only USD accounts. It connects as soon as the broker accepts the login; your balance appears within about 5 minutes.';
+  }
+  if (/profit|return|earn|how much|guarantee/.test(q)) {
+    return 'Results depend on the market and are never guaranteed: trading is risky and losses are possible. You only pay the profit share on real new profit from closed trades, never on losses.';
+  }
+  return `I can help with connecting your MT5 account, copying, the 50% profit share, paying in USDT and referrals. Could you ask about one of those? For anything else: ${help}`;
 }

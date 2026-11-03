@@ -60,3 +60,53 @@ test('visitors get fewer messages than signed-in clients', () => {
   while (allowMessage({ uid: 'u-test', ip: '9.9.9.9' }, t).allowed) n++;
   assert.equal(n, 30);
 });
+
+test('a model the key cannot use is skipped and the next one that works is kept', async () => {
+  const { askWithFallback, resetWorkingModelForTests, MODEL_CANDIDATES } = await import('../src/backend/assistant.ts');
+  resetWorkingModelForTests();
+  const tried: string[] = [];
+  const fetchImpl = async (url: string) => {
+    const model = decodeURIComponent(url.split('/models/')[1].split(':')[0]);
+    tried.push(model);
+    if (model === MODEL_CANDIDATES[2]) return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }) };
+    return { ok: false, status: 404, json: async () => ({ error: { message: `models/${model} is not found for API version v1beta` } }) };
+  };
+  const warn = console.warn;
+  const log = console.log;
+  console.warn = () => {};
+  console.log = () => {};
+  try {
+    const r = await askWithFallback({ apiKey: 'k', system: 's', history: [{ role: 'user', text: 'q' }], fetchImpl });
+    assert.equal(r.model, MODEL_CANDIDATES[2]);
+    tried.length = 0;
+    await askWithFallback({ apiKey: 'k', system: 's', history: [{ role: 'user', text: 'q' }], fetchImpl });
+    assert.deepEqual(tried, [MODEL_CANDIDATES[2]], 'the model that worked is asked first next time');
+  } finally {
+    console.warn = warn;
+    console.log = log;
+  }
+});
+
+test('a bad key stops the search at once', async () => {
+  const { askWithFallback, resetWorkingModelForTests } = await import('../src/backend/assistant.ts');
+  resetWorkingModelForTests();
+  let calls = 0;
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    await assert.rejects(
+      askWithFallback({ apiKey: 'k', system: 's', history: [{ role: 'user', text: 'q' }], fetchImpl: async () => (calls++, { ok: false, status: 400, json: async () => ({ error: { message: 'API key not valid. Please pass a valid API key.' } }) }) })
+    );
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(calls, 1);
+});
+
+test('built-in answers cover the common questions, personal when signed in', async () => {
+  const { builtInAnswer } = await import('../src/backend/assistant.ts');
+  assert.match(builtInAnswer('why is my account not copying', K, { signedIn: true, connected: true, copying: 'below_minimum' }), /100 USD/);
+  assert.match(builtInAnswer('where is my TXID', K, { signedIn: false }), /64/);
+  assert.match(builtInAnswer('how do I pay my 50% share', K, { signedIn: false }), /TRC20/);
+  assert.match(builtInAnswer('how much profit will I make', K, { signedIn: false }), /never guaranteed/);
+});
