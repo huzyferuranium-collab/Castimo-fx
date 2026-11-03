@@ -106,6 +106,8 @@ export interface SettleContext {
   feePct: number;
   dueHours: number;
   now: Date;
+  /** No invoice until the new profit reaches this many USD (smaller profit is carried forward). */
+  minProfitUsd?: number;
 }
 
 export type SettleOutcome =
@@ -121,7 +123,7 @@ export async function settleClient(deps: RunDeps, ledger: ClientLedger, ctx: Set
   const days = await loadDays(deps.store, ledger.userId, ledger.settledThrough, nowIso);
   const { pnl, trades } = sumTrades(days, ledger.settledThrough, nowIso);
   const state = realizedState(ledger);
-  const r = settleRealized(state, pnl, ctx.feePct);
+  const r = settleRealized(state, pnl, ctx.feePct, ctx.minProfitUsd ?? 0);
 
   let lastInvoiceId = ledger.lastInvoiceId;
   let invoice: Invoice | null = null;

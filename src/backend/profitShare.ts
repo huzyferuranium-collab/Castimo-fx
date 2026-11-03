@@ -144,3 +144,6 @@ export function isOverdue(invoice: Pick<Invoice, 'status' | 'dueAt'>, nowMs: num
 
 /** Fees below this are rolled into the next period instead of billed (avoids dust invoices). */
 export const MIN_INVOICE_USDT = 1;
+
+/** No invoice is made until the new profit since the last invoice reaches this many USD (MIN_INVOICE_PROFIT_USD). Smaller profit is carried forward. */
+export const DEFAULT_MIN_INVOICE_PROFIT_USD = 20;

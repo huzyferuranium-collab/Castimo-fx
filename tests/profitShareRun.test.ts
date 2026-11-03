@@ -318,3 +318,17 @@ test('a ledger from before closed-trade billing starts at 0 and waits 2 days for
   // upgrading twice does not push the date back
   assert.equal(upgradeLedger(up.ledger, now + 5 * 86_400_000).changed, false);
 });
+
+test('daily billing: no invoice until the new profit reaches 20 USD; smaller profit is carried forward, never lost', () => {
+  let r = settleRealized(realizedState({}), 12.5, 50, 20);
+  assert.equal(r.fee, 6.25);
+  assert.equal(r.invoiceable, false, 'under 20 USD profit: no invoice, so copying is never paused for it');
+  assert.deepEqual(r.next, { pnlCum: 12.5, pnlHwm: 0 });
+  r = settleRealized(r.next, 7.5, 50, 20); // 20 USD of new profit in total
+  assert.equal(r.gain, 20);
+  assert.equal(r.fee, 10);
+  assert.equal(r.invoiceable, true);
+  assert.deepEqual(r.next, { pnlCum: 20, pnlHwm: 20 });
+  r = settleRealized(r.next, 114.53, 50, 20);
+  assert.deepEqual([r.gain, r.fee, r.invoiceable], [114.53, 57.27, true]);
+});

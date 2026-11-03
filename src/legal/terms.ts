@@ -4,7 +4,7 @@
  *
  * IMPORTANT: this is a plain-language DRAFT. Have a lawyer in your country review it before launch.
  */
-export const TERMS_VERSION = '2026-10-v3';
+export const TERMS_VERSION = '2026-11-v4';
 
 export interface TermsSection {
   title: string;
@@ -48,12 +48,11 @@ export const TERMS_SECTIONS: TermsSection[] = [
   {
     title: '5. Profit share (our fee)',
     body: [
-      'There is no fee for losses. We charge 50% of NEW net profit, measured on your real broker account equity.',
-      'We start counting from the equity found when your account is first verified (the "high-water mark"). Money you deposit or withdraw is taken out of the calculation and never counts as profit or loss. We only charge when your equity is above the high-water mark, and losses must be recovered before a new fee is charged.',
-      'Every settlement period (currently 7 days) we calculate the fee from your broker\'s figures and issue an invoice in USDT. Fees under 1 USDT are carried to the next invoice.',
-      'Because the fee is measured on equity at the settlement time, profit that is later lost again is not refunded.',
+      'There is no fee for losses. We charge 50% of NEW net profit made by your closed trades (profit, minus commission and swap), as reported for your real broker account.',
+      'Money you deposit or withdraw never counts as profit or loss, and trades that are still open are not charged until they close. Losses must be recovered before a new fee is charged (the "high-water mark").',
+      'Every 24 hours we add up the new profit from your closed trades. If it is at least 20 USD, we issue an invoice in USDT for 50% of it. If it is less than 20 USD, no invoice is issued, copying continues, and that profit is carried forward to the next day.',
       'Pay in USDT on the TRON network (TRC20) to the wallet shown on your invoice. Network fees are paid by you. Send only to the address shown in the app. We never ask you to pay anywhere else.',
-      'If an invoice is not paid within the due time (currently 72 hours), copying is paused for your account until it is paid. Unpaid invoices remain owed.',
+      'If an invoice is not paid within the due time (currently 24 hours), copying is paused for your account until it is paid. Unpaid invoices remain owed.',
     ],
   },
   {

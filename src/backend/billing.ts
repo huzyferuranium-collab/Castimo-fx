@@ -17,6 +17,7 @@ import { Mt5ConnectionManager, type ClientConnectionRecord } from './MT5_CONNECT
 import {
   type ClientLedger,
   DEFAULT_FEE_PCT,
+  DEFAULT_MIN_INVOICE_PROFIT_USD,
   DEFAULT_INVOICE_DUE_HOURS,
   type Invoice,
   isSettlementDue,
@@ -73,7 +74,9 @@ function treasury(): string {
 export function billingConfig() {
   return {
     feePct: readLimit(process.env.FEE_PCT, DEFAULT_FEE_PCT),
-    periodDays: Math.max(1, readLimit(process.env.SETTLEMENT_PERIOD_DAYS, 7)),
+    // Settled every 24 hours by default; SETTLEMENT_PERIOD_DAYS can lengthen it.
+    periodDays: Math.max(1, readLimit(process.env.SETTLEMENT_PERIOD_DAYS, 1)),
+    minProfitUsd: Math.max(0, readLimit(process.env.MIN_INVOICE_PROFIT_USD, DEFAULT_MIN_INVOICE_PROFIT_USD)),
     dueHours: Math.max(1, readLimit(process.env.INVOICE_DUE_HOURS, DEFAULT_INVOICE_DUE_HOURS)),
     treasury: treasury(),
     subscriptionPriceUsdt: Math.max(1, readLimit(process.env.SUBSCRIPTION_PRICE_USDT, DEFAULT_SUBSCRIPTION_PRICE_USDT)),
@@ -281,11 +284,13 @@ export class BillingService {
       feePct: cfg.feePct,
       dueHours: cfg.dueHours,
       now: new Date(),
+      minProfitUsd: cfg.minProfitUsd,
     });
     if (out.kind === 'skipped') {
       this.notBilled.push(`${rec.userId.slice(0, 8)}…: ${out.reason}`);
       return;
     }
+    if (!out.invoice) console.log(`💰 [BILLING] ${rec.userId}: day settled, no invoice (${out.trades} closed trades, ${out.periodPnl} USD; under ${cfg.minProfitUsd} USD new profit is carried forward, copying continues).`);
     if (out.invoice) console.log(`🧾 [BILLING] Invoice ${out.invoice.id}: ${out.invoice.amountDueUsdt} USDT for ${rec.userId} (${out.trades} closed trades)`);
   }
 

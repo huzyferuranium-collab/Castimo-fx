@@ -783,7 +783,7 @@ class TradingEngine {
     enabled: false,
     treasuryAddress: '',
     feePct: 50,
-    periodDays: 7,
+    periodDays: 1,
   };
 
   public getBillingInfo() {
@@ -803,7 +803,7 @@ class TradingEngine {
           enabled: Boolean(data.billingEnabled),
           treasuryAddress: String(data.treasuryAddress || ''),
           feePct: Number(data.feePct) || 50,
-          periodDays: Number(data.periodDays) || 7,
+          periodDays: Number(data.periodDays) || 1,
         };
       }
       const rows: any[] = Array.isArray(data.invoices) ? data.invoices : [];

@@ -154,9 +154,13 @@ export interface RealizedSettlement extends RealizedShare {
   next: RealizedState;
 }
 
-export function settleRealized(state: RealizedState, periodPnl: number, feePct: number): RealizedSettlement {
+/**
+ * `minProfitUsd`: no invoice until the new profit (above the mark) reaches this much. Below it nothing is billed, so nothing can
+ * become overdue and copying is never paused for it; the profit is carried forward and counts towards the next day.
+ */
+export function settleRealized(state: RealizedState, periodPnl: number, feePct: number, minProfitUsd = 0): RealizedSettlement {
   const s = shareOn(state, periodPnl, feePct);
-  const invoiceable = s.fee >= MIN_INVOICE_USDT;
+  const invoiceable = s.fee >= MIN_INVOICE_USDT && s.gain >= (Number.isFinite(minProfitUsd) && minProfitUsd > 0 ? minProfitUsd : 0);
   return {
     ...s,
     invoiceable,
