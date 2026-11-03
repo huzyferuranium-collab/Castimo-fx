@@ -1624,7 +1624,7 @@ export class Mt5ConnectionManager {
         add(
           'Client template',
           r.riskFactorType !== null && r.riskFactorValue !== null,
-          `copier status ${r.copierStatus ?? '?'}, copy size type ${r.riskFactorType ?? '?'}${r.riskFactorType === 0 ? ' (auto risk based on equity)' : ''}, value ${r.riskFactorValue ?? '?'}. Every client gets this copy size.` +
+          `copier status ${r.copierStatus ?? 'not stated on the template'}, copy size type ${r.riskFactorType ?? '?'}${r.riskFactorType === 0 ? ' (auto risk based on equity)' : ''}, value ${r.riskFactorValue ?? '?'}. Every client gets this copy size.` +
             (r.copierStatus === null ? ` The row did not state a copier status. It looked like: ${String(r.layout ?? 'unknown').slice(0, 600)}` : '')
         );
       }
