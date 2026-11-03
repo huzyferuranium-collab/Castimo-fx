@@ -1061,7 +1061,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 </div>
 
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Paste the 64-character transaction ID (TXID) from your wallet. We check it on the network and mark your invoice paid.
+                  Paste the 64-character transaction ID (TXID) from your wallet. We check it on the network and mark your invoice paid. Sending from an exchange such as Binance? Up to 4 USDT less than the invoice (their withdrawal fee) is accepted.
                 </p>
 
                 <form onSubmit={handleVerifyHash} className="space-y-3">

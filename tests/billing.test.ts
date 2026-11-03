@@ -109,3 +109,18 @@ test('service-account login request is signed correctly', () => {
   assert.equal(claims.exp - claims.iat, 3600);
   assert.equal(verify('RSA-SHA256', Buffer.from(`${h}.${p}`), publicKey, Buffer.from(s, 'base64url')), true);
 });
+
+test('a profit-share payment up to 4 USDT short of the invoice is accepted', async () => {
+  const { acceptedMinimum } = await import('../src/backend/billing.ts');
+  const { checkUsdtPayment } = await import('../src/backend/tron.ts');
+  assert.equal(acceptedMinimum(80.7, 4), 76.7);
+  assert.equal(acceptedMinimum(80.7, 0), 80.7);
+  assert.equal(acceptedMinimum(3, 4), 1, 'never under 1 USDT');
+  const T = 'TR8vTWMkt3hGBfzWZ8fngejXLoCzzrdR2E';
+  const ev = (usdt: number) => [{ event_name: 'Transfer', contract_address: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t', result: { to: T, value: String(Math.round(usdt * 1e6)) } }];
+  const min = acceptedMinimum(80.7, 4);
+  assert.equal(checkUsdtPayment(ev(76.7), { treasury: T, minUsdt: min }).ok, true);
+  assert.equal(checkUsdtPayment(ev(84.7), { treasury: T, minUsdt: min }).ok, true);
+  assert.equal(checkUsdtPayment(ev(79.7), { treasury: T, minUsdt: min }).ok, true, 'a Binance withdrawal 1 USDT short after its fee');
+  assert.equal(checkUsdtPayment(ev(76.69), { treasury: T, minUsdt: min }).ok, false);
+});

@@ -120,6 +120,8 @@ export interface Invoice {
   dueAt: string;
   paidAt?: string;
   txHash?: string;
+  /** USDT that actually arrived (may be up to the payment tolerance below the amount due). */
+  amountReceivedUsdt?: number;
   confirmedBy?: string;
   /** 'closed_trades': billed on the net result of trades closed in the period. */
   basis?: 'closed_trades';

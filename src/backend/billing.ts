@@ -58,6 +58,12 @@ const listAll: BillingDb['listAll'] = (c) => db.listAll(c);
 const queryEquals: BillingDb['queryEquals'] = (c, f, v) => db.queryEquals(c, f, v);
 const setDoc: BillingDb['setDoc'] = (c, id, d) => db.setDoc(c, id, d);
 
+/** The smallest payment accepted for an invoice: the amount due less the tolerance, and never under 1 USDT. */
+export function acceptedMinimum(amountDueUsdt: number, toleranceUsdt: number): number {
+  const tol = Number.isFinite(toleranceUsdt) && toleranceUsdt > 0 ? toleranceUsdt : 0;
+  return Math.max(1, Math.round((amountDueUsdt - tol) * 100) / 100);
+}
+
 export interface PayableNow {
   canPay: boolean;
   /** Why paying is not possible yet (empty when it is). */
@@ -93,6 +99,8 @@ export function billingConfig() {
     periodDays: Math.max(1, readLimit(process.env.SETTLEMENT_PERIOD_DAYS, 1)),
     minProfitUsd: Math.max(0, readLimit(process.env.MIN_INVOICE_PROFIT_USD, DEFAULT_MIN_INVOICE_PROFIT_USD)),
     dueHours: Math.max(1, readLimit(process.env.INVOICE_DUE_HOURS, DEFAULT_INVOICE_DUE_HOURS)),
+    // How many USDT short of a profit-share invoice a payment may be and still pass (whole USDT).
+    paymentToleranceUsdt: readLimit(process.env.PAYMENT_TOLERANCE_USDT, 4),
     treasury: treasury(),
     subscriptionPriceUsdt: Math.max(1, readLimit(process.env.SUBSCRIPTION_PRICE_USDT, DEFAULT_SUBSCRIPTION_PRICE_USDT)),
     subscriptionDays: Math.max(1, readLimit(process.env.SUBSCRIPTION_PERIOD_DAYS, DEFAULT_SUBSCRIPTION_PERIOD_DAYS)),
@@ -600,7 +608,10 @@ export class BillingService {
     } catch {
       throw new BillingError('Could not reach the TRON network to check this payment. Please try again in a minute.', 502);
     }
-    const check = checkUsdtPayment(events, { treasury: invoice.recipientAddress || treasury(), minUsdt: invoice.amountDueUsdt });
+    // Up to PAYMENT_TOLERANCE_USDT (default 4) less than the invoice is accepted: an exchange withdrawal (Binance, say) often arrives
+    // a little short after its fee. The shortfall is forgiven. Paying more is always accepted.
+    const minUsdt = acceptedMinimum(invoice.amountDueUsdt, billingConfig().paymentToleranceUsdt);
+    const check = checkUsdtPayment(events, { treasury: invoice.recipientAddress || treasury(), minUsdt });
     if (!check.ok) throw new BillingError(check.error || 'Payment could not be verified.');
     if (!final) throw new BillingError('That payment is not fully confirmed on the network yet. Wait a few minutes and try again.', 409);
 
@@ -613,9 +624,11 @@ export class BillingService {
       if (!used || used.invoiceId !== invoice.id) throw new BillingError('This transaction was already used for another invoice.', 409);
     }
 
-    const paid: Invoice = { ...invoice, status: 'paid', paidAt: new Date().toISOString(), txHash };
+    const received = Math.round((check.amountUsdt ?? invoice.amountDueUsdt) * 100) / 100;
+    const paid: Invoice = { ...invoice, status: 'paid', paidAt: new Date().toISOString(), txHash, amountReceivedUsdt: received };
     await setDoc('profit_invoices', invoice.id, paid as any);
-    await this.creditReferrers(userId, invoice.amountDueUsdt, 'profit_invoice', invoice.id);
+    if (received < invoice.amountDueUsdt) console.log(`💰 [BILLING] Invoice ${invoice.id} accepted with ${received} USDT of ${invoice.amountDueUsdt} (within the tolerance; the rest is forgiven).`);
+    await this.creditReferrers(userId, Math.min(received, invoice.amountDueUsdt), 'profit_invoice', invoice.id);
     await this.applyBlocking(userId);
     return paid;
   }
