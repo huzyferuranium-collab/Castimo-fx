@@ -14,6 +14,7 @@ import fs from 'fs';
 import { tradeRouter } from './src/backend/WEBHOOK_ROUTES';
 import { referralRouter } from './src/backend/REFERRAL_ROUTES';
 import { emailCodeRouter } from './src/backend/EMAIL_CODE_ROUTES';
+import { assistantRouter } from './src/backend/ASSISTANT_ROUTES';
 import { Mt5ConnectionManager } from './src/backend/MT5_CONNECTION_MANAGER';
 import { BillingService, billingEnabled } from './src/backend/billing';
 import { buildAssetLinks } from './src/backend/assetLinks';
@@ -64,6 +65,7 @@ async function startServer() {
   app.use('/api/trade', tradeRouter);
   app.use('/api/referrals', referralRouter);
   app.use('/api/email-code', emailCodeRouter);
+  app.use('/api/assistant', assistantRouter);
 
   // Which build is running: Render sets the commit of the deploy. Opening /api/health shows it, so "is my latest change live?" can be checked.
   const version = (process.env.RENDER_GIT_COMMIT || '').slice(0, 7) || 'unknown';

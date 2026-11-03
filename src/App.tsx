@@ -5,6 +5,7 @@ import { BrandLoader } from './components/common/BrandLoader';
 import React, { useState } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { ThemeToggle, ThemeSegmentedControl } from './components/common/ThemeToggle';
+import { AssistantChat } from './components/assistant/AssistantChat';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { UserMenu } from './components/auth/UserMenu';
 import { AuthModal } from './components/auth/AuthModal';
@@ -214,6 +215,9 @@ const MainContent: React.FC = () => {
 
       {/* Global Auth Modal */}
       <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+
+      {/* Help assistant (bottom-right), shown when the server has it switched on */}
+      <AssistantChat />
 
     </div>
   );
