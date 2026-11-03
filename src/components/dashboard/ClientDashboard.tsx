@@ -382,9 +382,14 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const openDetailsMissing = openReported > openTrades.length;
   // The total is only shown when every open trade's own profit was read. Otherwise a dash, never a made-up zero.
   const floatingKnown = !openDetailsMissing && openTrades.every((t) => t.pnlKnown !== false);
-  const floatingPnl = floatingKnown ? openTrades.reduce((acc, trade) => acc + (trade.pnl || 0), 0) : null;
-  // The broker's own gap between equity and balance (it also includes any credit/bonus, so it is shown as a hint only).
-  const equityGap = Number.isFinite(account.equity) && Number.isFinite(account.balance) ? account.equity - account.balance : null;
+  // The broker's own gap between equity and balance. On an MT5 account this is the floating profit of all open trades
+  // (plus any credit/bonus the broker added, which is rare on live accounts).
+  const equityGap = Number.isFinite(account.equity) && Number.isFinite(account.balance) ? Math.round((account.equity - account.balance) * 100) / 100 : null;
+  // Preferred: the sum of the trades' own profits. When Duplikium sends none, the account's equity minus balance is
+  // used and labelled as such. A dash only when neither exists.
+  const floatingFromTrades = floatingKnown ? openTrades.reduce((acc, trade) => acc + (trade.pnl || 0), 0) : null;
+  const floatingFromAccount = floatingFromTrades === null && openTradesCount > 0 && isConnected ? equityGap : null;
+  const floatingPnl = floatingFromTrades ?? floatingFromAccount;
 
   const shareNavItem: NavGroup['items'][number] = {
     id: 'settlement_due',
@@ -677,8 +682,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                   footer={
                     <>
                       {`${openTradesCount} open trade${openTradesCount === 1 ? '' : 's'}`}
-                      {floatingPnl === null && openTradesCount > 0 && equityGap !== null && (
-                        <span className="block">{`Profit per trade not available yet. Equity minus balance: ${equityGap >= 0 ? '+' : '-'}$${Math.abs(equityGap).toFixed(2)}`}</span>
+                      {floatingFromAccount !== null && (
+                        <span className="block">Worked out from your account: equity minus balance</span>
+                      )}
+                      {floatingPnl === null && openTradesCount > 0 && (
+                        <span className="block">Not available from the broker right now</span>
                       )}
                     </>
                   }
@@ -914,7 +922,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 You have {openReported} open trade{openReported === 1 ? '' : 's'} right now. The details (symbol, size and profit) aren't available yet and will appear here as soon as they are.
               </div>
             )}
-            <TradeCopierTable trades={trades} />
+            <TradeCopierTable trades={trades} accountFloating={floatingFromAccount} />
           </div>
         )}
 

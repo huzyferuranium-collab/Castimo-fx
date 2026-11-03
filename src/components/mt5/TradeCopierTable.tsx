@@ -14,9 +14,11 @@ import {
 
 interface TradeCopierTableProps {
   trades: CopiedTrade[];
+  /** Equity minus balance from the broker, used only when no open trade carries its own profit. */
+  accountFloating?: number | null;
 }
 
-export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) => {
+export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades, accountFloating = null }) => {
   const [filter, setFilter] = useState<'ALL' | 'OPEN' | 'CLOSED'>('OPEN');
 
   const filteredTrades = trades.filter((trade) => {
@@ -26,7 +28,9 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
 
   const openOnes = trades.filter((t) => t.status === 'OPEN');
   const floatingKnown = openOnes.every((t) => t.pnlKnown !== false);
-  const totalFloatingPnl = openOnes.reduce((acc, curr) => acc + curr.pnl, 0);
+  const fromAccount = !floatingKnown && accountFloating !== null;
+  const totalFloatingPnl = fromAccount ? (accountFloating as number) : openOnes.reduce((acc, curr) => acc + curr.pnl, 0);
+  const floatingShown = floatingKnown || fromAccount;
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden text-slate-100">
@@ -54,13 +58,13 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
         <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2">
           {/* Floating PnL Pill */}
           <div className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-1.5 shrink-0">
-            <span className="text-[10px] text-slate-400 font-medium">Floating PnL:</span>
+            <span className="text-[10px] text-slate-400 font-medium">{fromAccount ? 'Floating PnL (account):' : 'Floating PnL:'}</span>
             <span
               className={`text-xs font-mono font-bold ${
-                !floatingKnown ? 'text-slate-400' : totalFloatingPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                !floatingShown ? 'text-slate-400' : totalFloatingPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
               }`}
             >
-              {floatingKnown ? `${totalFloatingPnl >= 0 ? '+' : ''}$${totalFloatingPnl.toFixed(2)}` : '—'}
+              {floatingShown ? `${totalFloatingPnl >= 0 ? '+' : ''}$${totalFloatingPnl.toFixed(2)}` : '—'}
             </span>
           </div>
 
