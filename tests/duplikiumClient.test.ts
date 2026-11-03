@@ -639,3 +639,34 @@ test('the limiter says how many more reads fit in the minute and the hour, witho
     assert.equal(lim.headroom('accounts'), 2, 'now the hour is the smaller room');
   });
 });
+
+// The shape Duplikium really sends (seen live 2026-11-03): the size is `amountLot` and money fields end in "Ccy".
+test('reads Duplikium position rows that give the size as amountLot', () => {
+  const open = {
+    data: [
+      { account_id: 'A1', master_name: 'm', master_id: 'M1', ticket: '1001', masterTicket: 77, openTime: '2026-11-03 10:00:00', side: 'Buy', symbol: 'XAUUSDm', openPrice: 2650.5, stopPrice: 0, limitPrice: 0, stopLoss: 0, takeProfit: 0, amountLot: 0.02, quantityCcy: 2, swapCcy: -0.1, commissionCcy: -0.2, profitCcy: 3.4 },
+      { account_id: 'A1', master_name: 'm', master_id: 'M1', ticket: '1002', masterTicket: 78, openTime: '2026-11-03 10:05:00', side: 'Sell', symbol: 'XAUUSDm', openPrice: 2651, stopPrice: 0, limitPrice: 0, stopLoss: 0, takeProfit: 0, amountLot: 0.01, quantityCcy: 1, swapCcy: 0 },
+    ],
+    recordsTotal: 9,
+    recordsFiltered: 2,
+  };
+  const r = readPositions(open, { accountId: 'A1', skipGroups: /closed|history|pending/i });
+  assert.equal(r.skipped, 0);
+  assert.equal(r.positions.length, 2);
+  const [a, b] = r.positions;
+  assert.equal(a.volume, 0.02);
+  assert.equal(a.side, 'BUY');
+  assert.equal(a.profit, 3.4);
+  assert.equal(a.swap, -0.1);
+  assert.equal(a.commission, -0.2);
+  assert.equal(b.side, 'SELL');
+  assert.equal(b.profit, null, 'no profit field: left empty, never guessed');
+});
+
+test('a profit field with another "Ccy" spelling is found only when there is exactly one', () => {
+  const base = { ticket: '1', symbol: 'XAUUSDb', side: 'Buy', amountLot: 0.01, closeTime: '2026-11-03 11:00:00' };
+  assert.equal(normalizePosition({ ...base, grossProfitCcy: 9, profitPips: 30 })?.profit, null, 'not a recognised profit name');
+  assert.equal(normalizePosition({ ...base, profitNetCcy: 5, profitPips: 30 })?.profit, 5);
+  assert.equal(normalizePosition({ ...base, profitNetCcy: 5, profitGrossCcy: 6 })?.profit, null, 'two candidates: ambiguous, left empty');
+  assert.equal(normalizePosition({ ...base, takeProfit: 2700 })?.profit, null, 'take-profit is a price, not money');
+});

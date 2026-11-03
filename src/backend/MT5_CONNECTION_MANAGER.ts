@@ -1376,7 +1376,7 @@ export class Mt5ConnectionManager {
     console.warn(
       `⚠️ [COPIER] ${kind} trades of ${who} not fully read: ${res.positions.length} read${noSide ? ` (${noSide} without a readable buy/sell)` : ''}, ${unread} unreadable` +
         (kind === 'Open' && typeof reportedOpen === 'number' ? `, the account list says ${reportedOpen} open` : '') +
-        `. The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 900)}`
+        `. The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 1600)}`
     );
   }
 
@@ -1670,7 +1670,7 @@ export class Mt5ConnectionManager {
               : missing
               ? ' Trades are open but could not be read, so they will not show on the dashboard.'
               : ' None open right now, so the trade format is not yet confirmed.') +
-            (missing || res.skipped || res.positions.some((p) => p.side === null) ? ` The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 900)}` : '')
+            (missing || res.skipped || res.positions.some((p) => p.side === null) ? ` The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 1600)}` : '')
         );
       } catch (e: any) {
         add('Master open trades', false, `${String(e?.message || e)} Trades will not show on the dashboard until this works.`);
@@ -1688,7 +1688,7 @@ export class Mt5ConnectionManager {
             (first
               ? ` Latest listed: ${first.side ?? '(buy/sell not readable)'} ${first.volume} ${first.symbol}, closed "${first.closeTime ?? 'no time'}", profit ${first.profit ?? 'not reported'}.`
               : ' None closed yet, so the closed-trade format is not yet confirmed.') +
-            ` The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 900)}`
+            ` The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 1600)}`
         );
       } catch (e: any) {
         add('Master closed trades', false, `${String(e?.message || e)} Trade history and profit share cannot read trades until this works.`);

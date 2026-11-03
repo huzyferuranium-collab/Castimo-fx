@@ -264,7 +264,8 @@ export function toIso(v: unknown): string | null {
 const POS_ID_KEYS = ['ticket', 'position_id', 'positionId', 'position_ticket', 'order_id', 'orderId', 'order', 'position', 'id', 'trade_id', 'tradeId', 'deal', 'identifier'];
 const POS_SYMBOL_KEYS = ['symbol', 'instrument', 'pair', 'symbol_name', 'symbolName'];
 const POS_SIDE_KEYS = ['type', 'side', 'action', 'direction', 'cmd', 'order_type', 'position_type', 'positionType', 'trade_type', 'operation'];
-const POS_VOLUME_KEYS = ['volume', 'lots', 'lot', 'size', 'quantity', 'qty', 'lot_size'];
+// Duplikium's position calls send the size as `amountLot` (seen live, 2026-11-03); `quantityCcy` is the size in currency units, not lots.
+const POS_VOLUME_KEYS = ['amountLot', 'amount_lot', 'volume', 'lots', 'lot', 'size', 'quantity', 'qty', 'lot_size'];
 /** Counters of a paged answer (how many rows exist, which page this is): numbers, safe to show. */
 const PAGING_KEYS = ['recordsTotal', 'recordsFiltered', 'draw', 'start', 'length', 'total', 'count'];
 /** Status fields of an answer (success flags, codes, copier status): short values, safe to show. */
@@ -295,6 +296,18 @@ export function readSide(v: unknown): 'BUY' | 'SELL' | null {
   return buy === sell ? null : buy ? 'BUY' : 'SELL';
 }
 
+/** Profit in the account's money. Duplikium writes money fields with a "Ccy" ending (swapCcy), so profitCcy is read first. */
+const PROFIT_KEYS = ['profitCcy', 'profit_ccy', 'netProfitCcy', 'pnlCcy', 'profit', 'pnl', 'net_profit', 'netProfit', 'floating_profit'];
+
+/**
+ * A profit field under a spelling not listed above, in account money: a name that starts with "profit" or "pnl" and ends with "Ccy".
+ * Pips, points and take-profit are never read as money. Only used when exactly one such field exists, so nothing is guessed.
+ */
+function profitByPattern(raw: any): unknown {
+  const keys = Object.keys(raw).filter((k) => /^(net_?)?(profit|pnl)/i.test(k) && /ccy$/i.test(k) && !/pip|point/i.test(k));
+  return keys.length === 1 ? raw[keys[0]] : undefined;
+}
+
 /** True for an object that names a symbol and a size: it is read as one position. */
 function looksLikePosition(v: any): boolean {
   return !!v && typeof v === 'object' && !Array.isArray(v) && firstScalar(v, POS_SYMBOL_KEYS) !== undefined && firstScalar(v, POS_VOLUME_KEYS) !== undefined;
@@ -323,9 +336,10 @@ export function normalizePosition(raw: any): DuplikiumPosition | null {
     closePrice: num(firstDefined(raw, ['close_price', 'closeprice', 'price_close', 'closePrice'])),
     stopLoss: num(firstDefined(raw, ['sl', 'stop_loss', 'stoploss', 'stopLoss'])),
     takeProfit: num(firstDefined(raw, ['tp', 'take_profit', 'takeprofit', 'takeProfit'])),
-    profit: num(firstDefined(raw, ['profit', 'pnl', 'net_profit', 'floating_profit'])),
-    commission: num(raw.commission),
-    swap: num(raw.swap),
+    profit: num(firstDefined(raw, PROFIT_KEYS) ?? profitByPattern(raw)),
+    // Duplikium names money fields with a "Ccy" ending (seen live: swapCcy), so those spellings are read first.
+    commission: num(firstDefined(raw, ['commissionCcy', 'commission_ccy', 'commission'])),
+    swap: num(firstDefined(raw, ['swapCcy', 'swap_ccy', 'swap'])),
     openTime: toIso(openRaw),
     closeTime: toIso(closeRaw),
     rawOpenTime: openRaw === undefined ? null : String(openRaw),
@@ -387,13 +401,13 @@ export function describeAnswer(json: any, depth = 0): string {
     return `[${json.length}× ${describeAnswer(row, depth + 1)}]`;
   }
   const entries = Object.entries(json);
-  const shown = entries.slice(0, 16).map(([k, v]) => {
+  const shown = entries.slice(0, 40).map(([k, v]) => {
     const name = /^\d{3,}$/.test(k) ? '#id' : k;
     if (v !== null && typeof v === 'object') return `${name}:${describeAnswer(v, depth + 1)}`;
     const reveal = (POS_SIDE_KEYS.includes(k) || POS_SYMBOL_KEYS.includes(k) || PAGING_KEYS.includes(k) || STATUS_KEYS.includes(k)) && (typeof v === 'number' || typeof v === 'boolean' || (typeof v === 'string' && v.length <= 24));
     return `${name}:${kindOf(v)}${reveal ? `=${JSON.stringify(v)}` : ''}`;
   });
-  return `{${shown.join(', ')}${entries.length > 16 ? `, …${entries.length - 16} more` : ''}}`;
+  return `{${shown.join(', ')}${entries.length > 40 ? `, …${entries.length - 40} more` : ''}}`;
 }
 
 export interface ReadPositionsOptions {
