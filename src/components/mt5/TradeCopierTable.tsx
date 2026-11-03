@@ -104,6 +104,14 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades, acco
         </div>
       </div>
 
+      {openOnes.some((t) => t.pnlKnown === false) && filter !== 'CLOSED' && (
+        <div role="status" className="px-4 py-2.5 text-[11px] leading-relaxed text-slate-400 border-b border-slate-800 bg-slate-950/40">
+          Your open trades are being mirrored. The copier service doesn't send a profit figure or live price for each open trade, so those show a dash.
+          {fromAccount ? ' The Floating PnL above is worked out from your account (equity minus balance). ' : ' '}
+          Each trade's result appears in History once it closes.
+        </div>
+      )}
+
       {/* MOBILE VIEW: Touch-friendly cards for smaller screens (< md) */}
       <div className="block md:hidden divide-y divide-slate-800/60">
         {filteredTrades.length === 0 ? (
