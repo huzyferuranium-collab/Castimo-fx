@@ -337,8 +337,8 @@ export function normalizePosition(raw: any): DuplikiumPosition | null {
     stopLoss: num(firstDefined(raw, ['sl', 'stop_loss', 'stoploss', 'stopLoss'])),
     takeProfit: num(firstDefined(raw, ['tp', 'take_profit', 'takeprofit', 'takeProfit'])),
     profit: num(firstDefined(raw, PROFIT_KEYS) ?? profitByPattern(raw)),
-    // Duplikium names money fields with a "Ccy" ending (seen live: swapCcy), so those spellings are read first.
-    commission: num(firstDefined(raw, ['commissionCcy', 'commission_ccy', 'commission'])),
+    // Duplikium names money fields with a "Ccy" ending (seen live: swapCcy, commissionBrokerCcy), so those spellings are read first.
+    commission: num(firstDefined(raw, ['commissionBrokerCcy', 'commission_broker_ccy', 'commissionCcy', 'commission_ccy', 'commission'])),
     swap: num(firstDefined(raw, ['swapCcy', 'swap_ccy', 'swap'])),
     openTime: toIso(openRaw),
     closeTime: toIso(closeRaw),

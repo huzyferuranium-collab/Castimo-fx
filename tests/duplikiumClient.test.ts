@@ -670,3 +670,9 @@ test('a profit field with another "Ccy" spelling is found only when there is exa
   assert.equal(normalizePosition({ ...base, profitNetCcy: 5, profitGrossCcy: 6 })?.profit, null, 'two candidates: ambiguous, left empty');
   assert.equal(normalizePosition({ ...base, takeProfit: 2700 })?.profit, null, 'take-profit is a price, not money');
 });
+
+test('reads the commission Duplikium sends as commissionBrokerCcy', () => {
+  const p = normalizePosition({ ticket: '9', symbol: 'XAUUSDb', side: 'Buy', amountLot: 0.01, profitCcy: 6.71, swapCcy: 0, commissionBrokerCcy: -0.07, ccy: 'USD', closeTime: '2026-11-03 10:43:38' });
+  assert.equal(p?.profit, 6.71);
+  assert.equal(p?.commission, -0.07);
+});
