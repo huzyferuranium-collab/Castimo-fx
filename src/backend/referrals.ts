@@ -2,7 +2,7 @@
  * Referral and withdrawal rules (pure functions, no I/O, unit-tested).
  *
  *  - Three levels. Level 1 earns 10%, level 2 earns 5%, level 3 earns 5% of what the referred client
- *    ACTUALLY PAYS the platform (a paid profit-share invoice or a verified subscription payment).
+ *    ACTUALLY PAYS for the $100 Monthly Plan (a verified subscription payment). Profit Share invoices earn no commission.
  *  - A withdrawal request must be at least $50 (gross). A 10% processing fee is taken from it.
  *  - Requests made before Thursday 23:59 GMT join that week's cycle. Later ones join the next week's.
  *    GMT/UTC is the only clock used, and the server's time is the only time that counts.

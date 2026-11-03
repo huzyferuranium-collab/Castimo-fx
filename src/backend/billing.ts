@@ -666,7 +666,7 @@ export class BillingService {
     const paid: Invoice = { ...invoice, status: 'paid', paidAt: new Date().toISOString(), txHash, amountReceivedUsdt: received };
     await setDoc('profit_invoices', invoice.id, paid as any);
     if (received < invoice.amountDueUsdt) console.log(`💰 [BILLING] Invoice ${invoice.id} accepted with ${received} USDT of ${invoice.amountDueUsdt} (within the tolerance; the rest is forgiven).`);
-    await this.creditReferrers(userId, Math.min(received, invoice.amountDueUsdt), 'profit_invoice', invoice.id);
+    // Referral commission is earned on the $100 Monthly Plan only, never on a Profit Share invoice.
     await this.applyBlocking(userId);
     return paid;
   }
@@ -684,7 +684,6 @@ export class BillingService {
       confirmedBy: `${adminUid}${note ? `: ${String(note).slice(0, 200)}` : ''}`,
     };
     await setDoc('profit_invoices', invoice.id, paid as any);
-    await this.creditReferrers(invoice.userId, invoice.amountDueUsdt, 'profit_invoice', invoice.id);
     await this.applyBlocking(invoice.userId);
     return paid;
   }
