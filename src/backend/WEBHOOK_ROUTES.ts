@@ -462,6 +462,30 @@ tradeRouter.get('/invoices', requireUser, async (req: Request, res: Response) =>
   }
 });
 
+/** GET /api/trade/profit-share/payable: what the client can pay now (50% of closed-trade profit, from 20 USD, no open trades). */
+tradeRouter.get('/profit-share/payable', requireUser, async (req: Request, res: Response) => {
+  try {
+    const user = getAuthUser(req);
+    return res.status(200).json({ success: true, ...(await BillingService.getInstance().payableNow(user.uid)) });
+  } catch (error: any) {
+    console.warn('⚠️ [API /profit-share/payable]', String(error?.message || error).slice(0, 160));
+    return res.status(502).json({ success: false, error: 'Could not check what can be paid right now.' });
+  }
+});
+
+/** POST /api/trade/profit-share/pay-now: makes the invoice now, so the client can pay it straight away. */
+tradeRouter.post('/profit-share/pay-now', requireUser, async (req: Request, res: Response) => {
+  try {
+    const user = getAuthUser(req);
+    const invoice = await BillingService.getInstance().payNow(user.uid);
+    return res.status(200).json({ success: true, invoice });
+  } catch (error: any) {
+    if (error instanceof BillingError) return res.status(error.status).json({ success: false, error: error.message });
+    console.error('❌ [API /profit-share/pay-now]', error?.message || error);
+    return res.status(500).json({ success: false, error: 'The invoice could not be made. Please try again.' });
+  }
+});
+
 tradeRouter.post('/pay-invoice', requireUser, async (req: Request, res: Response) => {
   try {
     const user = getAuthUser(req);

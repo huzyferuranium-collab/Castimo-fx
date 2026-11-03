@@ -18,6 +18,18 @@ import {
   NotificationType,
 } from '../types';
 import { authHeaders } from './apiAuth';
+
+export interface PayableNowView {
+  canPay: boolean;
+  reason: string;
+  minProfitUsd: number;
+  feePct: number;
+  periodPnl: number;
+  gain: number;
+  fee: number;
+  trades: number;
+  openTrades: number;
+}
 import { liveDetail, normalizePending, type ConnectOutcome, type PendingConnectionView } from './pendingConnection';
 import { needsCopyResume } from './connectSteps';
 import { planSync, type OwnAnswer } from './clientSync';
@@ -833,6 +845,35 @@ class TradingEngine {
       this.notify();
     } catch {
       // keep what we had
+    }
+  }
+
+  /** What can be paid now, before the daily settlement (50% of closed-trade profit, from the minimum, with no open trades). */
+  public async getPayableNow(): Promise<PayableNowView | null> {
+    try {
+      const headers = await authHeaders();
+      if (!headers.Authorization) return null;
+      const res = await fetch('/api/trade/profit-share/payable', { headers });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) return null;
+      return data as PayableNowView;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Makes the invoice now; it then shows as the share due and is paid like any invoice. */
+  public async payProfitShareNow(): Promise<{ success: boolean; error?: string }> {
+    try {
+      const headers = await authHeaders();
+      if (!headers.Authorization) return { success: false, error: 'Please sign in first.' };
+      const res = await fetch('/api/trade/profit-share/pay-now', { method: 'POST', headers });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return { success: false, error: data?.error || 'The invoice could not be made.' };
+      await this.syncInvoicesFromBackend();
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Could not reach the server. Please try again.' };
     }
   }
 

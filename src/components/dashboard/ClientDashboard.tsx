@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { tradingEngine, CASTIMO_TREASURY_ADDRESS } from '../../services/tradingEngine';
+import { tradingEngine, CASTIMO_TREASURY_ADDRESS, type PayableNowView } from '../../services/tradingEngine';
 import { authHeaders } from '../../services/apiAuth';
 import { pendingNote, pendingAccountLine, type PendingConnectionView } from '../../services/pendingConnection';
 import {
@@ -76,6 +76,30 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const isUserClient = isClient ?? (!isUserAdmin || userProfile?.role === 'client');
 
   const [activeSection, setActiveSection] = useState<string>('overview');
+  // Paying the 50% before the daily settlement: what is payable now, and the button's state.
+  const [payable, setPayable] = useState<PayableNowView | null>(null);
+  const [payableLoading, setPayableLoading] = useState(false);
+  const [payNowBusy, setPayNowBusy] = useState(false);
+  const [payNowError, setPayNowError] = useState('');
+  const loadPayable = async () => {
+    setPayableLoading(true);
+    setPayable(await tradingEngine.getPayableNow());
+    setPayableLoading(false);
+  };
+  const payNow = async () => {
+    setPayNowBusy(true);
+    setPayNowError('');
+    const r = await tradingEngine.payProfitShareNow();
+    if (!r.success) setPayNowError(r.error || 'The invoice could not be made.');
+    await loadPayable();
+    setPayNowBusy(false);
+  };
+  useEffect(() => {
+    if (activeSection !== 'settlement_due') return;
+    void loadPayable();
+    const t = setInterval(() => void loadPayable(), 60_000);
+    return () => clearInterval(t);
+  }, [activeSection]);
 
   // Every real client must accept the terms before using the dashboard. null = still checking.
   const [termsAccepted, setTermsAccepted] = useState<boolean | null>(null);
@@ -963,6 +987,40 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                   </span>
                 </div>
               </div>
+
+              {/* Pay now: the 50% of closed-trade profit can be paid before the daily settlement */}
+              {!hasPendingShare && (
+                <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/30 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="text-[10px] text-slate-500 uppercase tracking-wider block">Ready to pay now</span>
+                      <span className="text-xl font-bold font-mono text-amber-600 dark:text-amber-400 block mt-0.5">
+                        {payable ? `$${payable.fee.toFixed(2)} USDT` : payableLoading ? 'Checking…' : '—'}
+                      </span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                        {payable
+                          ? `${payable.feePct}% of $${payable.gain.toFixed(2)} new profit from ${payable.trades} closed trade${payable.trades === 1 ? '' : 's'}`
+                          : 'Your closed trades since the last invoice'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void payNow()}
+                      disabled={!payable?.canPay || payNowBusy}
+                      className="px-4 py-2.5 rounded-xl text-sm font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                    >
+                      {payNowBusy ? 'Preparing invoice…' : 'Pay my share now'}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    {payNowError ||
+                      (payable && !payable.canPay && payable.reason) ||
+                      (payable?.canPay
+                        ? 'All trades are closed. Press the button to get your invoice, then pay it below.'
+                        : `Payment opens when your closed-trade profit reaches ${payable?.minProfitUsd ?? 20} USD and no trade is open. Under that, copying is never paused.`)}
+                  </p>
+                </div>
+              )}
 
               {/* TRC20 Receiving Address Box */}
               <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2.5">

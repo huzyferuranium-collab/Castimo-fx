@@ -169,6 +169,23 @@ export async function settleClient(deps: RunDeps, ledger: ClientLedger, ctx: Set
   return { kind: 'settled', ledger: next, invoice, periodPnl: pnl, trades };
 }
 
+// ---------- paying before the daily settlement ----------
+
+export type PreviewOutcome =
+  | { ok: false; reason: string }
+  | { ok: true; periodPnl: number; trades: number; gain: number; fee: number };
+
+/** Stores any new closed trades and works out the 50% that is due on them now. Changes no ledger and makes no invoice. */
+export async function previewShare(deps: RunDeps, ledger: ClientLedger, feePct: number, now: Date): Promise<PreviewOutcome> {
+  const sync = await syncClosedTrades(deps, ledger.userId, ledger.settledThrough);
+  if (!sync.ok) return { ok: false, reason: sync.reason };
+  const nowIso = now.toISOString();
+  const days = await loadDays(deps.store, ledger.userId, ledger.settledThrough, nowIso);
+  const { pnl, trades } = sumTrades(days, ledger.settledThrough, nowIso);
+  const s = shareOn(realizedState(ledger), pnl, feePct);
+  return { ok: true, periodPnl: pnl, trades, gain: s.gain, fee: s.fee };
+}
+
 // ---------- the daily update ----------
 
 /** 'before_start': the account was connected after that day, so there is nothing to report (not a problem). */

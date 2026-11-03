@@ -23,7 +23,7 @@ import {
   isSettlementDue,
   round2,
 } from './profitShare.ts';
-import { type RunDeps, dailyUpdateFor, dailyWindowOpen, previousUtcDay, settleClient } from './profitShareRun.ts';
+import { type RunDeps, dailyUpdateFor, dailyWindowOpen, previewShare, previousUtcDay, settleClient } from './profitShareRun.ts';
 import { settlementAllowed, upgradeLedger } from './profitShareRealized.ts';
 import { readLimit } from './brokerVerification.ts';
 import { accrueCommissions, recordEvent } from './referralService.ts';
@@ -57,6 +57,21 @@ const isFirestoreAdminConfigured = (): boolean => db.isFirestoreAdminConfigured(
 const listAll: BillingDb['listAll'] = (c) => db.listAll(c);
 const queryEquals: BillingDb['queryEquals'] = (c, f, v) => db.queryEquals(c, f, v);
 const setDoc: BillingDb['setDoc'] = (c, id, d) => db.setDoc(c, id, d);
+
+export interface PayableNow {
+  canPay: boolean;
+  /** Why paying is not possible yet (empty when it is). */
+  reason: string;
+  minProfitUsd: number;
+  feePct: number;
+  /** Net result of the closed trades since the last invoice. */
+  periodPnl: number;
+  /** New profit above the high-water mark: what the fee is taken on. */
+  gain: number;
+  fee: number;
+  trades: number;
+  openTrades: number;
+}
 
 export class BillingError extends Error {
   status: number;
@@ -481,6 +496,70 @@ export class BillingService {
       canSwitch,
       stats: { activeSubscribers, profitShareClients },
     };
+  }
+
+  private payNowBusy = new Set<string>();
+
+  /**
+   * What a profit-share client can pay right now, before the daily settlement: 50% of the new profit from closed trades, allowed
+   * when that profit is at least MIN_INVOICE_PROFIT_USD, no trade is open on the account, and no earlier invoice is still unpaid.
+   */
+  async payableNow(userId: string): Promise<PayableNow> {
+    const cfg = billingConfig();
+    const base = { minProfitUsd: cfg.minProfitUsd, feePct: cfg.feePct, periodPnl: 0, gain: 0, fee: 0, trades: 0, openTrades: 0 };
+    if (!billingEnabled()) return { ...base, canPay: false, reason: 'Payments are not open yet.' };
+    const rec = this.manager.getAllClientRecords().find((r) => r.userId === userId && r.isBrokerVerified);
+    if (!rec) return { ...base, canPay: false, reason: 'Connect your MT5 account first.' };
+    const plan = await this.getPlan(userId);
+    if (plan?.model === 'subscription') return { ...base, canPay: false, reason: 'You are on the monthly plan: there is no profit share to pay.' };
+    if (String(rec.currency).toUpperCase() !== 'USD') return { ...base, canPay: false, reason: 'Only USD accounts can pay the profit share here.' };
+
+    const unpaid = (await this.listInvoicesForUser(userId)).find((i) => i.status !== 'paid');
+    let ledger = await this.openLedger(rec);
+    const up = upgradeLedger(ledger, Date.now());
+    if (up.changed) {
+      ledger = up.ledger;
+      await setDoc('client_ledgers', rec.userId, ledger as any);
+    }
+    const preview = await previewShare(this.psDeps(), ledger, cfg.feePct, new Date());
+    if (!preview.ok) return { ...base, canPay: false, reason: 'Your closed trades could not be read just now. Please try again in a minute.' };
+
+    const t = await this.manager.getClientTrades(userId).catch(() => null);
+    const openTrades = Math.max(t?.open.length ?? 0, t?.openReported ?? 0);
+    const out = { ...base, periodPnl: preview.periodPnl, gain: preview.gain, fee: preview.fee, trades: preview.trades, openTrades };
+    if (!t) return { ...out, canPay: false, reason: 'Your open trades could not be checked just now. Please try again in a minute.' };
+    if (unpaid) return { ...out, canPay: false, reason: 'Pay the invoice you already have first.' };
+    if (openTrades > 0) return { ...out, canPay: false, reason: `You have ${openTrades} open trade${openTrades === 1 ? '' : 's'}. You can pay once all trades are closed.` };
+    if (preview.gain < cfg.minProfitUsd) return { ...out, canPay: false, reason: `Payment opens when your new closed-trade profit reaches ${cfg.minProfitUsd} USD (now ${preview.gain.toFixed(2)} USD).` };
+    if (!settlementAllowed(ledger, Date.now())) return { ...out, canPay: false, reason: `Your first invoice can be made from ${ledger.settleAfter}.` };
+    return { ...out, canPay: true, reason: '' };
+  }
+
+  /** Makes the invoice now for what payableNow allows (all checks are run again). The client then pays it as any invoice. */
+  async payNow(userId: string): Promise<Invoice> {
+    if (this.payNowBusy.has(userId) || this.sweeping) throw new BillingError('Your invoice is being prepared. Please wait a moment and try again.', 409);
+    this.payNowBusy.add(userId);
+    try {
+      const view = await this.payableNow(userId);
+      if (!view.canPay) throw new BillingError(view.reason || 'Nothing can be paid right now.', 409);
+      const rec = this.manager.getAllClientRecords().find((r) => r.userId === userId && r.isBrokerVerified)!;
+      const cfg = billingConfig();
+      const ledger = await this.openLedger(rec);
+      const out = await settleClient(this.psDeps(), ledger, {
+        accountLogin: rec.login,
+        equity: Number(rec.equity),
+        treasury: cfg.treasury,
+        feePct: cfg.feePct,
+        dueHours: cfg.dueHours,
+        now: new Date(),
+        minProfitUsd: cfg.minProfitUsd,
+      });
+      if (out.kind === 'skipped' || !out.invoice) throw new BillingError('The invoice could not be made just now. Please try again in a minute.', 409);
+      console.log(`🧾 [BILLING] Pay-now invoice ${out.invoice.id}: ${out.invoice.amountDueUsdt} USDT for ${userId} (${out.trades} closed trades)`);
+      return out.invoice;
+    } finally {
+      this.payNowBusy.delete(userId);
+    }
   }
 
   async listInvoicesForUser(userId: string): Promise<Invoice[]> {

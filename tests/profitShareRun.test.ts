@@ -332,3 +332,25 @@ test('daily billing: no invoice until the new profit reaches 20 USD; smaller pro
   r = settleRealized(r.next, 114.53, 50, 20);
   assert.deepEqual([r.gain, r.fee, r.invoiceable], [114.53, 57.27, true]);
 });
+
+test('pay now: previewShare shows the 50% due on closed trades without making an invoice; settling with the 20 USD minimum then invoices it', async () => {
+  const { previewShare } = await import('../src/backend/profitShareRun.ts');
+  const store = new FakeStore();
+  const deps = { store, fetchClosed: async () => ({ positions: [pos('a', 57.67, '2026-11-02T12:47:43Z'), pos('b', 56.86, '2026-11-02T12:47:43Z', -0.5)], skipped: 0 }) };
+  const p = await previewShare(deps, ledger0(), 50, new Date('2026-11-02T13:00:00.000Z'));
+  assert.deepEqual(p, { ok: true, periodPnl: 114.03, trades: 2, gain: 114.03, fee: 57.02 });
+  assert.equal([...store.docs.keys()].some((k) => k.startsWith('profit_invoices')), false, 'a preview makes no invoice');
+  const o = await settleClient(deps, ledger0(), { ...ctx('2026-11-02T13:00:00.000Z'), minProfitUsd: 20 });
+  assert.equal(o.kind, 'settled');
+  if (o.kind === 'settled') assert.equal(o.invoice?.amountDueUsdt, 57.02);
+});
+
+test('pay now: under 20 USD of new profit the preview shows it but settling makes no invoice', async () => {
+  const { previewShare } = await import('../src/backend/profitShareRun.ts');
+  const store = new FakeStore();
+  const deps = { store, fetchClosed: async () => ({ positions: [pos('a', 12, '2026-11-02T10:00:00Z')], skipped: 0 }) };
+  const p = await previewShare(deps, ledger0(), 50, new Date('2026-11-02T13:00:00.000Z'));
+  assert.equal(p.ok && p.fee, 6);
+  const o = await settleClient(deps, ledger0(), { ...ctx('2026-11-02T13:00:00.000Z'), minProfitUsd: 20 });
+  assert.equal(o.kind === 'settled' && o.invoice, null);
+});
