@@ -257,6 +257,45 @@ export function toIso(v: unknown): string | null {
 }
 
 /**
+ * The time zone Duplikium writes trade times in when the text carries no zone. Checked live on 2026-11-03: a trade MT5 showed at
+ * 14:15 on HFM (server time GMT+2), i.e. 12:15 UTC, was sent by Duplikium as 13:15, which is Paris time (UTC+1 in winter,
+ * UTC+2 in summer). DUPLIKIUM_TIMEZONE can change it (an IANA name such as Europe/Paris, or UTC).
+ */
+export function positionTimeZone(env: Record<string, string | undefined> = process.env): string {
+  const z = (env.DUPLIKIUM_TIMEZONE || '').trim() || 'Europe/Paris';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: z });
+    return z;
+  } catch {
+    return 'Europe/Paris';
+  }
+}
+
+/** Minutes the zone is ahead of UTC at the instant `ms`. */
+function zoneOffsetMinutes(ms: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date(ms));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+  return Math.round((asUtc - Math.floor(ms / 1000) * 1000) / 60_000);
+}
+
+/**
+ * A trade time from Duplikium as an ISO string in UTC. Text with its own zone (or a unix number) is read as it says; text without
+ * a zone is wall-clock time in `timeZone` (summer and winter time are taken into account).
+ */
+export function positionTimeToIso(v: unknown, timeZone: string = positionTimeZone()): string | null {
+  if (v === undefined || v === null || v === '') return null;
+  if (typeof v !== 'string' || /^\d{9,13}$/.test(v.trim()) || /(?:Z|[+-]\d{2}:?\d{2})$/i.test(v.trim()) || timeZone === 'UTC') return toIso(v);
+  const wall = toIso(v); // the wall-clock time, read as if it were UTC
+  if (!wall) return null;
+  const guess = Date.parse(wall);
+  // Two passes, so a time close to the summer/winter change gets the offset that is right for it.
+  let utc = guess - zoneOffsetMinutes(guess, timeZone) * 60_000;
+  utc = guess - zoneOffsetMinutes(utc, timeZone) * 60_000;
+  return new Date(utc).toISOString();
+}
+
+/**
  * Reads one open or closed position. Several spellings are accepted for each field because the position
  * calls are the least documented part of the service. A position without a recognisable id, symbol and size is
  * rejected (null). A side that is not written in words is left empty (null), never guessed.
@@ -340,8 +379,8 @@ export function normalizePosition(raw: any): DuplikiumPosition | null {
     // Duplikium names money fields with a "Ccy" ending (seen live: swapCcy, commissionBrokerCcy), so those spellings are read first.
     commission: num(firstDefined(raw, ['commissionBrokerCcy', 'commission_broker_ccy', 'commissionCcy', 'commission_ccy', 'commission'])),
     swap: num(firstDefined(raw, ['swapCcy', 'swap_ccy', 'swap'])),
-    openTime: toIso(openRaw),
-    closeTime: toIso(closeRaw),
+    openTime: positionTimeToIso(openRaw),
+    closeTime: positionTimeToIso(closeRaw),
     rawOpenTime: openRaw === undefined ? null : String(openRaw),
   };
 }

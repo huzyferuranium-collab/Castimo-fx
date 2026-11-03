@@ -242,7 +242,7 @@ test('a position is read under several spellings; unreadable ones are skipped, n
   assert.equal(a.openPrice, 2650.5);
   assert.equal(a.profit, 12.3);
   assert.equal(a.takeProfit, 2700);
-  assert.equal(a.openTime, '2026-10-30T08:15:00.000Z');
+  assert.equal(a.openTime, '2026-10-30T07:15:00.000Z');
   assert.equal(a.rawOpenTime, '2026-10-30 08:15:00');
   assert.equal(a.closePrice, null);
   assert.equal(b.side, 'SELL');
@@ -675,4 +675,17 @@ test('reads the commission Duplikium sends as commissionBrokerCcy', () => {
   const p = normalizePosition({ ticket: '9', symbol: 'XAUUSDb', side: 'Buy', amountLot: 0.01, profitCcy: 6.71, swapCcy: 0, commissionBrokerCcy: -0.07, ccy: 'USD', closeTime: '2026-11-03 10:43:38' });
   assert.equal(p?.profit, 6.71);
   assert.equal(p?.commission, -0.07);
+});
+
+test('trade times without a zone are Paris time (Duplikium), with summer and winter time', async () => {
+  const { positionTimeToIso, positionTimeZone } = await import('../src/backend/duplikiumClient.ts');
+  // Seen live: MT5 (HFM, GMT+2) showed 14:15, Duplikium sent 13:15, so the trade opened at 12:15 UTC.
+  assert.equal(positionTimeToIso('2026-11-03 13:15:14.534', 'Europe/Paris'), '2026-11-03T12:15:14.534Z');
+  assert.equal(positionTimeToIso('2026-07-01 13:00:00', 'Europe/Paris'), '2026-07-01T11:00:00.000Z', 'summer time is UTC+2');
+  assert.equal(positionTimeToIso('2026-11-03T10:43:38Z', 'Europe/Paris'), '2026-11-03T10:43:38.000Z', 'a time with its own zone is kept');
+  assert.equal(positionTimeToIso('2026-11-03 13:15:00', 'UTC'), '2026-11-03T13:15:00.000Z');
+  assert.equal(positionTimeToIso('', 'Europe/Paris'), null);
+  assert.equal(positionTimeZone({}), 'Europe/Paris');
+  assert.equal(positionTimeZone({ DUPLIKIUM_TIMEZONE: 'Not/AZone' }), 'Europe/Paris');
+  assert.equal(positionTimeZone({ DUPLIKIUM_TIMEZONE: 'UTC' }), 'UTC');
 });
