@@ -1,4 +1,5 @@
 import { AdminWithdrawalsPanel } from '../admin/AdminWithdrawalsPanel';
+import { AdminIncomePanel } from '../admin/AdminIncomePanel';
 import { AdminConnectLogPanel } from '../admin/AdminConnectLogPanel';
 import { AdminTerminalsPanel } from '../admin/AdminTerminalsPanel';
 import React, { useState, useEffect, useRef } from 'react';
@@ -203,6 +204,7 @@ export const AdminDashboard: React.FC = () => {
           badgeVariant: 'warning',
         },
         { id: 'withdrawals', label: 'Withdrawals', icon: Wallet },
+        { id: 'income', label: 'Income', icon: DollarSign },
         {
           id: 'governance',
           label: 'Risk & watcher',
@@ -669,6 +671,12 @@ export const AdminDashboard: React.FC = () => {
         {activeTab === 'connectlog' && (
           <div className="space-y-4 animate-in fade-in duration-150">
             <AdminConnectLogPanel />
+          </div>
+        )}
+
+        {activeTab === 'income' && (
+          <div className="space-y-4 animate-in fade-in duration-150">
+            <AdminIncomePanel />
           </div>
         )}
 

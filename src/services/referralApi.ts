@@ -69,6 +69,21 @@ async function call<T = any>(path: string, body?: unknown): Promise<{ ok: boolea
 export const getReferralSummary = () => call<ReferralSummary>('/api/referrals/summary');
 export const requestWithdrawal = (amount: number, wallet: string) => call('/api/referrals/withdraw', { amount, wallet });
 export const getNotifications = () => call<{ items: NotificationItem[] }>('/api/referrals/notifications');
+export interface IncomeStreamView {
+  total: number;
+  thisMonth: number;
+  count: number;
+}
+export interface IncomeView {
+  generatedAt: string;
+  subscriptions: IncomeStreamView;
+  profitShare: IncomeStreamView & { awaitingPayment: number; awaitingCount: number };
+  withdrawalFees: IncomeStreamView & { pendingFees: number; pendingCount: number };
+  total: IncomeStreamView;
+  referralPayoutsSent: number;
+  months: Array<{ month: string; subscriptions: number; profitShare: number; withdrawalFees: number; total: number }>;
+}
+export const adminGetIncome = () => call<{ income: IncomeView }>('/api/trade/admin/income');
 export const adminGetWithdrawals = () => call<{ withdrawals: WithdrawalRow[] }>('/api/referrals/admin/withdrawals');
 export const adminSetWithdrawalStatus = (id: string, status: string, reason?: string) =>
   call(`/api/referrals/admin/withdrawals/${encodeURIComponent(id)}/status`, { status, reason });

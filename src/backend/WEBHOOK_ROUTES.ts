@@ -22,6 +22,8 @@ import { recordEvent } from './referralService';
 import { BrokerVerificationError, validateSubmittedCredentials, normalizeBrokerServer } from './brokerVerification';
 import { ConnectJobs, pendingFor } from './clientBridge';
 import { BillingService, BillingError, billingConfig, billingEnabled } from './billing';
+import { listAll, isFirestoreAdminConfigured } from './firestoreAdmin';
+import { computeIncome } from './income';
 
 export const tradeRouter = Router();
 
@@ -551,6 +553,24 @@ tradeRouter.get('/admin/invoices', requireAdmin, async (_req: Request, res: Resp
     return res.status(200).json({ success: true, invoices: await BillingService.getInstance().listAllInvoices() });
   } catch {
     return res.status(500).json({ success: false, error: 'Could not load invoices.' });
+  }
+});
+
+/** Castimofx income: monthly plan payments, paid 50% profit-share invoices, and fees on paid-out referral withdrawals. */
+tradeRouter.get('/admin/income', requireAdmin, async (_req: Request, res: Response) => {
+  if (!isFirestoreAdminConfigured()) {
+    return res.status(503).json({ success: false, error: 'The database is not connected, so income cannot be worked out yet.' });
+  }
+  try {
+    const [subs, invoices, withdrawals] = await Promise.all([
+      listAll('subscription_payments'),
+      listAll('profit_invoices'),
+      listAll('referral_withdrawals'),
+    ]);
+    return res.status(200).json({ success: true, income: computeIncome(subs, invoices, withdrawals) });
+  } catch (e: any) {
+    console.warn('[INCOME] could not read the payment records:', e?.message);
+    return res.status(500).json({ success: false, error: 'Could not read the payment records. Please try again.' });
   }
 });
 
