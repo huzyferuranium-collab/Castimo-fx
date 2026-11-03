@@ -1724,11 +1724,11 @@ export class Mt5ConnectionManager {
             (reported !== null ? ` (the account list says ${reported} open)` : '') +
             '.' +
             (first
-              ? ` First: ${first.side ?? '(buy/sell not readable)'} ${first.volume} ${first.symbol}, opened "${first.rawOpenTime ?? 'no time'}" (check this matches your master's time zone).`
+              ? ` First: ${first.side ?? '(buy/sell not readable)'} ${first.volume} ${first.symbol}, opened "${first.rawOpenTime ?? 'no time'}" (check this matches your master's time zone). Profit read: ${first.profit === null ? 'none (no profit field in the row)' : first.profit}.`
               : missing
               ? ' Trades are open but could not be read, so they will not show on the dashboard.'
               : ' None open right now, so the trade format is not yet confirmed.') +
-            (missing || res.skipped || res.positions.some((p) => p.side === null) ? ` The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 1600)}` : '')
+            (missing || res.skipped || res.positions.length > 0 || res.positions.some((p) => p.side === null) ? ` The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 1600)}` : '')
         );
       } catch (e: any) {
         add('Master open trades', false, `${String(e?.message || e)} Trades will not show on the dashboard until this works.`);
