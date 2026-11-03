@@ -20,8 +20,8 @@ function readSeen(): string {
 }
 
 /**
- * Notifications come from real server records only: your own withdrawals, commissions and invoices, plus
- * anonymous platform activity such as "S***n subscribed to the Monthly Plan." With no events the list is empty.
+ * Notifications come from real server records about your own account only: your withdrawals, commissions, invoices,
+ * daily profit-share updates and copying notices. Nothing about other clients is shown. With no records the list is empty.
  */
 export const NotificationCenter: React.FC<NotificationCenterProps> = ({ className = '' }) => {
   const [items, setItems] = useState<NotificationItem[]>([]);

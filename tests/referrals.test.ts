@@ -12,23 +12,23 @@ test('fee is 10% of the gross and net is what is left', () => {
 
 test('commissions are 5/3/2 percent up three levels only', () => {
   const l = commissionLines(['a', 'b', 'c', 'd'], 100);
-  assert.deepEqual(l.map((x) => [x.beneficiaryUid, x.level, x.amountUsdt]), [['a', 1, 5], ['b', 2, 3], ['c', 3, 2]]);
-  assert.deepEqual(commissionLines(['a'], 50).map((x) => x.amountUsdt), [2.5]);
+  assert.deepEqual(l.map((x) => [x.beneficiaryUid, x.level, x.amountUsdt]), [['a', 1, 10], ['b', 2, 5], ['c', 3, 5]]);
+  assert.deepEqual(commissionLines(['a'], 50).map((x) => x.amountUsdt), [5]);
   assert.deepEqual(commissionLines([], 100), []);
   assert.deepEqual(commissionLines(['a'], 0), []);
   assert.deepEqual(commissionLines(['a'], NaN), []);
 });
 
-test('Monthly Plan: a $100 plan fee gives 5 / 3 / 2 dollars up the three levels', () => {
+test('Monthly Plan: a $100 plan fee gives 10 / 5 / 5 dollars up the three levels', () => {
   const base = commissionBaseUsdt(100, 100);
   assert.equal(base, 100);
-  assert.deepEqual(commissionLines(['a', 'b', 'c'], base).map((x) => x.amountUsdt), [5, 3, 2]);
+  assert.deepEqual(commissionLines(['a', 'b', 'c'], base).map((x) => x.amountUsdt), [10, 5, 5]);
 });
 
-test('Profit Share: a $500 invoice (50% of $1,000 profit) gives 25 / 15 / 10 dollars', () => {
+test('Profit Share: a $500 invoice (50% of $1,000 profit) gives 50 / 25 / 25 dollars', () => {
   const base = commissionBaseUsdt(500);
   assert.equal(base, 500);
-  assert.deepEqual(commissionLines(['a', 'b', 'c'], base).map((x) => x.amountUsdt), [25, 15, 10]);
+  assert.deepEqual(commissionLines(['a', 'b', 'c'], base).map((x) => x.amountUsdt), [50, 25, 25]);
 });
 
 test('the commission base is the fee owed: extra sent by mistake earns nothing, and a fee is never inflated', () => {

@@ -37,7 +37,7 @@ const TickerBar: React.FC = () => {
       <div className="hidden lg:flex items-center gap-3 shrink-0 text-[10px] text-slate-500 dark:text-slate-500">
         <span>$100/MONTH OR 50% PROFIT SHARE</span>
         <span>•</span>
-        <span>REFERRALS: 5% / 3% / 2%</span>
+        <span>REFERRALS: 10% / 5% / 5%</span>
         <span>•</span>
         <span>INVOICES DUE IN 24H</span>
       </div>
@@ -143,7 +143,7 @@ const MainContent: React.FC = () => {
               <Share2 className="w-3.5 h-3.5 text-rose-400" />
               <span>Referral Hub</span>
               <span className={`${isAdmin ? 'hidden sm:inline' : ''} text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-gradient-to-r from-rose-500/20 via-violet-500/20 to-blue-500/20 text-rose-700 dark:text-rose-200 border border-rose-500/30`}>
-                5%•3%•2%
+                10%•5%•5%
               </span>
             </button>
 

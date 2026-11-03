@@ -328,22 +328,12 @@ export async function recordEvent(type: 'SUBSCRIBED' | 'ACCOUNT_CONNECTED' | 'PR
   }
 }
 
-const PUBLIC_TEXT: Record<string, string> = {
-  SUBSCRIBED: 'subscribed to the Monthly Plan.',
-  ACCOUNT_CONNECTED: 'connected an account successfully.',
-  PROFIT_SHARE_SELECTED: 'selected the 50% Profit Share option.',
-};
-
 export async function notificationsFor(uid: string) {
   if (!isFirestoreAdminConfigured()) return { items: [] as any[] };
   const items: Array<{ id: string; kind: 'personal' | 'activity'; title: string; message: string; at: string }> = [];
 
-  const events = (await listAll('platform_events').catch(() => [])) as Doc[];
-  for (const e of events.sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 15)) {
-    if (!PUBLIC_TEXT[e.type]) continue;
-    items.push({ id: `ev-${e.at}-${e.who}-${e.type}`, kind: 'activity', title: 'Platform activity', message: `${e.who} ${PUBLIC_TEXT[e.type]}`, at: String(e.at) });
-  }
-
+  // Only what belongs to this client's own account goes in here. Other clients' activity (plan choices, subscriptions,
+  // connections) is never shown to anyone.
   const withdrawals = (await queryEquals('referral_withdrawals', 'userId', uid).catch(() => [])) as Doc[];
   const wdText: Record<string, string> = {
     pending: 'was submitted',

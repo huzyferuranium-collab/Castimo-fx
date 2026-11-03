@@ -279,7 +279,7 @@ export interface ReferralUser {
   id: string;
   name: string;
   accountNumber: string;
-  phase: ReferralPhase; // Phase 1 (5%), Phase 2 (3%), Phase 3 (2%)
+  phase: ReferralPhase; // Phase 1 (10%), Phase 2 (5%), Phase 3 (5%)
   referrerName: string;
   totalSettledProfit: number;
   totalCommissionPaid: number;
@@ -293,7 +293,7 @@ export interface ReferralCommissionEvent {
   fromClientName: string;
   fromAccountNumber: string;
   phase: ReferralPhase;
-  phasePct: number; // 5%, 3%, 2%
+  phasePct: number; // 10%, 5%, 5%
   settledProfit: number; // 24-hr profit
   profitShareAmount: number; // 50% profit share
   commissionEarnedUsdt: number;
