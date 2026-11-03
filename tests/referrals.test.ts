@@ -105,15 +105,12 @@ test('daily equity commission: 1% / 0.5% / 0.5% of the client equity, three leve
   assert.deepEqual(dailyEquityLines(['A'], 0), []);
 });
 
-test('daily equity commission is paid on the first 20 working days of each month only', async () => {
-  const { workingDayOfMonth, isDailyCommissionDay } = await import('../src/backend/referrals.ts');
+test('daily equity commission is paid every business day (Mon-Fri), with no monthly limit', async () => {
+  const { isDailyCommissionDay } = await import('../src/backend/referrals.ts');
   const at = (d: string) => Date.parse(`${d}T12:00:00Z`);
-  assert.equal(workingDayOfMonth(at('2026-11-02')), 1); // Monday 2 November
-  assert.equal(workingDayOfMonth(at('2026-11-01')), 0); // Sunday
-  assert.equal(workingDayOfMonth(at('2026-11-27')), 20); // Friday: the 20th working day
-  assert.equal(isDailyCommissionDay(at('2026-11-27')), true);
-  assert.equal(workingDayOfMonth(at('2026-11-30')), 21);
-  assert.equal(isDailyCommissionDay(at('2026-11-30')), false, 'the 21st working day earns nothing');
-  assert.equal(isDailyCommissionDay(at('2026-12-01')), true, 'a new month starts again');
+  assert.equal(isDailyCommissionDay(at('2026-11-02')), true, 'Monday');
+  assert.equal(isDailyCommissionDay(at('2026-11-06')), true, 'Friday');
   assert.equal(isDailyCommissionDay(at('2026-11-07')), false, 'Saturday');
+  assert.equal(isDailyCommissionDay(at('2026-11-08')), false, 'Sunday');
+  assert.equal(isDailyCommissionDay(at('2026-11-30')), true, 'the 21st business day of the month is paid too');
 });

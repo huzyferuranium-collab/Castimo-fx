@@ -56,7 +56,6 @@ export const ReferralCommissionView: React.FC = () => {
   const open = s.withdrawals.find((w) => w.status === 'pending' || w.status === 'processing');
 
   const daily = s.dailyRatesPct ?? [1, 0.5, 0.5];
-  const paidDays = s.dailyPaidDaysPerMonth ?? 20;
   const rateText = (r: number[]) => `${r[0]}% · ${r[1]}% · ${r[2]}%`;
   const saved = s.wallet || '';
 
@@ -129,7 +128,7 @@ export const ReferralCommissionView: React.FC = () => {
             <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
               <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Daily commission · 50% Profit Share</span>
               <div className="text-lg font-black font-mono text-amber-500 mt-0.5">{rateText(daily)}</div>
-              <span className="text-[11px] text-slate-500">of the client's equity, every working day · {paidDays} days a month</span>
+              <span className="text-[11px] text-slate-500">of the client's equity, every business day (Mon–Fri)</span>
             </div>
           </div>
 
@@ -137,7 +136,7 @@ export const ReferralCommissionView: React.FC = () => {
             <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               <p><b>Levels.</b> Level 1 is someone who joined with your link. Level 2 joined with their link, and level 3 with the next one down.</p>
               <p><b>Monthly Plan commission ({rateText(s.ratesPct)}), paid once.</b> When a client you referred pays the $100 Monthly Plan for the first time, you earn ${(100 * s.ratesPct[0] / 100).toFixed(0)} (level 1), ${(100 * s.ratesPct[1] / 100).toFixed(0)} (level 2) or ${(100 * s.ratesPct[2] / 100).toFixed(0)} (level 3). Renewals in later months earn nothing. Nothing is earned until the payment is verified.</p>
-              <p><b>Daily commission ({rateText(daily)}).</b> Every 24 hours, for each 50% Profit Share client you referred whose MT5 account stays connected, you earn that percentage of their equity as shown by the copier. It is paid on the first {paidDays} working days (Monday to Friday) of every month and starts again on the 1st. A disconnected account earns nothing that day. Example: a level 1 client with $1,000 equity earns you ${(1000 * daily[0] / 100).toFixed(2)} a day.</p>
+              <p><b>Daily commission ({rateText(daily)}).</b> Every 24 hours, for each 50% Profit Share client you referred whose MT5 account stays connected, you earn that percentage of their equity as shown by the copier. It is paid every business day (Monday to Friday, never at weekends) for as long as the account stays connected. A disconnected account earns nothing that day. Example: a level 1 client with $1,000 equity earns you ${(1000 * daily[0] / 100).toFixed(2)} a day.</p>
               <p><b>Getting paid.</b> Commissions build up as your balance here. Save your TRON (TRC20) address under Withdraw and request a withdrawal (minimum ${s.rules.minUsdt}, {s.rules.feePct}% processing fee). The admin checks it and sends the USDT to your address.</p>
             </div>
           </Collapsible>

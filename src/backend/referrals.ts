@@ -12,12 +12,11 @@
 export const REFERRAL_RATES_PCT = [10, 5, 5] as const;
 
 /**
- * Daily equity commission (50% Profit Share clients): each paid day, the three referrers above a connected client earn these
- * percentages of that client's equity, as the copier service reports it. Paid on the first 20 working days (Mon-Fri, UTC)
- * of every month; working days after the 20th earn nothing, and the count starts again on the 1st.
+ * Daily equity commission (50% Profit Share clients): on every business day (Monday to Friday, UTC), the three referrers
+ * above a connected client earn these percentages of that client's equity, as the copier service reports it. There is no
+ * monthly limit: it carries on every business day for as long as the account stays connected. Weekends are never paid.
  */
 export const DAILY_EQUITY_RATES_PCT = [1, 0.5, 0.5] as const;
-export const DAILY_PAID_DAYS_PER_MONTH = 20;
 
 /** 1 for the first Monday-to-Friday of the month (UTC), 2 for the second, ...; 0 on a Saturday or Sunday. */
 export function workingDayOfMonth(nowMs: number): number {
@@ -32,10 +31,9 @@ export function workingDayOfMonth(nowMs: number): number {
   return n;
 }
 
-/** True on a day that pays the daily equity commission: one of the first 20 working days of the month. */
+/** True on a day that pays the daily equity commission: any business day (Monday to Friday, UTC). */
 export function isDailyCommissionDay(nowMs: number): boolean {
-  const n = workingDayOfMonth(nowMs);
-  return n >= 1 && n <= DAILY_PAID_DAYS_PER_MONTH;
+  return workingDayOfMonth(nowMs) >= 1;
 }
 
 /** The daily equity commission for one client's equity: `chain[0]` is the direct referrer. */

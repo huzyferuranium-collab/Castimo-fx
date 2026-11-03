@@ -10,7 +10,6 @@ import { checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToH
 import {
   REFERRAL_RATES_PCT,
   DAILY_EQUITY_RATES_PCT,
-  DAILY_PAID_DAYS_PER_MONTH,
   dailyEquityLines,
   WITHDRAW_FEE_PCT,
   WITHDRAW_MIN_USDT,
@@ -225,7 +224,6 @@ export async function summary(uid: string) {
     link: `${BASE_URL}/?ref=${code}`,
     ratesPct: [...REFERRAL_RATES_PCT],
     dailyRatesPct: [...DAILY_EQUITY_RATES_PCT],
-    dailyPaidDaysPerMonth: DAILY_PAID_DAYS_PER_MONTH,
     wallet: await savedWallet(uid),
     counts: { level1: levels[0].length, level2: levels[1].length, level3: levels[2].length },
     earnedUsdt: bal.earned,

@@ -160,7 +160,7 @@ export class BillingService {
   private dailyEquityDone = new Set<string>();
 
   /**
-   * The daily equity commission: on each of the first 20 working days of the month (UTC), every connected 50% Profit Share client
+   * The daily equity commission: on every business day (Mon-Fri, UTC), for as long as it stays connected, every 50% Profit Share client
    * earns their three referrers 1% / 0.5% / 0.5% of the client's equity (as the copier service reports it at that moment). Runs every 10 minutes and credits
    * each client once a day (the credits have fixed ids). A disconnected account earns nothing that day.
    */
