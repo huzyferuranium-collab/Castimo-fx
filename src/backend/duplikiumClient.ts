@@ -260,6 +260,8 @@ const POS_ID_KEYS = ['ticket', 'position_id', 'positionId', 'position_ticket', '
 const POS_SYMBOL_KEYS = ['symbol', 'instrument', 'pair', 'symbol_name', 'symbolName'];
 const POS_SIDE_KEYS = ['type', 'side', 'action', 'direction', 'cmd', 'order_type', 'position_type', 'positionType', 'trade_type', 'operation'];
 const POS_VOLUME_KEYS = ['volume', 'lots', 'lot', 'size', 'quantity', 'qty', 'lot_size'];
+/** Counters of a paged answer (how many rows exist, which page this is): numbers, safe to show. */
+const PAGING_KEYS = ['recordsTotal', 'recordsFiltered', 'draw', 'start', 'length', 'total', 'count'];
 const POS_ACCOUNT_KEYS = ['account_id', 'accountId', 'id_account'];
 
 /** The first of these fields that holds a plain value (text or number). Objects and lists are never read as a value. */
@@ -368,12 +370,20 @@ function kindOf(v: unknown): string {
 export function describeAnswer(json: any, depth = 0): string {
   if (json === null || typeof json !== 'object') return kindOf(json);
   if (depth >= 4) return Array.isArray(json) ? 'list' : 'object';
-  if (Array.isArray(json)) return json.length === 0 ? '[]' : `[${json.length}× ${describeAnswer(json[0], depth + 1)}]`;
+  if (Array.isArray(json)) {
+    if (json.length === 0) return '[]';
+    const row = json[0];
+    // A row that is a plain list of values (one per column): show them, so the columns can be matched up.
+    if (Array.isArray(row) && row.length <= 24 && row.every((x) => x === null || typeof x !== 'object')) {
+      return `[${json.length}× row(${row.length} values): ${row.map((x) => JSON.stringify(typeof x === 'string' ? x.slice(0, 24) : x)).join(', ')}]`;
+    }
+    return `[${json.length}× ${describeAnswer(row, depth + 1)}]`;
+  }
   const entries = Object.entries(json);
   const shown = entries.slice(0, 16).map(([k, v]) => {
     const name = /^\d{3,}$/.test(k) ? '#id' : k;
     if (v !== null && typeof v === 'object') return `${name}:${describeAnswer(v, depth + 1)}`;
-    const reveal = (POS_SIDE_KEYS.includes(k) || POS_SYMBOL_KEYS.includes(k)) && (typeof v === 'number' || (typeof v === 'string' && v.length <= 24));
+    const reveal = (POS_SIDE_KEYS.includes(k) || POS_SYMBOL_KEYS.includes(k) || PAGING_KEYS.includes(k)) && (typeof v === 'number' || (typeof v === 'string' && v.length <= 24));
     return `${name}:${kindOf(v)}${reveal ? `=${JSON.stringify(v)}` : ''}`;
   });
   return `{${shown.join(', ')}${entries.length > 16 ? `, …${entries.length - 16} more` : ''}}`;
@@ -904,12 +914,39 @@ export class DuplikiumClient implements CopierApi {
 
   // ----- positions -----
 
+  /**
+   * The position calls answer like a paged table ({ data: [...], recordsTotal, recordsFiltered }), and a table asked for no
+   * page can come back empty. So the first page is asked for explicitly (start 0, length 200) and, while the answer says
+   * more rows exist, the next pages are read (at most 5 pages). If the service refuses the paging fields, the plain call is made.
+   */
+  private async positionsJson(path: string, cls: LimitClass, accountId: string): Promise<any> {
+    const PAGE = 200;
+    let first: any;
+    try {
+      first = await this.call(path, cls, { account_id: accountId, start: 0, length: PAGE });
+    } catch (e) {
+      if (e instanceof DuplikiumError && e.kind === 'API') return this.call(path, cls, { account_id: accountId });
+      throw e;
+    }
+    const rows = first && typeof first === 'object' && !Array.isArray(first) && Array.isArray(first.data) ? first.data : null;
+    const total = num(first?.recordsFiltered) ?? num(first?.recordsTotal);
+    if (!rows || total === null || rows.length === 0 || rows.length >= total) return first;
+    const all = [...rows];
+    for (let page = 1; page < 5 && all.length < total; page++) {
+      const next = await this.call(path, cls, { account_id: accountId, start: page * PAGE, length: PAGE });
+      const more = Array.isArray(next?.data) ? next.data : [];
+      if (more.length === 0) break;
+      all.push(...more);
+    }
+    return { ...first, data: all };
+  }
+
   async getOpenPositions(accountId: string): Promise<PositionsResult> {
-    return readPositions(await this.call('position/getOpenPositions.php', 'open', { account_id: accountId }), { accountId, skipGroups: /closed|history|pending/i });
+    return readPositions(await this.positionsJson('position/getOpenPositions.php', 'open', accountId), { accountId, skipGroups: /closed|history|pending/i });
   }
 
   async getClosedPositions(accountId: string): Promise<PositionsResult> {
-    return readPositions(await this.call('position/getClosedPositions.php', 'closed', { account_id: accountId }), { accountId, skipGroups: /^open|pending/i });
+    return readPositions(await this.positionsJson('position/getClosedPositions.php', 'closed', accountId), { accountId, skipGroups: /^open|pending/i });
   }
 }
 

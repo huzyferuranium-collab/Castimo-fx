@@ -321,7 +321,36 @@ test('rows that are real trades but unreadable are counted apart from lines that
 test('getOpenPositions asks for one account', async () => {
   const { c, requests } = client({ 'access/getToken.php': TOKEN(1), 'position/getOpenPositions.php': { body: { positions: [] } } });
   assert.deepEqual(await c.getOpenPositions('M1'), { positions: [], skipped: 0, skippedTrades: 0 });
-  assert.deepEqual(form(requests[1]), { account_id: 'M1' });
+  assert.deepEqual(form(requests[1]), { account_id: 'M1', start: '0', length: '200' });
+});
+
+test('a paged answer is asked for a page and the next pages are read while more rows exist', async () => {
+  const row = (n: number) => ({ ticket: n, symbol: 'XAUUSD', type: 'Sell', volume: 0.03, profit: 1, close_time: '2026-11-02 20:00:00' });
+  const { c, requests } = client({
+    'access/getToken.php': TOKEN(1),
+    'position/getClosedPositions.php': [
+      { body: { data: Array.from({ length: 200 }, (_, i) => row(i + 1)), recordsTotal: 230, recordsFiltered: 230 } },
+      { body: { data: Array.from({ length: 30 }, (_, i) => row(i + 201)), recordsTotal: 230, recordsFiltered: 230 } },
+    ],
+  });
+  const r = await c.getClosedPositions('M1');
+  assert.equal(r.positions.length, 230);
+  assert.deepEqual(form(requests[1]), { account_id: 'M1', start: '0', length: '200' });
+  assert.deepEqual(form(requests[2]), { account_id: 'M1', start: '200', length: '200' });
+});
+
+test('if the service refuses the paging fields, the plain call is made', async () => {
+  const { c, requests } = client({
+    'access/getToken.php': TOKEN(1),
+    'position/getOpenPositions.php': [{ body: { error: 'Unknown parameter' } }, { body: { data: [{ ticket: 5, symbol: 'XAUUSD', type: 'Buy', volume: 0.1 }] } }],
+  });
+  assert.equal((await c.getOpenPositions('M1')).positions.length, 1);
+  assert.deepEqual(form(requests[2]), { account_id: 'M1' });
+});
+
+test('an empty paged answer shows its counters, and rows that are plain lists show their values', () => {
+  assert.equal(describeAnswer({ data: [], recordsTotal: 14, recordsFiltered: 14 }), '{data:[], recordsTotal:number=14, recordsFiltered:number=14}');
+  assert.equal(describeAnswer({ data: [[3426236597, 'XAUUSD', 'Sell', 0.03]] }), '{data:[1× row(4 values): 3426236597, "XAUUSD", "Sell", 0.03]}');
 });
 
 test('times and numbers are read carefully', () => {
