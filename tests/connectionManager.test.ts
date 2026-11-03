@@ -314,12 +314,12 @@ test('a read-only (investor) password is refused and the account removed', async
 });
 
 test('below the minimum equity: the account connects and is kept, but copying is never switched on', async () => {
-  const { fake, m, events } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+  const { fake, m, events } = setup({ fresh: { equity: 60, balance: 60, freeMargin: 60 } });
   await m.refreshAll();
   const rec = await m.provisionClientTerminal(creds(), () => {});
   assert.equal(rec.isBrokerVerified, true);
   assert.equal(rec.lowFunds, true, 'told apart as connected but not copying');
-  assert.equal(rec.copyMinimumUsd, 200);
+  assert.equal(rec.copyMinimumUsd, 100);
   assert.deepEqual(fake.deleted, [], 'a small account is not removed');
   assert.deepEqual(events.newConn, ['u1'], 'it is a real new connection');
   assert.equal(fake.copier.get('D1'), -1, 'held at close only at the copier service');
@@ -328,15 +328,15 @@ test('below the minimum equity: the account connects and is kept, but copying is
 });
 
 test('an account that reaches the minimum starts copying by itself, and is saved as such', async () => {
-  const { fake, m, events } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+  const { fake, m, events } = setup({ fresh: { equity: 60, balance: 60, freeMargin: 60 } });
   await m.refreshAll();
   await m.provisionClientTerminal(creds(), () => {});
   assert.equal(fake.copier.get('D1'), -1);
   const saves = events.saved.length;
 
   // a deposit arrives: the next read of the account list sees it
-  fake.accounts.get('D1')!.equity = 250;
-  fake.accounts.get('D1')!.balance = 250;
+  fake.accounts.get('D1')!.equity = 150;
+  fake.accounts.get('D1')!.balance = 150;
   await m.refreshAll();
   await sleep(30);
 
@@ -348,12 +348,12 @@ test('an account that reaches the minimum starts copying by itself, and is saved
 });
 
 test('exactly the minimum is enough, and one cent less is not', async () => {
-  const a = setup({ fresh: { equity: 200, balance: 200, freeMargin: 200 } });
+  const a = setup({ fresh: { equity: 100, balance: 100, freeMargin: 100 } });
   await a.m.refreshAll();
   assert.equal((await a.m.provisionClientTerminal(creds(), () => {})).lowFunds, false);
   assert.equal(a.fake.copier.get('D1'), 1);
 
-  const b = setup({ fresh: { equity: 199.99, balance: 199.99, freeMargin: 199.99 } });
+  const b = setup({ fresh: { equity: 99.99, balance: 99.99, freeMargin: 99.99 } });
   await b.m.refreshAll();
   assert.equal((await b.m.provisionClientTerminal(creds(), () => {})).lowFunds, true);
   assert.equal(b.fake.copier.get('D1'), -1);
@@ -364,8 +364,8 @@ test('an account that was copying is never stopped because its equity later fall
   await m.refreshAll();
   await m.provisionClientTerminal(creds(), () => {});
   assert.equal(fake.copier.get('D1'), 1);
-  fake.accounts.get('D1')!.equity = 120;
-  fake.accounts.get('D1')!.balance = 120;
+  fake.accounts.get('D1')!.equity = 60;
+  fake.accounts.get('D1')!.balance = 60;
   await m.refreshAll();
   await sleep(30);
   assert.equal(m.getClientConnection('u1')!.lowFunds, false);
@@ -373,7 +373,7 @@ test('an account that was copying is never stopped because its equity later fall
 });
 
 test('a paused client below the minimum who then reaches it stays paused', async () => {
-  const { fake, m } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+  const { fake, m } = setup({ fresh: { equity: 60, balance: 60, freeMargin: 60 } });
   await m.refreshAll();
   await m.provisionClientTerminal(creds(), () => {});
   await m.setCopyStatus('u1', 'IDLE');
@@ -386,10 +386,10 @@ test('a paused client below the minimum who then reaches it stays paused', async
 test('the minimum can be changed on Render, and a waiting account is released when it is lowered', async () => {
   const before = process.env.MIN_CONNECT_EQUITY;
   try {
-    process.env.MIN_CONNECT_EQUITY = '100';
-    const lowered = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+    process.env.MIN_CONNECT_EQUITY = '50';
+    const lowered = setup({ fresh: { equity: 60, balance: 60, freeMargin: 60 } });
     await lowered.m.refreshAll();
-    assert.equal((await lowered.m.provisionClientTerminal(creds(), () => {})).lowFunds, false, '$150 is enough when the minimum is $100');
+    assert.equal((await lowered.m.provisionClientTerminal(creds(), () => {})).lowFunds, false, '$60 is enough when the minimum is $50');
 
     process.env.MIN_CONNECT_EQUITY = '300';
     const raised = setup({ fresh: { equity: 250, balance: 250, freeMargin: 250 } });
@@ -512,7 +512,7 @@ test('a client is never turned away because the copier service refuses a copy-se
 });
 
 test('a hold that cannot be set at connect time is retried by the periodic check, and the client still connects', async () => {
-  const { fake, m } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+  const { fake, m } = setup({ fresh: { equity: 60, balance: 60, freeMargin: 60 } });
   await m.refreshAll();
   fake.failSetSettings = true; // the hold ("not copying yet") cannot be set right now
   const rec = await m.provisionClientTerminal(creds(), () => {});
@@ -526,7 +526,7 @@ test('a hold that cannot be set at connect time is retried by the periodic check
 });
 
 test('a hold the service says it accepted but did not apply is not reported as applied, and is retried', async () => {
-  const { fake, m } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+  const { fake, m } = setup({ fresh: { equity: 60, balance: 60, freeMargin: 60 } });
   await m.refreshAll();
   fake.ignoreStatusChange = true; // the answer is fine, but nothing changes at the service
   const rec = await m.provisionClientTerminal(creds(), () => {});
@@ -766,7 +766,7 @@ test('a returning client below the minimum equity is restored, not judged again'
 });
 
 test('after a restart, an account saved as "not copying yet" is still held back until it reaches the minimum', async () => {
-  const { fake, m } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+  const { fake, m } = setup({ fresh: { equity: 60, balance: 60, freeMargin: 60 } });
   await m.refreshAll();
   await m.provisionClientTerminal(creds(), () => {});
   assert.equal(fake.copier.get('D1'), -1);
@@ -780,7 +780,7 @@ test('after a restart, an account saved as "not copying yet" is still held back 
   assert.equal(fake.copier.get('D1'), -1, 'still not copying after the restart');
 
   // and once funded, a restart releases it straight away
-  fake.accounts.get('D1')!.equity = 260;
+  fake.accounts.get('D1')!.equity = 160;
   const m3 = Mt5ConnectionManager.forTests(fake, { masterId: 'MASTER', templateId: 'TEMPLATE' });
   m3.wasVerified = async () => 'yes';
   m3.loadSavedLowFunds = async () => true;
@@ -791,7 +791,7 @@ test('after a restart, an account saved as "not copying yet" is still held back 
 });
 
 test('if the saved "not copying yet" note cannot be read, nobody is held back in doubt', async () => {
-  const { fake, m } = setup({ fresh: { equity: 150, balance: 150, freeMargin: 150 } });
+  const { fake, m } = setup({ fresh: { equity: 60, balance: 60, freeMargin: 60 } });
   await m.refreshAll();
   await m.provisionClientTerminal(creds(), () => {});
   const m2 = Mt5ConnectionManager.forTests(fake, { masterId: 'MASTER', templateId: 'TEMPLATE' });
@@ -1307,11 +1307,11 @@ test('the connection minimum shown to the admin is the real one, and says where 
   const before = process.env.MIN_CONNECT_EQUITY;
   try {
     delete process.env.MIN_CONNECT_EQUITY;
-    assert.deepEqual(m.getConnectMinimum(), { usd: 200, source: 'default' });
+    assert.deepEqual(m.getConnectMinimum(), { usd: 100, source: 'default' });
     process.env.MIN_CONNECT_EQUITY = '350';
     assert.deepEqual(m.getConnectMinimum(), { usd: 350, source: 'setting' });
     process.env.MIN_CONNECT_EQUITY = 'not-a-number';
-    assert.deepEqual(m.getConnectMinimum(), { usd: 200, source: 'default' }, 'a bad setting falls back to the default, and says so');
+    assert.deepEqual(m.getConnectMinimum(), { usd: 100, source: 'default' }, 'a bad setting falls back to the default, and says so');
   } finally {
     if (before === undefined) delete process.env.MIN_CONNECT_EQUITY;
     else process.env.MIN_CONNECT_EQUITY = before;

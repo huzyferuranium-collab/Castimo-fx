@@ -191,7 +191,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
               { tone: 'royal' as const, icon: <Wallet className="w-4 h-4" />, t: 'Your funds, your broker', d: 'We never hold client deposits' },
               { tone: 'violet' as const, icon: <Lock className="w-4 h-4" />, t: 'USDT on TRON (TRC20)', d: 'Pay from any wallet' },
               { tone: 'aqua' as const, icon: <Clock className="w-4 h-4" />, t: 'No automatic charges', d: 'You choose when to renew' },
-              { tone: 'gold' as const, icon: <Shield className="w-4 h-4" />, t: '$200 to start copying', d: 'Connect any USD account, any time' },
+              { tone: 'gold' as const, icon: <Shield className="w-4 h-4" />, t: '$100 to start copying', d: 'Connect any USD account, any time' },
             ].map((x) => (
               <div key={x.t} className="flex items-start gap-3">
                 <Tile tone={x.tone} size="w-9 h-9">{x.icon}</Tile>

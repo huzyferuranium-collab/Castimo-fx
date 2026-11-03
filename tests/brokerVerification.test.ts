@@ -183,11 +183,11 @@ test('no account is refused for having little equity: it connects and simply is 
   assert.equal(code(() => checkConnectEligibility({ equity: 5000.5, currency: 'usd' })), 'NO_ERROR');
 });
 
-test('copying needs at least $200 equity, and an unreadable figure holds copying back', () => {
-  assert.equal(isBelowCopyMinimum(199.99), true);
+test('copying needs at least $100 equity, and an unreadable figure holds copying back', () => {
+  assert.equal(isBelowCopyMinimum(99.99), true);
   assert.equal(isBelowCopyMinimum(0), true);
   assert.equal(isBelowCopyMinimum(NaN), true);
-  assert.equal(isBelowCopyMinimum(200), false);
+  assert.equal(isBelowCopyMinimum(100), false);
   assert.equal(isBelowCopyMinimum(5000.5), false);
 });
 

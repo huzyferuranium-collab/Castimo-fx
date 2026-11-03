@@ -65,7 +65,7 @@ export const RiskManagementControls: React.FC<RiskManagementControlsProps> = ({
 
   // Compute calculated drawdown in dollar value based on current account equity
   const calculatedDrawdownUsd = (account.equity * (maxDrawdownPct / 100)).toFixed(2);
-  const safetyBufferAboveFloor = Math.max(0, account.equity - 200).toFixed(2);
+  const safetyBufferAboveFloor = Math.max(0, account.equity - 100).toFixed(2);
 
   // Apply Predefined Risk Profiles
   const applyPreset = (preset: 'conservative' | 'balanced' | 'aggressive') => {
@@ -200,7 +200,7 @@ export const RiskManagementControls: React.FC<RiskManagementControlsProps> = ({
           <div>
             <span className="text-[10px] text-slate-500 uppercase font-bold block">Safety Floor Margin</span>
             <span className="text-sm font-black text-emerald-400 font-mono">+${safetyBufferAboveFloor} USD</span>
-            <span className="text-[10px] text-slate-500 block">Above the $200 minimum for copying</span>
+            <span className="text-[10px] text-slate-500 block">Above the $100 minimum for copying</span>
           </div>
         </div>
 
@@ -375,7 +375,7 @@ export const RiskManagementControls: React.FC<RiskManagementControlsProps> = ({
           <ShieldAlert className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
           <div className="leading-relaxed">
             <span className="font-bold text-purple-300">Copying rule: </span>
-            Any USD account can connect. Trades are copied once it has <code className="bg-purple-950/60 px-1 py-0.2 rounded font-mono text-purple-200">$200.00 USD</code> of equity; until then it shows as connected but not copying, and copying starts by itself when the account reaches the minimum. An account that has started copying is not stopped if its equity later falls.
+            Any USD account can connect. Trades are copied once it has <code className="bg-purple-950/60 px-1 py-0.2 rounded font-mono text-purple-200">$100.00 USD</code> of equity; until then it shows as connected but not copying, and copying starts by itself when the account reaches the minimum. An account that has started copying is not stopped if its equity later falls.
           </div>
         </div>
 
