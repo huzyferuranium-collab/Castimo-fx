@@ -3,6 +3,7 @@ import { tradingEngine, ConnectError, type ConnectProgress } from '../../service
 import { connectSteps, mayLeaveWindow } from '../../services/connectSteps';
 import { TermsModal } from '../legal/TermsModal';
 import { acceptTerms, recoverAcceptance } from '../../services/agreements';
+import { useAuth } from '../../hooks/useAuth';
 import { KeyRound, Server, CheckCircle2, Lock, AlertTriangle, ArrowRight, Eye, EyeOff, Loader2, Circle } from 'lucide-react';
 
 interface Mt5ConnectionModalProps {
@@ -54,6 +55,47 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
   const [needTerms, setNeedTerms] = useState(false);
   // True once the client has just tapped "I Agree" in this window: if the server still says no, we tell them plainly instead of asking again and again.
   const justAgreed = useRef(false);
+  // The server says the email is not confirmed: the client can send the link again, or say they have confirmed it, right here.
+  const { sendVerificationEmail, refreshEmailVerified, userProfile } = useAuth();
+  const [needEmail, setNeedEmail] = useState(false);
+  const [emailNote, setEmailNote] = useState<string | null>(null);
+  const [emailBusy, setEmailBusy] = useState<'send' | 'check' | null>(null);
+  const [resendWaitUntil, setResendWaitUntil] = useState(0);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!needEmail || resendWaitUntil <= Date.now()) return;
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [needEmail, resendWaitUntil]);
+  const resendLeft = Math.max(0, Math.ceil((resendWaitUntil - Date.now()) / 1000));
+
+  const resendEmail = async () => {
+    if (emailBusy || resendLeft > 0) return;
+    setEmailBusy('send');
+    setEmailNote(null);
+    const r = await sendVerificationEmail?.();
+    setEmailBusy(null);
+    if (r?.success) {
+      setResendWaitUntil(Date.now() + 60_000); // one email a minute, so Firebase does not block the address
+      setEmailNote(`We sent a new link to ${userProfile?.email || 'your email'}. Open it (check Spam too), then tap "I have confirmed".`);
+    } else {
+      setEmailNote(r?.error || 'Could not send the email just now. Please try again in a minute.');
+    }
+  };
+
+  const confirmedAndRetry = async () => {
+    if (emailBusy) return;
+    setEmailBusy('check');
+    setEmailNote(null);
+    const ok = await refreshEmailVerified?.();
+    setEmailBusy(null);
+    if (!ok) {
+      setEmailNote('Your email is not confirmed yet. Open the link we sent (check Spam too), then tap this button again.');
+      return;
+    }
+    setNeedEmail(false);
+    void runConnect();
+  };
 
   // Opening the window again starts fresh (unless a connection is still running in it).
   useEffect(() => {
@@ -97,6 +139,9 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
         // Accepted before, but the record never reached the database: save it through the server and carry on, no questions.
         if (first instanceof ConnectError && first.code === 'TERMS_NOT_ACCEPTED' && (await recoverAcceptance(userId))) {
           outcome = await tradingEngine.connectMt5Account(userId, accountNumber.trim(), brokerServer.trim(), password, setProgress);
+        } else if (first instanceof ConnectError && first.code === 'EMAIL_NOT_VERIFIED' && (await refreshEmailVerified?.())) {
+          // Confirmed already, but the sign-in still carried the old "not confirmed" state: it was refreshed, so try once more.
+          outcome = await tradingEngine.connectMt5Account(userId, accountNumber.trim(), brokerServer.trim(), password, setProgress);
         } else {
           throw first;
         }
@@ -126,6 +171,11 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
         }
         // Never a dead end: ask for the acceptance here. Their details stay filled in and connecting resumes once they agree.
         setNeedTerms(true);
+        return;
+      }
+      if (err instanceof ConnectError && err.code === 'EMAIL_NOT_VERIFIED') {
+        // Never a dead end: the details stay filled in, and the panel below lets them resend the link or carry on once confirmed.
+        setNeedEmail(true);
         return;
       }
       setErrorMsg(err.message || 'Connection failed.');
@@ -196,6 +246,36 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
+              {needEmail && (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-100 space-y-2.5" aria-live="polite">
+                  <div className="flex items-start gap-2 text-xs">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <p>
+                      Please confirm your email address first. We sent a link to <b>{userProfile?.email || 'your email'}</b> when you signed up.
+                      Your account details below stay filled in.
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void resendEmail()}
+                      disabled={!!emailBusy || resendLeft > 0}
+                      className="flex-1 py-2 px-3 rounded-lg text-xs font-bold bg-slate-800 border border-slate-600 text-white disabled:opacity-50"
+                    >
+                      {emailBusy === 'send' ? 'Sending…' : resendLeft > 0 ? `Resend in ${resendLeft}s` : 'Resend confirmation email'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void confirmedAndRetry()}
+                      disabled={!!emailBusy}
+                      className="flex-1 py-2 px-3 rounded-lg text-xs font-bold btn-gold disabled:opacity-50"
+                    >
+                      {emailBusy === 'check' ? 'Checking…' : 'I have confirmed, connect'}
+                    </button>
+                  </div>
+                  {emailNote && <p className="text-[11px] text-amber-200/90">{emailNote}</p>}
+                </div>
+              )}
               {errorMsg && (
                 <div className="p-3 text-xs rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
