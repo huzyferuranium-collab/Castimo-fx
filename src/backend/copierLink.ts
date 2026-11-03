@@ -5,7 +5,9 @@
  * unit-tested without the network.
  *
  *   connected + real figures        -> VERIFY (apply the rules, then switch copying on)
- *   connected, figures not in yet   -> WAIT   (Duplikium refreshes balances after each trade and every 5 minutes)
+ *   connected, figures not in yet   -> VERIFY_LOGIN when `connectOnLogin` (new connections): the login is proven, so the client is
+ *                                      connected at once with copying held until the figures arrive; otherwise WAIT
+ *                                      (Duplikium refreshes balances only after each trade and every 5 minutes)
  *   not logged in                   -> WAIT for a short grace period, then REJECT (wrong number / password / server)
  *   investor (read-only) password   -> REJECT
  *   service credit empty            -> WAIT   (our side; never the client's fault)
@@ -26,6 +28,7 @@ export interface LinkMemory {
 
 export type LinkDecision =
   | { action: 'VERIFY' }
+  | { action: 'VERIFY_LOGIN' }
   | { action: 'WAIT'; label: string; disconnectedSince?: number }
   | { action: 'REJECT'; reason: 'TRADING_NOT_ALLOWED' | 'BROKER_AUTH_FAILED' | 'GONE' }
   | { action: 'GIVE_UP' };
@@ -41,7 +44,8 @@ export function decideLink(
   mem: LinkMemory,
   now: number,
   graceMs: number = DISCONNECT_GRACE_MS,
-  goneGraceMs: number = 0
+  goneGraceMs: number = 0,
+  connectOnLogin = false
 ): LinkDecision {
   if (!acc) {
     if (goneGraceMs > 0 && now - mem.startedAt < goneGraceMs) return { action: 'WAIT', label: 'Connecting to your broker…' };
@@ -52,6 +56,7 @@ export function decideLink(
   if (kind === 'investor') return { action: 'REJECT', reason: 'TRADING_NOT_ALLOWED' };
 
   if (kind === 'connected' && hasFigures(acc)) return { action: 'VERIFY' };
+  if (kind === 'connected' && connectOnLogin) return { action: 'VERIFY_LOGIN' };
 
   let wait: LinkDecision;
   if (kind === 'disconnected') {
@@ -71,10 +76,11 @@ export function decideLink(
 }
 
 /** What copying should be doing for a client: the one switch we control on the copier service. */
-export function desiredCopierStatus(rec: { status: string; billingBlocked?: boolean; lowFunds?: boolean; isBrokerVerified: boolean }): number {
-  // Not (yet) verified: frozen. Paused, unpaid, or not yet at the minimum equity: only follow the master's closes, so nothing is left stranded.
+export function desiredCopierStatus(rec: { status: string; billingBlocked?: boolean; lowFunds?: boolean; figuresPending?: boolean; unsupportedCurrency?: boolean; isBrokerVerified: boolean }): number {
+  // Not (yet) verified: frozen. Paused, unpaid, not yet at the minimum equity, or balance not read yet: only follow the master's
+  // closes, so nothing is left stranded.
   if (!rec.isBrokerVerified) return COPIER.FROZEN;
-  return rec.status === 'ACTIVE' && !rec.billingBlocked && !rec.lowFunds ? COPIER.ON : COPIER.CLOSE_ONLY;
+  return rec.status === 'ACTIVE' && !rec.billingBlocked && !rec.lowFunds && !rec.figuresPending && !rec.unsupportedCurrency ? COPIER.ON : COPIER.CLOSE_ONLY;
 }
 
 /**

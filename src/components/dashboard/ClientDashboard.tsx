@@ -368,7 +368,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const isBlockedUnpaid = account.status === 'blocked_unpaid';
   const isRiskBlocked = account.status === 'blocked' || account.riskStatus === 'blocked';
   // Connected, but below the minimum equity: nothing is copied yet, and it starts by itself once the account reaches the minimum.
-  const copyHeld = isConnected && account.copyHeld === 'low_funds';
+  const copyHeld = isConnected && !!account.copyHeld;
+  const readingBalance = account.copyHeld === 'reading_balance';
   const copyMinText = typeof account.copyMinimumUsd === 'number' ? `$${account.copyMinimumUsd.toFixed(2)}` : 'the minimum';
   // The two plans never mix: a monthly subscriber has no 50% invoices and sees none of the 50% screens.
   const isSubscriber = planView?.model === 'subscription';
@@ -460,7 +461,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
             profile: { tone: 'magenta', art: 'badge', subtitle: 'Your account details.' },
             settlement_due: { tone: 'gold', art: 'coins', subtitle: 'Your profit-share invoice.' },
           };
-          const look = looks[activeSection] || { tone: 'royal' as Tone, art: undefined, subtitle: copyHeld ? 'MT5 connected. Copying starts once your account has the minimum.' : isConnected ? 'MT5 trade mirroring active' : '' };
+          const look = looks[activeSection] || { tone: 'royal' as Tone, art: undefined, subtitle: readingBalance ? 'MT5 connected. Reading your balance…' : copyHeld ? 'MT5 connected. Copying starts once your account has the minimum.' : isConnected ? 'MT5 trade mirroring active' : '' };
           return (
             <SectionBanner
               tone={look.tone}
@@ -505,10 +506,14 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
           <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 animate-in fade-in">
             <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
             <div>
-              <h4 className="font-bold text-sm text-amber-600 dark:text-amber-300">Connected, but not copying yet</h4>
+              <h4 className="font-bold text-sm text-amber-600 dark:text-amber-300">{readingBalance ? 'Connected. Reading your balance…' : 'Connected, but not copying yet'}</h4>
               <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
-                Your account is safely connected. Trades from the master account start copying as soon as your account equity reaches {copyMinText}
-                {' '}(it is ${account.equity.toFixed(2)} now). Add funds at your broker whenever you are ready: there is nothing else to do, we start copying by ourselves.
+                {readingBalance
+                  ? 'Your broker accepted the login. The copier reports your balance within about 5 minutes, and copying starts by itself as soon as it does. There is nothing else to do.'
+                  : account.copyHeld === 'currency'
+                  ? 'Your account is connected, but right now we can only copy to accounts held in US dollars (USD).'
+                  : <>Your account is safely connected. Trades from the master account start copying as soon as your account equity reaches {copyMinText}
+                {' '}(it is ${account.equity.toFixed(2)} now). Add funds at your broker whenever you are ready: there is nothing else to do, we start copying by ourselves.</>}
               </p>
             </div>
           </div>

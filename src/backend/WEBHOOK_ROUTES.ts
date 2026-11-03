@@ -61,6 +61,9 @@ function toPublicClient(c: any) {
     billingBlocked: Boolean(c.billingBlocked),
     // True while the account is connected but below the minimum equity, so no trades are copied to it yet.
     lowFunds: Boolean(c.lowFunds),
+    // True right after connecting, until the copier service reports the balance (copying starts then).
+    figuresPending: Boolean(c.figuresPending),
+    unsupportedCurrency: Boolean(c.unsupportedCurrency),
     copyMinimumUsd: typeof c.copyMinimumUsd === 'number' ? c.copyMinimumUsd : undefined,
     connectionState: c.connectionState,
     connectionStatus: c.connectionStatus,

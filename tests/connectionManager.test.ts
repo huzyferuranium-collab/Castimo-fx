@@ -540,7 +540,43 @@ test('a hold the service says it accepted but did not apply is not reported as a
 
 // ---------- a slow broker ----------
 
-test('a broker that is slow to report figures carries on in the background and finishes by itself', async () => {
+test('a new account is connected as soon as the login is accepted; copying waits for the balance, then starts by itself', async () => {
+  const { fake, m, events } = setup({ fresh: { state: 'CONNECTED', balance: null, equity: null, freeMargin: null, currency: '' } });
+  await m.refreshAll();
+  await m.provisionClientTerminal(creds(), () => {});
+  let rec = m.getClientConnection('u1');
+  assert.ok(rec && rec.isBrokerVerified, 'connected without waiting for the balance');
+  assert.equal(rec!.figuresPending, true);
+  assert.equal(rec!.lowFunds, false, 'not called "below the minimum" before the balance is known');
+  assert.equal(fake.copier.get('D1'), -1, 'nothing new is copied until the balance is known');
+  assert.deepEqual(events.newConn, ['u1']);
+
+  fake.settle('D1'); // Duplikium reports the figures a little later
+  await m.refreshAll();
+  await sleep(20);
+  rec = m.getClientConnection('u1');
+  assert.ok(rec && rec.equity === 520);
+  assert.equal(rec!.figuresPending, false);
+  assert.equal(fake.copier.get('D1'), 1, 'copying starts once the balance is in');
+});
+
+test('a balance below the minimum that arrives after connecting holds copying, as a new connection would', async () => {
+  const { fake, m } = setup({ fresh: { state: 'CONNECTED', balance: null, equity: null, freeMargin: null, currency: '' } });
+  await m.refreshAll();
+  await m.provisionClientTerminal(creds(), () => {});
+  const a = fake.accounts.get('D1')!;
+  Object.assign(a, { balance: 20, equity: 20, freeMargin: 20, currency: 'USD' });
+  await m.refreshAll();
+  await sleep(20);
+  const rec = m.getClientConnection('u1');
+  assert.equal(rec!.figuresPending, false);
+  assert.equal(rec!.lowFunds, true);
+  assert.equal(fake.copier.get('D1'), -1);
+});
+
+test('with CONNECT_ON_LOGIN=0 a broker slow to report figures carries on in the background and finishes by itself', async () => {
+  process.env.CONNECT_ON_LOGIN = '0';
+  try {
   const { fake, m, events } = setup({ fresh: { state: 'CONNECTED', balance: null, equity: null, freeMargin: null, currency: '' } });
   await m.refreshAll();
   assert.equal(await code(m.provisionClientTerminal(creds(), () => {})), 'HANDED_OFF');
@@ -556,6 +592,9 @@ test('a broker that is slow to report figures carries on in the background and f
   assert.equal(m.pendingView('u1'), null);
   assert.deepEqual(events.newConn, ['u1']);
   assert.equal(fake.copier.get('D1'), 1);
+  } finally {
+    delete process.env.CONNECT_ON_LOGIN;
+  }
 });
 
 test('a login that never works is given up on in the background and the account removed', async () => {
@@ -987,7 +1026,7 @@ test('every new connection is logged with how long it took and how many reads it
     console.log = orig;
   }
   const line = lines.find((l) => /Connected #5551234/.test(l)) ?? '';
-  assert.match(line, /took \d+\.\d s \(account added after \d+\.\d s, 1 status read\)/);
+  assert.match(line, /took \d+\.\d s \(account added after \d+\.\d s, 1 status read, login accepted after \d+\.\d s\)/);
 });
 
 test('a dashboard asking for a client never reads the copier service itself', async () => {

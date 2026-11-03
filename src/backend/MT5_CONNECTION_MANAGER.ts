@@ -48,6 +48,8 @@ import {
   sameLogin,
   translateCopierError,
   verifyCopierAccount,
+  verifyCopierLogin,
+  hasFigures,
   type VerifiedBrokerAccount,
 } from './brokerVerification.ts';
 
@@ -99,6 +101,14 @@ export interface ClientConnectionRecord {
   latencyMs?: number;
   /** When the copier service last updated the account's figures. */
   lastHeartbeat?: string;
+  /**
+   * True from the moment the broker accepted the login until the copier service first reports the balance (it refreshes figures
+   * only after a trade and every 5 minutes). The client is connected meanwhile; copying is held and the minimum-equity and
+   * currency rules are applied as soon as the figures arrive.
+   */
+  figuresPending?: boolean;
+  /** Set when the figures showed a currency other than USD: the account stays connected but nothing is copied. */
+  unsupportedCurrency?: boolean;
   /** Internal bookkeeping; never sent to the browser. */
   copyApplied?: number;
   missedReads?: number;
@@ -144,6 +154,8 @@ interface PendingLink extends LinkMemory {
   t0?: number;
   addedAt?: number;
   reads?: number;
+  /** When the copier service first reported the login as accepted (for the timing line). */
+  loginAt?: number;
 }
 
 /** What one read of the account list came to. */
@@ -498,8 +510,10 @@ export class Mt5ConnectionManager {
     if (acc.equity !== null) rec.equity = acc.equity;
     if (acc.freeMargin !== null) rec.freeMargin = acc.freeMargin;
     if (acc.currency) rec.currency = acc.currency;
+    // Connected on the login alone, and the balance has now been reported: apply the rules a connection waits for.
+    if (rec.figuresPending && hasFigures(acc)) this.figuresArrived(rec);
     // The account has reached the minimum equity (a deposit, or the minimum was lowered): copying starts by itself.
-    if (rec.lowFunds && acc.equity !== null && !isBelowCopyMinimum(rec.equity, this.minEquity())) this.releaseLowFunds(rec);
+    if (rec.lowFunds && !rec.figuresPending && acc.equity !== null && !isBelowCopyMinimum(rec.equity, this.minEquity())) this.releaseLowFunds(rec);
     rec.connectionState = this.stateFor(acc);
     rec.connectionStatus = acc.state || 'NONE';
     rec.lastHeartbeat = toIso(acc.lastUpdate) ?? rec.lastHeartbeat;
@@ -512,6 +526,34 @@ export class Mt5ConnectionManager {
         : kind === 'disconnected'
           ? 'The copier service cannot sign in to your account right now.'
           : undefined;
+  }
+
+  /**
+   * The first balance of an account connected on its login alone: the currency and minimum-equity rules are applied now, and
+   * copying is switched on if they allow it (the periodic check retries if that fails).
+   */
+  private figuresArrived(rec: ClientConnectionRecord): void {
+    rec.figuresPending = false;
+    const since = Date.parse(rec.verificationTimestamp);
+    const after = Number.isFinite(since) ? ` ${Math.round((Date.now() - since) / 1000)} s after connecting` : '';
+    if (String(rec.currency).toUpperCase() !== 'USD') {
+      rec.unsupportedCurrency = true;
+      rec.errorMessage = `Right now we can only copy to accounts held in US dollars (USD), and this one is in ${rec.currency}.`;
+      console.warn(`⚠️ [COPIER] #${rec.login} is in ${rec.currency}, not USD: connected, nothing is copied.`);
+    } else {
+      rec.lowFunds = isBelowCopyMinimum(rec.equity, this.minEquity());
+      console.log(`✅ [COPIER] #${rec.login} balance reported${after}: equity $${rec.equity.toFixed(2)}` + (rec.lowFunds ? ` (below the $${this.minEquity().toFixed(2)} minimum, not copying yet)` : ', copying starts.'));
+    }
+    try {
+      this.registerClient(rec);
+    } catch {
+      // saving is best-effort
+    }
+    if (this.api && !this.copyingAwaitsBilling(rec)) {
+      void this.applyCopyState(rec).catch((e: any) =>
+        console.warn(`⚠️ [COPIER] Could not set copying for ${mask(rec.userId)} yet: ${String(e?.message || e).slice(0, 160)}`)
+      );
+    }
   }
 
   /** An account held back for low equity has reached the minimum: save that and switch copying on at the service (the periodic check retries if that fails). */
@@ -749,8 +791,9 @@ export class Mt5ConnectionManager {
           throw r.error ?? new DuplikiumError('NETWORK', 'The copier service could not be read.');
         }
         const acc = this.lastAccounts.find((a) => a.accountId === accountId) ?? null;
-        const d = decideLink(acc, link, Date.now(), this.graceMs(), GONE_GRACE_MS);
-        if (d.action === 'VERIFY') {
+        if (acc && !link.loginAt && classifyState(acc.state) === 'connected') link.loginAt = Date.now();
+        const d = decideLink(acc, link, Date.now(), this.graceMs(), GONE_GRACE_MS, this.connectOnLogin(link));
+        if (d.action === 'VERIFY' || d.action === 'VERIFY_LOGIN') {
           go('verifying');
           return await this.completeConnection(link, acc!);
         }
@@ -848,11 +891,22 @@ export class Mt5ConnectionManager {
     return e;
   }
 
-  /** The account is logged in and its figures are real: apply our rules and put it into service. */
+  /**
+   * New connections are finished as soon as the broker accepts the login, without waiting up to 5 minutes for the copier service
+   * to report the balance. CONNECT_ON_LOGIN=0 turns this off. Clients restored after a restart keep waiting for real figures, so
+   * their saved minimum-equity state is never replaced by a placeholder.
+   */
+  private connectOnLogin(link: PendingLink): boolean {
+    return !link.verifiedBefore && (process.env.CONNECT_ON_LOGIN ?? '1').trim() !== '0';
+  }
+
+  /** The account is logged in (and, normally, its figures are real): apply our rules and put it into service. */
   private async completeConnection(link: PendingLink, acc: DuplikiumAccount): Promise<ClientConnectionRecord> {
-    const verified = verifyCopierAccount(acc, { login: link.login, server: link.server });
+    const figuresPending = !hasFigures(acc) && this.connectOnLogin(link);
+    const verified = figuresPending ? verifyCopierLogin(acc, { login: link.login, server: link.server }) : verifyCopierAccount(acc, { login: link.login, server: link.server });
     // Only the currency can refuse a NEW connection. A small account is never turned away: it connects and is simply not copied yet.
-    if (!link.verifiedBefore) checkConnectEligibility(verified);
+    // When the balance is not read yet the currency is checked as soon as it is (copying is held until then).
+    if (!link.verifiedBefore && !figuresPending) checkConnectEligibility(verified);
 
     const status: 'ACTIVE' | 'IDLE' = link.verifiedBefore ? ((await this.loadSavedStatus?.(link.userId).catch(() => null)) ?? 'ACTIVE') : 'ACTIVE';
     const record = this.buildClientRecord(link, acc, verified, status);
@@ -862,7 +916,9 @@ export class Mt5ConnectionManager {
     const min = this.minEquity();
     record.copyMinimumUsd = min;
     const heldBefore = link.verifiedBefore ? Boolean(await this.loadSavedLowFunds?.(link.userId).catch(() => false)) : true;
-    record.lowFunds = heldBefore && isBelowCopyMinimum(verified.equity, min);
+    // Balance not read yet: the minimum is judged when it is (in applyAccountToClient). Copying is held by figuresPending meanwhile.
+    record.lowFunds = figuresPending ? false : heldBefore && isBelowCopyMinimum(verified.equity, min);
+    if (figuresPending) record.figuresPending = true;
 
     // A client restored after a restart, whose payment standing billing has not judged yet, is left as the service has
     // them: billing decides within seconds (and switches them on if they are in good standing).
@@ -875,7 +931,8 @@ export class Mt5ConnectionManager {
     console.log(
       `${link.verifiedBefore ? '♻️' : '✅'} [COPIER] ${link.verifiedBefore ? 'Restored' : 'Connected'} #${record.login} (${record.status}): ${verified.accountType}, equity $${verified.equity.toFixed(2)}` +
         (record.lowFunds ? ` - connected, not copying yet (below the $${min.toFixed(2)} minimum)` : '') +
-        (link.verifiedBefore ? '' : ` - took ${((Date.now() - (link.t0 ?? link.startedAt)) / 1000).toFixed(1)} s` + (link.addedAt && link.t0 ? ` (account added after ${((link.addedAt - link.t0) / 1000).toFixed(1)} s` + `, ${link.reads ?? 0} status read${link.reads === 1 ? '' : 's'})` : ''))
+        (record.figuresPending ? ' - login accepted, balance not reported yet (copying starts once it is)' : '') +
+        (link.verifiedBefore ? '' : ` - took ${((Date.now() - (link.t0 ?? link.startedAt)) / 1000).toFixed(1)} s` + (link.addedAt && link.t0 ? ` (account added after ${((link.addedAt - link.t0) / 1000).toFixed(1)} s` + `, ${link.reads ?? 0} status read${link.reads === 1 ? '' : 's'}` + (link.loginAt && link.t0 ? `, login accepted after ${((link.loginAt - link.t0) / 1000).toFixed(1)} s` : '') + ')' : ''))
     );
     return record;
   }
@@ -925,9 +982,10 @@ export class Mt5ConnectionManager {
     for (const link of Array.from(this.pending.values())) {
       if (link.failure || this.connecting.has(link.userId)) continue;
       const acc = byId.get(link.accountId) ?? null;
-      const d = decideLink(acc, link, Date.now(), this.graceMs(), GONE_GRACE_MS);
+      if (acc && !link.loginAt && classifyState(acc.state) === 'connected') link.loginAt = Date.now();
+      const d = decideLink(acc, link, Date.now(), this.graceMs(), GONE_GRACE_MS, this.connectOnLogin(link));
       try {
-        if (d.action === 'VERIFY') {
+        if (d.action === 'VERIFY' || d.action === 'VERIFY_LOGIN') {
           await this.completeConnection(link, acc!);
         } else if (d.action === 'WAIT') {
           link.label = d.label;

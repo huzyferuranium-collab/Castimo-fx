@@ -44,6 +44,8 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
   const [success, setSuccess] = useState(false);
   // Set when the account connected but is below the minimum equity: nothing copies yet, and it starts by itself once it reaches it.
   const [heldMin, setHeldMin] = useState<string | null>(null);
+  // Connected on the login: the copier reports the balance within a few minutes, and copying starts by itself then.
+  const [readingBalance, setReadingBalance] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [errorHint, setErrorHint] = useState<string | null>(null);
   const [errorRef, setErrorRef] = useState<string | null>(null);
@@ -155,13 +157,14 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
       }
       const connected = tradingEngine.getMt5Account();
       const held = connected.copyHeld === 'low_funds';
+      setReadingBalance(connected.copyHeld === 'reading_balance');
       setHeldMin(held ? (typeof connected.copyMinimumUsd === 'number' ? `$${connected.copyMinimumUsd.toFixed(2)}` : 'the minimum') : null);
       setSuccess(true);
       setTimeout(() => {
         setSuccess(false);
         setHeldMin(null);
         onClose();
-      }, held ? 6000 : 1500);
+      }, held || connected.copyHeld === 'reading_balance' ? 6000 : 1500);
     } catch (err: any) {
       if (err instanceof ConnectError && err.code === 'TERMS_NOT_ACCEPTED') {
         if (justAgreed.current) {
@@ -236,7 +239,11 @@ export const Mt5ConnectionModal: React.FC<Mt5ConnectionModalProps> = ({
                 <CheckCircle2 className="w-8 h-8" />
               </div>
               <h4 className="text-base font-bold text-white">Account connected</h4>
-              {heldMin ? (
+              {readingBalance ? (
+                <p className="text-xs text-slate-400">
+                  Your broker accepted the login for #{accountNumber}. Your balance appears on the dashboard within a few minutes, and copying starts by itself as soon as it does.
+                </p>
+              ) : heldMin ? (
                 <p className="text-xs text-slate-400">
                   #{accountNumber} is connected but not copying yet. Trades start by themselves as soon as the account has {heldMin}: add funds at your broker whenever you are ready.
                 </p>

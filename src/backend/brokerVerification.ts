@@ -195,6 +195,40 @@ export function verifyCopierAccount(
   };
 }
 
+/**
+ * The login is accepted (the service reports the account CONNECTED) but its balance has not been read yet. The same checks as
+ * verifyCopierAccount except the figures, which are 0 until the service reports them; the caller holds copying back meanwhile.
+ */
+export function verifyCopierLogin(
+  acc: DuplikiumAccount | null | undefined,
+  submitted: SubmittedCredentials
+): VerifiedBrokerAccount {
+  if (!acc || typeof acc !== 'object') throw new BrokerVerificationError('BAD_BROKER_RESPONSE', 'The broker returned no account information.');
+  if (classifyState(acc.state) === 'investor') {
+    throw new BrokerVerificationError(
+      'TRADING_NOT_ALLOWED',
+      'This login can only view the account (investor password) or has trading switched off. Please use your trading password so trades can be copied.'
+    );
+  }
+  if (classifyState(acc.state) !== 'connected') throw new BrokerVerificationError('BAD_BROKER_RESPONSE', 'The broker has not accepted the login yet.');
+  if (acc.login && !sameLogin(acc.login, submitted.login)) {
+    throw new BrokerVerificationError('LOGIN_MISMATCH', 'The broker reported a different account number from the one you entered. Please check it and try again.');
+  }
+  const server = String(acc.server || submitted.server || '');
+  return {
+    balance: 0,
+    equity: 0,
+    freeMargin: 0,
+    leverage: 0,
+    currency: String(acc.currency || ''),
+    brokerName: server,
+    accountHolderName: '',
+    tradeAllowed: true,
+    investorMode: false,
+    accountType: /demo|trial/i.test(server) ? 'demo' : 'real',
+  };
+}
+
 // ---------- ownership of broker accounts inside Duplikium ----------
 
 /** Every account we create in Duplikium is named after the user who linked it. */
