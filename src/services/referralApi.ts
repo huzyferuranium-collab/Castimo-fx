@@ -21,6 +21,11 @@ export interface ReferralSummary {
   code: string;
   link: string;
   ratesPct: number[];
+  /** Daily equity commission (Monthly Plan clients), levels 1-3, percent of the client's equity per paid day. */
+  dailyRatesPct?: number[];
+  dailyPaidDaysPerMonth?: number;
+  /** The TRON address saved for withdrawals ('' when none). */
+  wallet?: string;
   counts: { level1: number; level2: number; level3: number };
   earnedUsdt: number;
   heldUsdt: number;
@@ -32,7 +37,7 @@ export interface ReferralSummary {
     amountUsdt: number;
     /** The payment this commission is a percentage of (the plan fee or the profit-share invoice). */
     basePaidUsdt: number | null;
-    sourceType: 'subscription' | 'profit_invoice' | null;
+    sourceType: 'subscription' | 'profit_invoice' | 'daily_equity' | null;
     createdAt: string;
   }>;
   withdrawals: WithdrawalRow[];
@@ -102,3 +107,6 @@ export async function attachPendingReferral(): Promise<void> {
     }
   }
 }
+
+/** Saves the TRON (TRC20) address that referral withdrawals are paid to. */
+export const saveReferralWallet = (wallet: string) => call<{ wallet: string }>('/api/referrals/wallet', { wallet });

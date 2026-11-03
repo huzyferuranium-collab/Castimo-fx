@@ -26,8 +26,8 @@ import {
 import { type RunDeps, dailyUpdateFor, dailyWindowOpen, previewShare, previousUtcDay, settleClient } from './profitShareRun.ts';
 import { settlementAllowed, upgradeLedger } from './profitShareRealized.ts';
 import { readLimit } from './brokerVerification.ts';
-import { accrueCommissions, recordEvent } from './referralService.ts';
-import { commissionBaseUsdt } from './referrals.ts';
+import { accrueCommissions, accrueDailyEquityCommission, recordEvent } from './referralService.ts';
+import { commissionBaseUsdt, isDailyCommissionDay } from './referrals.ts';
 import {
   DEFAULT_SUBSCRIPTION_PERIOD_DAYS,
   DEFAULT_SUBSCRIPTION_PRICE_USDT,
@@ -157,7 +157,45 @@ export class BillingService {
   }
 
   /** Starts the periodic sweep. Safe to call when billing is not configured (it then does nothing). */
+  private dailyEquityDone = new Set<string>();
+
+  /**
+   * The daily equity commission: on each of the first 20 working days of the month (UTC), every connected Monthly Plan client
+   * with an active plan earns their three referrers 1% / 0.5% / 0.5% of the client's equity. Runs every 10 minutes and credits
+   * each client once a day (the credits have fixed ids). A disconnected account earns nothing that day.
+   */
+  async dailyEquityPass(now = Date.now()): Promise<void> {
+    if (!isFirestoreAdminConfigured() || !isDailyCommissionDay(now)) return;
+    const day = new Date(now).toISOString().slice(0, 10).replace(/-/g, '');
+    for (const k of this.dailyEquityDone) if (!k.endsWith(`_${day}`)) this.dailyEquityDone.delete(k);
+    let credited = 0;
+    for (const rec of uniqueVerifiedClients(this.manager)) {
+      const mark = `${rec.userId}_${day}`;
+      if (this.dailyEquityDone.has(mark)) continue;
+      if (rec.connectionState === 'DISCONNECTED' || rec.connectionState === 'ERROR') continue;
+      const equity = Number(rec.equity);
+      if (!Number.isFinite(equity) || equity <= 0 || String(rec.currency).toUpperCase() !== 'USD') continue;
+      try {
+        const plan = await this.getPlan(rec.userId);
+        if (plan?.model !== 'subscription' || !subscriptionActive(plan, now)) {
+          this.dailyEquityDone.add(mark); // not on an active Monthly Plan today
+          continue;
+        }
+        credited += await accrueDailyEquityCommission(rec.userId, equity, day);
+        this.dailyEquityDone.add(mark);
+      } catch (e: any) {
+        console.warn(`⚠️ [REFERRALS] Daily commission for ${rec.userId} not credited yet:`, e?.message);
+      }
+    }
+    if (credited) console.log(`💸 [REFERRALS] Daily equity commission ${day}: ${credited} credit(s).`);
+  }
+
   start(): void {
+    if (isFirestoreAdminConfigured()) {
+      const t = setInterval(() => void this.dailyEquityPass().catch((e) => console.warn('[REFERRALS] daily:', e?.message)), 10 * 60_000);
+      (t as any).unref?.();
+      setTimeout(() => void this.dailyEquityPass().catch(() => undefined), 90_000).unref?.();
+    }
     if (!billingEnabled()) {
       console.warn('⚠️ [BILLING] Billing is OFF: set FIREBASE_SERVICE_ACCOUNT and TREASURY_ADDRESS to turn it on.');
       return;

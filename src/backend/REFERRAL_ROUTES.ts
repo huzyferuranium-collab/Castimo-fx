@@ -8,6 +8,7 @@ import {
   attachReferrer,
   notificationsFor,
   requestWithdrawal,
+  saveWallet,
   summary,
 } from './referralService';
 
@@ -33,6 +34,15 @@ referralRouter.post('/attach', requireUser, async (req: Request, res: Response) 
     return res.status(200).json({ success: true });
   } catch (e) {
     return fail(res, e, '/referrals/attach');
+  }
+});
+
+/** POST /api/referrals/wallet: saves the TRON (TRC20) address withdrawals are paid to. */
+referralRouter.post('/wallet', requireUser, async (req: Request, res: Response) => {
+  try {
+    return res.status(200).json({ success: true, wallet: await saveWallet(getAuthUser(req).uid, req.body?.wallet) });
+  } catch (e) {
+    return fail(res, e, '/referrals/wallet');
   }
 });
 

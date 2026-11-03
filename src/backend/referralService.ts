@@ -9,6 +9,9 @@ import { DocExistsError, createDoc, getDoc, isFirestoreAdminConfigured, listAll,
 import { checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron.ts';
 import {
   REFERRAL_RATES_PCT,
+  DAILY_EQUITY_RATES_PCT,
+  DAILY_PAID_DAYS_PER_MONTH,
+  dailyEquityLines,
   WITHDRAW_FEE_PCT,
   WITHDRAW_MIN_USDT,
   PROCESSING_HOURS,
@@ -141,6 +144,52 @@ export async function accrueCommissions(
   }
 }
 
+/**
+ * Credits one day's equity commission for a connected Monthly Plan client. Safe to call many times a day: each credit has a
+ * fixed id per client, day and level, so it can only exist once. Returns how many credits were new.
+ */
+export async function accrueDailyEquityCommission(sourceUid: string, equityUsd: number, dayKey: string): Promise<number> {
+  if (!isFirestoreAdminConfigured()) return 0;
+  const lines = dailyEquityLines(await chainFor(sourceUid), equityUsd);
+  const sourceId = `eq-${sourceUid}-${dayKey}`;
+  let added = 0;
+  for (const l of lines) {
+    try {
+      await createDoc('referral_commissions', `${sourceId}-L${l.level}`, {
+        beneficiaryUid: l.beneficiaryUid,
+        sourceUid,
+        level: l.level,
+        ratePct: l.ratePct,
+        basePaidUsdt: Math.round(equityUsd * 100) / 100, // the client's equity that day
+        amountUsdt: l.amountUsdt,
+        sourceType: 'daily_equity',
+        sourceId,
+        day: dayKey,
+        createdAt: new Date().toISOString(),
+      });
+      added++;
+    } catch (e) {
+      if (!(e instanceof DocExistsError)) throw e;
+    }
+  }
+  return added;
+}
+
+/** The TRON address a referrer saved for withdrawals ('' when none). */
+export async function savedWallet(uid: string): Promise<string> {
+  const w = (await getDoc('referral_wallets', uid).catch(() => null)) as Doc | null;
+  return String(w?.address ?? '');
+}
+
+/** Saves the referrer's TRON (TRC20) address; every withdrawal request then goes to the admin with it. */
+export async function saveWallet(uid: string, addressRaw: unknown): Promise<string> {
+  need();
+  const address = String(addressRaw ?? '').trim();
+  if (tronAddressToHex20(address) === null) throw new ReferralError('Enter a valid TRON (TRC20) wallet address that starts with T.');
+  await setDoc('referral_wallets', uid, { address, updatedAt: new Date().toISOString() });
+  return address;
+}
+
 async function displayName(uid: string): Promise<string> {
   const u = (await getDoc('users', uid).catch(() => null)) as Doc | null;
   return String(u?.displayName ?? '');
@@ -175,6 +224,9 @@ export async function summary(uid: string) {
     code,
     link: `${BASE_URL}/?ref=${code}`,
     ratesPct: [...REFERRAL_RATES_PCT],
+    dailyRatesPct: [...DAILY_EQUITY_RATES_PCT],
+    dailyPaidDaysPerMonth: DAILY_PAID_DAYS_PER_MONTH,
+    wallet: await savedWallet(uid),
     counts: { level1: levels[0].length, level2: levels[1].length, level3: levels[2].length },
     earnedUsdt: bal.earned,
     heldUsdt: bal.held,
@@ -188,7 +240,7 @@ export async function summary(uid: string) {
         ratePct: c.ratePct,
         amountUsdt: c.amountUsdt,
         basePaidUsdt: c.basePaidUsdt ?? null,
-        sourceType: c.sourceType === 'subscription' || c.sourceType === 'profit_invoice' ? c.sourceType : null,
+        sourceType: c.sourceType === 'subscription' || c.sourceType === 'profit_invoice' || c.sourceType === 'daily_equity' ? c.sourceType : null,
         createdAt: c.createdAt,
       })),
     withdrawals: withdrawals
@@ -220,7 +272,8 @@ function publicWithdrawal(w: Doc) {
 export function requestWithdrawal(uid: string, amountRaw: unknown, walletRaw: unknown) {
   need();
   return locked(`wd:${uid}`, async () => {
-    const wallet = String(walletRaw ?? '').trim();
+    // The address typed now, or else the one saved in the Referral Hub.
+    const wallet = String(walletRaw ?? '').trim() || (await savedWallet(uid));
     if (tronAddressToHex20(wallet) === null) throw new ReferralError('Enter a valid TRON (TRC20) wallet address that starts with T.');
 
     const commissions = (await queryEquals('referral_commissions', 'beneficiaryUid', uid)) as Doc[];
@@ -357,7 +410,9 @@ export async function notificationsFor(uid: string) {
       id: `cm-${c.sourceId}-L${c.level}`,
       kind: 'personal',
       title: 'Referral commission',
-      message: `You earned $${Number(c.amountUsdt).toFixed(2)} (level ${c.level}, ${c.ratePct}%).`,
+      message: c.sourceType === 'daily_equity'
+        ? `Daily commission: $${Number(c.amountUsdt).toFixed(2)} (level ${c.level}, ${c.ratePct}% of a client's equity).`
+        : `You earned $${Number(c.amountUsdt).toFixed(2)} (level ${c.level}, ${c.ratePct}%).`,
       at: String(c.createdAt),
     });
   }

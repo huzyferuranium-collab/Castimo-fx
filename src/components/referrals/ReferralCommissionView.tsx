@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, Share2, Wallet, Users } from 'lucide-react';
 import { SectionBanner, StatCard } from '../dashboard/DashboardVisuals';
-import { ReferralSummary, getReferralSummary, requestWithdrawal } from '../../services/referralApi';
+import { Collapsible } from '../common/Collapsible';
+import { ReferralSummary, getReferralSummary, requestWithdrawal, saveReferralWallet } from '../../services/referralApi';
 
 const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
@@ -22,10 +23,13 @@ export const ReferralCommissionView: React.FC = () => {
   const [wallet, setWallet] = useState('');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [walletBusy, setWalletBusy] = useState(false);
+  const [walletNote, setWalletNote] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = useCallback(async () => {
     const r = await getReferralSummary();
     setS(r.ok ? r.data! : null);
+    if (r.ok && r.data?.wallet) setWallet((w) => w || r.data!.wallet!);
   }, []);
   useEffect(() => {
     load();
@@ -51,11 +55,27 @@ export const ReferralCommissionView: React.FC = () => {
   const net = valid ? Math.round((n - fee) * 100) / 100 : 0;
   const open = s.withdrawals.find((w) => w.status === 'pending' || w.status === 'processing');
 
+  const daily = s.dailyRatesPct ?? [1, 0.5, 0.5];
+  const paidDays = s.dailyPaidDaysPerMonth ?? 20;
+  const rateText = (r: number[]) => `${r[0]}% · ${r[1]}% · ${r[2]}%`;
+  const saved = s.wallet || '';
+
+  const saveWallet = async () => {
+    setWalletBusy(true);
+    setWalletNote(null);
+    const r = await saveReferralWallet(wallet.trim());
+    setWalletBusy(false);
+    if (r.ok) {
+      setWalletNote({ ok: true, text: 'Saved. Your withdrawals are sent to this address.' });
+      load();
+    } else setWalletNote({ ok: false, text: r.error || 'Could not save the address.' });
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setNote(null);
-    const r = await requestWithdrawal(n, wallet.trim());
+    const r = await requestWithdrawal(n, saved);
     setBusy(false);
     if (r.ok) {
       setNote({ ok: true, text: 'Withdrawal requested. You can follow its status below.' });
@@ -70,7 +90,7 @@ export const ReferralCommissionView: React.FC = () => {
         tone="ruby"
         art="network"
         title="Referral Hub"
-        subtitle={`Earn ${s.ratesPct[0]}% / ${s.ratesPct[1]}% / ${s.ratesPct[2]}% of what the people you invite pay us.`}
+        subtitle={`${rateText(s.ratesPct)} commission on the $100 Monthly Plan, plus ${rateText(daily)} daily.`}
       />
       <div className="flex gap-2">
         {(['overview', 'withdraw'] as const).map((t) => (
@@ -97,10 +117,30 @@ export const ReferralCommissionView: React.FC = () => {
                 {copied === 'link' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />} {copied === 'link' ? 'Copied' : 'Copy'}
               </button>
             </div>
-            <p className="text-[11px] text-slate-500">
-              You earn {s.ratesPct[0]}% / {s.ratesPct[1]}% / {s.ratesPct[2]}% (levels 1, 2 and 3) of what the people you invited pay us: their Monthly Plan fee, or their Profit Share fee. Nothing is earned until a payment is verified.
-            </p>
           </div>
+
+          {/* The two rates at a glance; the details are behind "How commissions work". */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+              <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Monthly Plan commission</span>
+              <div className="text-lg font-black font-mono text-emerald-500 mt-0.5">{rateText(s.ratesPct)}</div>
+              <span className="text-[11px] text-slate-500">of each $100 Monthly Plan payment · levels 1 · 2 · 3</span>
+            </div>
+            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+              <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Daily commission</span>
+              <div className="text-lg font-black font-mono text-amber-500 mt-0.5">{rateText(daily)}</div>
+              <span className="text-[11px] text-slate-500">of the client's equity, every working day · {paidDays} days a month</span>
+            </div>
+          </div>
+
+          <Collapsible title="How commissions work" summary="Levels, the daily commission, and how you get paid" openLabel="Show" closeLabel="Hide">
+            <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              <p><b>Levels.</b> Level 1 is someone who joined with your link. Level 2 joined with their link, and level 3 with the next one down.</p>
+              <p><b>Monthly Plan commission ({rateText(s.ratesPct)}).</b> Each time a client you referred pays the $100 Monthly Plan, you earn ${(100 * s.ratesPct[0] / 100).toFixed(0)} (level 1), ${(100 * s.ratesPct[1] / 100).toFixed(0)} (level 2) or ${(100 * s.ratesPct[2] / 100).toFixed(0)} (level 3). The same rates apply to a paid Profit Share invoice. Nothing is earned until the payment is verified.</p>
+              <p><b>Daily commission ({rateText(daily)}).</b> Every 24 hours, for each Monthly Plan client you referred whose MT5 account is connected, you earn that percentage of their equity as shown by the copier. It is paid on the first {paidDays} working days (Monday to Friday) of every month and starts again on the 1st. A disconnected account earns nothing that day. Example: a level 1 client with $1,000 equity earns you ${(1000 * daily[0] / 100).toFixed(2)} a day.</p>
+              <p><b>Getting paid.</b> Commissions build up as your balance here. Save your TRON (TRC20) address under Withdraw and request a withdrawal (minimum ${s.rules.minUsdt}, {s.rules.feePct}% processing fee). The admin checks it and sends the USDT to your address.</p>
+            </div>
+          </Collapsible>
 
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {([
@@ -135,7 +175,7 @@ export const ReferralCommissionView: React.FC = () => {
                       {c.basePaidUsdt != null && (
                         <span className="block text-[10px] text-slate-500">
                           of ${Number(c.basePaidUsdt).toFixed(2)}
-                          {c.sourceType === 'subscription' ? ' · Monthly Plan' : c.sourceType === 'profit_invoice' ? ' · Profit Share fee' : ''}
+                          {c.sourceType === 'subscription' ? ' · Monthly Plan' : c.sourceType === 'profit_invoice' ? ' · Profit Share fee' : c.sourceType === 'daily_equity' ? ' equity · daily commission' : ''}
                         </span>
                       )}
                     </span>
@@ -160,7 +200,31 @@ export const ReferralCommissionView: React.FC = () => {
             </p>
             <div className="text-[11px] text-slate-500 space-y-1">
               <p>Requests made before <strong>{gmt(s.schedule.nextCutoff)}</strong> are in this week's round and are processed within {s.rules.processingHours} hours after it (by {gmt(s.schedule.nextExpectedBy)}). Later requests go into the next week's round.</p>
-              <p>All deadlines use GMT. Your local time is 3 hours ahead of GMT in Uganda.</p>
+              <p>All deadlines use GMT. East Africa (Kenya, Uganda, Tanzania) is 3 hours ahead of GMT.</p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2">
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 block">Your TRON (TRC20) payout address</span>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  value={wallet}
+                  onChange={(e) => setWallet(e.target.value)}
+                  placeholder="T... (USDT on the TRON network)"
+                  className="flex-1 px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
+                />
+                <button
+                  type="button"
+                  onClick={() => void saveWallet()}
+                  disabled={walletBusy || wallet.trim().length < 30 || wallet.trim() === saved}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white disabled:opacity-40 cursor-pointer"
+                >
+                  {walletBusy ? 'Saving…' : saved && wallet.trim() === saved ? 'Saved' : 'Save address'}
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-500">
+                {saved ? `Withdrawals go to ${saved.slice(0, 6)}…${saved.slice(-4)}. The admin sends your USDT here.` : 'Save it once; every withdrawal request is sent to the admin with this address.'}
+              </p>
+              {walletNote && <p className={`text-[11px] ${walletNote.ok ? 'text-emerald-500' : 'text-rose-500'}`}>{walletNote.text}</p>}
             </div>
 
             {open ? (
@@ -174,12 +238,6 @@ export const ReferralCommissionView: React.FC = () => {
                   placeholder={`Amount in USD (min ${s.rules.minUsdt})`}
                   className="w-full px-3 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
                 />
-                <input
-                  value={wallet}
-                  onChange={(e) => setWallet(e.target.value)}
-                  placeholder="TRC20 USDT wallet address"
-                  className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-white"
-                />
                 {valid && (
                   <div className="rounded-xl bg-slate-100 dark:bg-slate-950 p-3 text-xs space-y-1 font-mono">
                     <div className="flex justify-between"><span>Requested</span><span>${n.toFixed(2)}</span></div>
@@ -189,11 +247,12 @@ export const ReferralCommissionView: React.FC = () => {
                 )}
                 <button
                   type="submit"
-                  disabled={busy || !valid || wallet.trim().length < 20}
+                  disabled={busy || !valid || !saved}
                   className="btn-gold px-4 py-2 rounded-xl font-bold text-xs cursor-pointer"
                 >
                   {busy ? 'Submitting…' : 'Confirm withdrawal'}
                 </button>
+                {!saved && <p className="text-[11px] text-amber-500">Save your TRON address above first.</p>}
               </form>
             )}
             {note && <div className={`p-3 rounded-xl text-xs border ${note.ok ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' : 'bg-rose-500/10 border-rose-500/30 text-rose-500'}`}>{note.text}</div>}
