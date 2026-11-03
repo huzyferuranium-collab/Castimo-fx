@@ -64,6 +64,20 @@ export function acceptedMinimum(amountDueUsdt: number, toleranceUsdt: number): n
   return Math.max(1, Math.round((amountDueUsdt - tol) * 100) / 100);
 }
 
+export interface AdminClientMoney {
+  userId: string;
+  login: string;
+  model: 'profit_share' | 'subscription';
+  /** Net result of the trades closed since the last invoice (null when it could not be read). */
+  periodPnl: number | null;
+  /** The 50% built up on that profit, not invoiced yet. */
+  accruedShareUsdt: number | null;
+  /** Invoices made and not paid yet. */
+  unpaidUsdt: number;
+  trades: number;
+  readError: string;
+}
+
 export interface PayableNow {
   canPay: boolean;
   /** Why paying is not possible yet (empty when it is). */
@@ -546,6 +560,47 @@ export class BillingService {
   }
 
   private payNowBusy = new Set<string>();
+  private moneyCache = new Map<string, { at: number; row: AdminClientMoney }>();
+
+  /**
+   * For the administrator's Clients table: per client, the net profit of the trades closed since the last invoice, the 50% that
+   * has built up on it, and the unpaid invoices. Each client's closed trades are read at most every 5 minutes (the copier
+   * service allows few such reads), so opening the page often costs nothing extra.
+   */
+  async adminClientMoney(): Promise<AdminClientMoney[]> {
+    if (!billingEnabled()) return [];
+    const cfg = billingConfig();
+    const out: AdminClientMoney[] = [];
+    for (const rec of uniqueVerifiedClients(this.manager)) {
+      const hit = this.moneyCache.get(rec.userId);
+      if (hit && Date.now() - hit.at < 5 * 60_000) {
+        out.push(hit.row);
+        continue;
+      }
+      const row: AdminClientMoney = { userId: rec.userId, login: rec.login, model: 'profit_share', periodPnl: null, accruedShareUsdt: null, unpaidUsdt: 0, trades: 0, readError: '' };
+      try {
+        const plan = await this.getPlan(rec.userId);
+        if (plan?.model === 'subscription') {
+          row.model = 'subscription';
+        } else {
+          const invoices = await this.listInvoicesForUser(rec.userId);
+          row.unpaidUsdt = round2(invoices.filter((i) => i.status !== 'paid').reduce((t, i) => t + (Number(i.amountDueUsdt) || 0), 0));
+          const ledger = await this.openLedger(rec);
+          const p = await previewShare(this.psDeps(), ledger, cfg.feePct, new Date());
+          if (p.ok) {
+            row.periodPnl = p.periodPnl;
+            row.accruedShareUsdt = p.fee;
+            row.trades = p.trades;
+          } else row.readError = p.reason;
+        }
+        this.moneyCache.set(rec.userId, { at: Date.now(), row });
+      } catch (e: any) {
+        row.readError = String(e?.message || e).slice(0, 120);
+      }
+      out.push(row);
+    }
+    return out;
+  }
 
   /**
    * The client's connected account, found the same way the dashboard finds it: from memory, or looked up again at the copier

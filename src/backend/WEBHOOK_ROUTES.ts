@@ -669,6 +669,16 @@ tradeRouter.get('/my-ip', requireUser, (req: Request, res: Response) => {
  * GET /api/trade/clients  (administrators only)
  * Every broker-verified client in the replication pipeline.
  */
+/** GET /api/trade/admin/client-money (administrators): per client, profit since the last invoice, 50% built up, unpaid invoices. */
+tradeRouter.get('/admin/client-money', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    return res.status(200).json({ success: true, clients: await BillingService.getInstance().adminClientMoney() });
+  } catch (error: any) {
+    console.warn('⚠️ [API /admin/client-money]', String(error?.message || error).slice(0, 160));
+    return res.status(502).json({ success: false, error: 'Client figures could not be read just now.' });
+  }
+});
+
 tradeRouter.get('/clients', requireAdmin, (req: Request, res: Response) => {
   try {
     const clients = connectionManager.getActiveClients();

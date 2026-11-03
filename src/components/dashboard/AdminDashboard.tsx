@@ -4,6 +4,7 @@ import { AdminTerminalsPanel } from '../admin/AdminTerminalsPanel';
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { tradingEngine, CASTIMO_TREASURY_ADDRESS } from '../../services/tradingEngine';
+import { authHeaders } from '../../services/apiAuth';
 import { Mt5Account, ProfitShareInvoice } from '../../types';
 import { getRiskRules, type RiskRules } from '../../services/riskRulesApi';
 import { LedgerAuditModal } from '../ledger/LedgerAuditModal';
@@ -64,6 +65,44 @@ export const AdminDashboard: React.FC = () => {
   );
   // The rules the server really applies (read-only). undefined = still loading, null = could not be read.
   const [riskRules, setRiskRules] = useState<RiskRules | null | undefined>(undefined);
+
+  // Per client, from the server: profit of the trades closed since the last invoice, the 50% built up on it, unpaid invoices.
+  type ClientMoney = { userId: string; login: string; model: 'profit_share' | 'subscription'; periodPnl: number | null; accruedShareUsdt: number | null; unpaidUsdt: number; trades: number; readError: string };
+  const [money, setMoney] = useState<Record<string, ClientMoney>>({});
+  useEffect(() => {
+    let stop = false;
+    const load = async () => {
+      try {
+        const res = await fetch('/api/trade/admin/client-money', { headers: await authHeaders() });
+        const d = await res.json().catch(() => null);
+        if (!stop && res.ok && d?.success && Array.isArray(d.clients)) {
+          const map: Record<string, ClientMoney> = {};
+          for (const c of d.clients as ClientMoney[]) map[String(c.login)] = c;
+          setMoney(map);
+        }
+      } catch {
+        // keep what we had
+      }
+    };
+    void load();
+    const t = setInterval(() => void load(), 60_000);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, []);
+  const moneyOf = (acc: Mt5Account) => {
+    const m = money[String(acc.accountNumber)];
+    const unpaidFromInvoices = invoices.filter((i) => i.accountNumber === acc.accountNumber && i.status !== 'paid').reduce((t, i) => t + i.amountDueUsdt, 0);
+    return {
+      profit: m?.periodPnl ?? null,
+      due: Math.max(m?.unpaidUsdt ?? 0, unpaidFromInvoices),
+      accrued: m?.accruedShareUsdt ?? null,
+      monthly: m?.model === 'subscription',
+      trades: m?.trades ?? 0,
+    };
+  };
+  const signed = (n: number | null) => (n === null ? '—' : `${n < 0 ? '-' : '+'}$${Math.abs(n).toFixed(2)}`);
 
   const [showLedgerModal, setShowLedgerModal] = useState(false);
   const [showSettlementModal, setShowSettlementModal] = useState(false);
@@ -139,10 +178,7 @@ export const AdminDashboard: React.FC = () => {
 
   const totalSupervisedEquity = supervisedAccounts.reduce((sum, a) => sum + a.equity, 0);
   const accountsDisconnected = supervisedAccounts.filter((a) => a.status === 'blocked_unpaid').length;
-  const pendingShareTotal = supervisedAccounts.reduce(
-    (sum, a) => sum + (a.unpaidProfitShareUsdt || 0),
-    0
-  );
+  const pendingShareTotal = supervisedAccounts.reduce((sum, a) => sum + moneyOf(a).due, 0);
   const pendingInvoicesCount = invoices.filter((i) => i.status === 'pending').length;
 
   // Admin navigation. Badges show real counts only.
@@ -292,7 +328,8 @@ export const AdminDashboard: React.FC = () => {
                 ) : (
                   supervisedAccounts.map((acc) => {
                     const isOverdue = acc.status === 'blocked_unpaid';
-                    const hasDue = (acc.unpaidProfitShareUsdt || 0) > 0;
+                    const mo = moneyOf(acc);
+                    const hasDue = mo.due > 0;
                     const activeInv = invoices.find(
                       (i) => i.accountNumber === acc.accountNumber && i.status === 'pending'
                     );
@@ -322,15 +359,15 @@ export const AdminDashboard: React.FC = () => {
                             <span className="font-mono font-bold text-white text-sm block">
                               ${acc.equity.toFixed(2)}
                             </span>
-                            <span className="text-[10px] text-emerald-400 block font-mono">
-                              +${(acc.lastProfitGenerated || 0).toFixed(2)}
+                            <span className={`text-[10px] block font-mono ${(mo.profit ?? 0) < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                              {mo.monthly ? 'Monthly plan' : signed(mo.profit)}
                             </span>
                           </div>
                         </div>
 
                         <div className="flex items-center justify-between pt-1 text-xs">
                           <span className="text-slate-400 font-mono">
-                            Due: ${(acc.unpaidProfitShareUsdt || 0).toFixed(2)} USDT
+                            Due: ${mo.due.toFixed(2)} USDT{mo.accrued ? ` · building $${mo.accrued.toFixed(2)}` : ''}
                           </span>
                           <div className="flex items-center gap-1.5">
                             {hasDue && activeInv && (
@@ -367,7 +404,7 @@ export const AdminDashboard: React.FC = () => {
                       <th className="py-2 px-3">Account</th>
                       <th className="py-2 px-3">Broker</th>
                       <th className="py-2 px-3">Equity</th>
-                      <th className="py-2 px-3">Last profit</th>
+                      <th className="py-2 px-3">Profit since last invoice</th>
                       <th className="py-2 px-3">Share due</th>
                       <th className="py-2 px-3">Status</th>
                       <th className="py-2 px-3 text-right"></th>
@@ -383,7 +420,8 @@ export const AdminDashboard: React.FC = () => {
                     ) : (
                       supervisedAccounts.map((acc) => {
                         const isOverdue = acc.status === 'blocked_unpaid';
-                        const hasDue = (acc.unpaidProfitShareUsdt || 0) > 0;
+                        const mo = moneyOf(acc);
+                    const hasDue = mo.due > 0;
                         const activeInv = invoices.find(
                           (i) => i.accountNumber === acc.accountNumber && i.status === 'pending'
                         );
@@ -414,8 +452,18 @@ export const AdminDashboard: React.FC = () => {
                                 Bal: ${acc.balance.toFixed(2)}
                               </span>
                             </td>
-                            <td className="py-2.5 px-3 text-emerald-400 font-bold">+${(acc.lastProfitGenerated || 0).toFixed(2)}</td>
-                            <td className="py-2.5 px-3 text-amber-400 font-bold">${(acc.unpaidProfitShareUsdt || 0).toFixed(2)} USDT</td>
+                            <td className={`py-2.5 px-3 font-bold ${(mo.profit ?? 0) < 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                              {mo.monthly ? <span className="text-slate-400 font-normal text-xs">Monthly plan</span> : signed(mo.profit)}
+                              {!mo.monthly && mo.profit !== null && (
+                                <span className="text-[10px] text-slate-500 block font-normal">{mo.trades} closed trade{mo.trades === 1 ? '' : 's'} since last invoice</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-amber-400 font-bold">
+                              ${mo.due.toFixed(2)} USDT
+                              {!mo.monthly && mo.accrued !== null && mo.accrued > 0 && (
+                                <span className="text-[10px] text-slate-500 block font-normal">+${mo.accrued.toFixed(2)} building, not invoiced yet</span>
+                              )}
+                            </td>
                             <td className="py-2.5 px-3">
                               {isOverdue ? (
                                 <span className="text-[10px] font-bold text-rose-300 bg-rose-500/15 px-2 py-0.5 rounded border border-rose-500/30">
