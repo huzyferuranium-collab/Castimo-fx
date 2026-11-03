@@ -24,9 +24,9 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
     return trade.status === filter;
   });
 
-  const totalFloatingPnl = trades
-    .filter((t) => t.status === 'OPEN')
-    .reduce((acc, curr) => acc + curr.pnl, 0);
+  const openOnes = trades.filter((t) => t.status === 'OPEN');
+  const floatingKnown = openOnes.every((t) => t.pnlKnown !== false);
+  const totalFloatingPnl = openOnes.reduce((acc, curr) => acc + curr.pnl, 0);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden text-slate-100">
@@ -57,10 +57,10 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
             <span className="text-[10px] text-slate-400 font-medium">Floating PnL:</span>
             <span
               className={`text-xs font-mono font-bold ${
-                totalFloatingPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                !floatingKnown ? 'text-slate-400' : totalFloatingPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
               }`}
             >
-              {totalFloatingPnl >= 0 ? '+' : ''}${totalFloatingPnl.toFixed(2)}
+              {floatingKnown ? `${totalFloatingPnl >= 0 ? '+' : ''}$${totalFloatingPnl.toFixed(2)}` : '—'}
             </span>
           </div>
 
@@ -148,7 +148,7 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
                         isProfit ? 'text-emerald-400' : 'text-rose-400'
                       }`}
                     >
-                      {isProfit ? '+' : ''}${trade.pnl.toFixed(2)}
+                      {trade.pnlKnown === false ? '—' : `${isProfit ? '+' : ''}$${trade.pnl.toFixed(2)}`}
                     </div>
                     <span
                       className={`text-[9px] uppercase px-1.5 py-0.2 rounded font-semibold ${
@@ -284,7 +284,7 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades }) =>
                           isProfit ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
-                        {isProfit ? '+' : ''}${trade.pnl.toFixed(2)}
+                        {trade.pnlKnown === false ? '—' : `${isProfit ? '+' : ''}$${trade.pnl.toFixed(2)}`}
                       </div>
                       <span
                         className={`text-[9px] uppercase px-1.5 py-0.2 rounded font-semibold ${

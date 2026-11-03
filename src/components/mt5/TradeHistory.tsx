@@ -66,6 +66,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
   });
 
   // Performance calculations on fetched history
+  const profitKnown = trades.every((t) => t.pnlKnown !== false);
   const totalProfit = trades.reduce((sum, t) => sum + t.pnl, 0);
   const winCount = trades.filter((t) => t.pnl > 0).length;
   const lossCount = trades.filter((t) => t.pnl < 0).length;
@@ -130,7 +131,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
         <div className="bg-slate-950/70 p-3 sm:p-4">
           <span className="text-[10px] text-slate-500 block uppercase font-bold">Total Net Profit</span>
           <div className={`text-base sm:text-lg font-black font-mono mt-0.5 ${totalProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {totalProfit >= 0 ? `+$${totalProfit.toFixed(2)}` : `-$${Math.abs(totalProfit).toFixed(2)}`}{' '}
+            {!profitKnown ? '—' : totalProfit >= 0 ? `+$${totalProfit.toFixed(2)}` : `-$${Math.abs(totalProfit).toFixed(2)}`}{' '}
             <span className="text-[10px] font-normal text-slate-400">USD</span>
           </div>
         </div>
@@ -155,7 +156,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
         <div className="bg-slate-950/70 p-3 sm:p-4">
           <span className="text-[10px] text-slate-500 block uppercase font-bold">50% of profit shown (estimate)</span>
           <div className="text-base sm:text-lg font-black font-mono text-amber-400 mt-0.5">
-            ${Math.max(0, totalProfit * 0.5).toFixed(2)}{' '}
+            {profitKnown ? `$${Math.max(0, totalProfit * 0.5).toFixed(2)}` : '—'}{' '}
             <span className="text-[10px] font-normal text-slate-400">USDT</span>
           </div>
         </div>
@@ -245,7 +246,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
                         isProfit ? 'text-emerald-400' : 'text-rose-400'
                       }`}
                     >
-                      {isProfit ? `+$${trade.pnl.toFixed(2)}` : `-$${Math.abs(trade.pnl).toFixed(2)}`}
+                      {trade.pnlKnown === false ? '—' : isProfit ? `+$${trade.pnl.toFixed(2)}` : `-$${Math.abs(trade.pnl).toFixed(2)}`}
                     </div>
                     {hasCosts(trade) && (
                       <span className="text-[10px] text-slate-500 font-mono">
@@ -387,7 +388,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
                           isProfit ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
-                        {isProfit ? `+$${trade.pnl.toFixed(2)}` : `-$${Math.abs(trade.pnl).toFixed(2)}`}
+                        {trade.pnlKnown === false ? '—' : isProfit ? `+$${trade.pnl.toFixed(2)}` : `-$${Math.abs(trade.pnl).toFixed(2)}`}
                       </div>
                       {hasCosts(trade) && (
                         <div className="text-[10px] text-slate-500 mt-0.5">

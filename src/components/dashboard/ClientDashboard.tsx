@@ -380,7 +380,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const openTrades = trades.filter((t) => t.status === 'OPEN');
   const openTradesCount = Math.max(openTrades.length, openReported);
   const openDetailsMissing = openReported > openTrades.length;
-  const floatingPnl = openTrades.reduce((acc, trade) => acc + (trade.pnl || 0), 0);
+  // The total is only shown when every open trade's own profit was read. Otherwise a dash, never a made-up zero.
+  const floatingKnown = !openDetailsMissing && openTrades.every((t) => t.pnlKnown !== false);
+  const floatingPnl = floatingKnown ? openTrades.reduce((acc, trade) => acc + (trade.pnl || 0), 0) : null;
+  // The broker's own gap between equity and balance (it also includes any credit/bonus, so it is shown as a hint only).
+  const equityGap = Number.isFinite(account.equity) && Number.isFinite(account.balance) ? account.equity - account.balance : null;
 
   const shareNavItem: NavGroup['items'][number] = {
     id: 'settlement_due',
@@ -663,14 +667,21 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                   footer={account.equity > 0 ? 'Share of your equity that is free' : undefined}
                 />
                 <StatCard
-                  tone={floatingPnl >= 0 ? 'mint' : 'ruby'}
+                  tone={floatingPnl === null || floatingPnl >= 0 ? 'mint' : 'ruby'}
                   art="orbit"
                   icon={<Activity className="w-5 h-5" />}
                   label="Floating P/L"
                   value={floatingPnl}
                   signed
-                  valueClass={floatingPnl >= 0 ? '!text-emerald-600 dark:!text-emerald-300' : '!text-rose-600 dark:!text-rose-300'}
-                  footer={`${openTradesCount} open trade${openTradesCount === 1 ? '' : 's'}`}
+                  valueClass={floatingPnl === null ? '' : floatingPnl >= 0 ? '!text-emerald-600 dark:!text-emerald-300' : '!text-rose-600 dark:!text-rose-300'}
+                  footer={
+                    <>
+                      {`${openTradesCount} open trade${openTradesCount === 1 ? '' : 's'}`}
+                      {floatingPnl === null && openTradesCount > 0 && equityGap !== null && (
+                        <span className="block">{`Profit per trade not available yet. Equity minus balance: ${equityGap >= 0 ? '+' : '-'}$${Math.abs(equityGap).toFixed(2)}`}</span>
+                      )}
+                    </>
+                  }
                 />
               </div>
             )}
@@ -867,7 +878,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                           </div>
                         </div>
                         <div className={`font-mono text-sm font-extrabold ${(t.pnl || 0) >= 0 ? '!text-emerald-600 dark:!text-emerald-300' : '!text-rose-600 dark:!text-rose-300'}`}>
-                          {(t.pnl || 0) >= 0 ? '+' : ''}${(t.pnl || 0).toFixed(2)}
+                          {t.pnlKnown === false ? '—' : `${(t.pnl || 0) >= 0 ? '+' : ''}$${(t.pnl || 0).toFixed(2)}`}
                         </div>
                       </li>
                     ))}

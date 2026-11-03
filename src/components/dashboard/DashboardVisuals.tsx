@@ -125,7 +125,8 @@ export const StatCard: React.FC<{
   tone: Tone;
   icon: React.ReactNode;
   label: string;
-  value: number;
+  /** null shows a dash: the figure is not available (never a made-up zero). */
+  value: number | null;
   prefix?: string;
   signed?: boolean;
   valueClass?: string;
@@ -164,7 +165,7 @@ export const StatCard: React.FC<{
         row ? 'max-sm:col-start-2 max-sm:row-start-2 max-sm:mt-0 max-sm:pt-0' : ''
       } ${valueClass}`}
     >
-      <AnimatedNumber value={value} prefix={prefix} signed={signed} decimals={decimals} />
+      {value === null ? '—' : <AnimatedNumber value={value} prefix={prefix} signed={signed} decimals={decimals} />}
     </div>
     {share != null && (
       <div className={`relative mt-2 sm:mt-3 h-1.5 rounded-full bg-slate-400/15 overflow-hidden ${row ? 'max-sm:col-start-2' : ''}`}>

@@ -640,6 +640,7 @@ tradeRouter.get('/my-trades', requireUser, async (req: Request, res: Response) =
       sl: p.stopLoss ?? 0,
       tp: p.takeProfit ?? 0,
       pnl: p.profit ?? 0,
+      pnlKnown: p.profit !== null && p.profit !== undefined,
       commission: p.commission ?? 0,
       swap: p.swap ?? 0,
       status,

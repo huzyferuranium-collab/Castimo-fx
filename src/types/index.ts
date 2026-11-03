@@ -154,6 +154,8 @@ export interface CopiedTrade {
   sl: number;
   tp: number;
   pnl: number;
+  /** false when the copier service gave no profit figure for this trade (pnl is then 0 and must not be shown as a result). */
+  pnlKnown?: boolean;
   commission: number;
   swap: number;
   status: 'OPEN' | 'CLOSED';
