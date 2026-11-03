@@ -16,6 +16,8 @@ export interface MasterTrade {
 export interface AITradingAssistantProps {
   state: ConsoleState;
   trades: MasterTrade[];
+  /** How many trades the master has open, as the copier service counts them (it can be more than the details we could read). */
+  openCount?: number;
   className?: string;
 }
 
@@ -23,7 +25,7 @@ export interface AITradingAssistantProps {
  * The robot card. The animation is decorative; every word and figure shown comes from the
  * master account's real open positions. No confidence figure is shown because none exists.
  */
-export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, trades, className = '' }) => {
+export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, trades, openCount, className = '' }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
   const tooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -50,15 +52,15 @@ export const AITradingAssistant: React.FC<AITradingAssistantProps> = ({ state, t
   }, []);
 
   const first = trades[0];
-  const isSignal = state === 'TRADE' && !!first;
+  const isSignal = state === 'TRADE';
   const isAnalyzing = state === 'SEARCHING';
-  const signal = isSignal ? first.side : null; // null: no trade, or a trade whose direction is not readable
+  const signal = isSignal && first ? first.side : null; // null: no trade, or a trade whose direction is not readable
   const statusLabel =
     state === 'TRADE' ? 'TRADE FOUND' : state === 'NO_TRADE' ? 'NO ACTIVE TRADE' : state === 'UNAVAILABLE' ? 'DATA UNAVAILABLE' : 'SEARCHING';
   const symbol = first?.symbol || '';
   const task =
     state === 'TRADE'
-      ? `${trades.length} open on the master account`
+      ? `${Math.max(openCount ?? 0, trades.length)} open on the master account`
       : state === 'NO_TRADE'
       ? 'No active trade found'
       : state === 'UNAVAILABLE'

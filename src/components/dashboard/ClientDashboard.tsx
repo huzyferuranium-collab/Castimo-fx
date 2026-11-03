@@ -98,6 +98,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const [trades, setTrades] = useState<CopiedTrade[]>(tradingEngine.getTrades());
   // Said on the trade pages when the list could not be loaded or shown in full (instead of a page that just looks empty).
   const [tradesNotice, setTradesNotice] = useState<string | null>(tradingEngine.getTradesNotice());
+  // How many open trades the copier service counts on this account (it can be more than the details we could read).
+  const [openReported, setOpenReported] = useState<number>(tradingEngine.getOpenReported());
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -262,6 +264,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
       setPending(tradingEngine.getPendingConnection());
       setTrades([...tradingEngine.getTrades()]);
       setTradesNotice(tradingEngine.getTradesNotice());
+      setOpenReported(tradingEngine.getOpenReported());
       setInvoices([...tradingEngine.getProfitInvoices()]);
     });
     return () => unsubscribe();
@@ -348,7 +351,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   const subscriptionRunning = Boolean(planView?.subscription?.active);
   const hasPendingShare = !isSubscriber && (account.unpaidProfitShareUsdt || 0) > 0;
   const openTrades = trades.filter((t) => t.status === 'OPEN');
-  const openTradesCount = openTrades.length;
+  const openTradesCount = Math.max(openTrades.length, openReported);
+  const openDetailsMissing = openReported > openTrades.length;
   const floatingPnl = openTrades.reduce((acc, trade) => acc + (trade.pnl || 0), 0);
 
   const shareNavItem: NavGroup['items'][number] = {
@@ -862,6 +866,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
 
             {tradesNotice && (
               <div role="status" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">{tradesNotice}</div>
+            )}
+            {openDetailsMissing && (
+              <div role="status" className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+                You have {openReported} open trade{openReported === 1 ? '' : 's'} right now. The details (symbol, size and profit) aren't available yet and will appear here as soon as they are.
+              </div>
             )}
             <TradeCopierTable trades={trades} />
           </div>

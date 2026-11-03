@@ -170,6 +170,8 @@ export interface ClientTrades {
   closed: DuplikiumPosition[];
   /** How many trades are known to exist but could not be read (for a gentle notice on the client's page). */
   unreadable?: number;
+  /** How many open trades Duplikium says the account has (null when not known), even if their details could not be read. */
+  openReported?: number | null;
 }
 
 export interface CheckStep {
@@ -1305,6 +1307,22 @@ export class Mt5ConnectionManager {
     return Date.now() - since >= 90_000;
   }
 
+  /**
+   * How many trades Duplikium says are open on an account in its account list, or null when that is not known or not recent
+   * (the list was read more than 3 minutes ago). This is Duplikium's own figure: it is right even when the details of the trades
+   * cannot be read, and it is what the dashboards fall back on.
+   */
+  private reportedOpen(accountId: string | null | undefined): number | null {
+    if (!accountId || this.lastRefreshAt === 0 || Date.now() - this.lastRefreshAt > 180_000) return null;
+    const n = this.lastAccounts.find((a) => a.accountId === accountId)?.openTrades;
+    return typeof n === 'number' && n >= 0 ? n : null;
+  }
+
+  /** How many trades the master has open, as Duplikium reports it (null when unknown). */
+  public getMasterOpenCount(): number | null {
+    return this.masterState === 'CONNECTED' ? this.reportedOpen(this.masterId) : null;
+  }
+
   /** The master's open positions (cached, so many dashboards cost the service one call). */
   public async getMasterTrades(): Promise<MasterTrade[]> {
     if (!this.api || !this.masterId) throw new DuplikiumError('NOT_CONFIGURED', 'The copier service is not connected.');
@@ -1317,13 +1335,9 @@ export class Mt5ConnectionManager {
       if (e instanceof DuplikiumError && e.kind === 'RATE_LIMIT' && this.masterTradesCache && Date.now() - this.masterTradesCache.at < 300_000) return this.masterTradesCache.trades;
       throw e;
     }
-    const reported = this.masterMetrics.openPositionsCount;
-    this.noteUnreadTrades('the master', this.masterId, res, reported);
-    // Trades were in the answer but none could be read: that is "not readable", never "no trade".
-    if (res.positions.length === 0 && (res.skipped > 0 || this.tradesMissing(this.masterId, 0, reported))) {
-      throw new DuplikiumError('BAD_RESPONSE', 'The master\'s open trades could not be read.');
-    }
-    if (res.positions.length > 0) this.mismatchSince.delete(this.masterId);
+    // Trades that are in the answer but cannot be read are logged. The route says "trade found" from Duplikium's own count
+    // (getMasterOpenCount) rather than "no trade", so an unreadable answer is never shown as an empty master.
+    this.noteUnreadTrades('the master', this.masterId, res, this.reportedOpen(this.masterId));
     const trades = res.positions.map((p) => ({ id: p.id, symbol: p.symbol, side: p.side, volume: p.volume, openPrice: p.openPrice, openedAt: p.openTime }));
     this.masterTradesCache = { at: Date.now(), trades };
     return trades;
@@ -1363,6 +1377,7 @@ export class Mt5ConnectionManager {
     let open = c?.data.open ?? [];
     let closed = c?.data.closed ?? [];
     let unreadable = c?.data.unreadable ?? 0;
+    if (c && freshOpen && now - c.closedAt < 60_000) return { ...c.data, openReported: this.reportedOpen(rec.accountId) };
     try {
       if (!freshOpen) {
         const res = await this.api.getOpenPositions(rec.accountId);
@@ -1382,7 +1397,7 @@ export class Mt5ConnectionManager {
       if (e instanceof DuplikiumError && e.kind === 'RATE_LIMIT' && c && now - Math.max(c.openAt, c.closedAt) < 300_000) return c.data;
       throw e;
     }
-    const data: ClientTrades = { open, closed, unreadable };
+    const data: ClientTrades = { open, closed, unreadable, openReported: this.reportedOpen(rec.accountId) };
     this.tradesCache.set(userId, { at: now, openAt: freshOpen ? c!.openAt : now, closedAt: freshClosed ? c!.closedAt : now, data });
     return data;
   }
@@ -1623,6 +1638,24 @@ export class Mt5ConnectionManager {
         );
       } catch (e: any) {
         add('Master open trades', false, `${String(e?.message || e)} Trades will not show on the dashboard until this works.`);
+      }
+    }
+
+    if (this.masterId) {
+      try {
+        const res = await this.api.getClosedPositions(this.masterId);
+        const first = res.positions[0];
+        add(
+          'Master closed trades',
+          true,
+          `${res.positions.length} closed trade(s) read${res.skipped ? `, ${res.skipped} could not be read` : ''}.` +
+            (first
+              ? ` Latest listed: ${first.side ?? '(buy/sell not readable)'} ${first.volume} ${first.symbol}, closed "${first.closeTime ?? 'no time'}", profit ${first.profit ?? 'not reported'}.`
+              : ' None closed yet, so the closed-trade format is not yet confirmed.') +
+            ` The answer looked like: ${String(res.layout ?? 'unknown').slice(0, 900)}`
+        );
+      } catch (e: any) {
+        add('Master closed trades', false, `${String(e?.message || e)} Trade history and profit share cannot read trades until this works.`);
       }
     }
 

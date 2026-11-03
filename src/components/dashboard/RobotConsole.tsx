@@ -11,6 +11,7 @@ import { authHeaders } from '../../services/apiAuth';
 export const RobotConsole: React.FC = () => {
   const [state, setState] = useState<ConsoleState>('SEARCHING');
   const [trades, setTrades] = useState<MasterTrade[]>([]);
+  const [openCount, setOpenCount] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -22,10 +23,12 @@ export const RobotConsole: React.FC = () => {
         if (cancelled) return;
         setState(data.state === 'TRADE' || data.state === 'NO_TRADE' ? data.state : 'UNAVAILABLE');
         setTrades(Array.isArray(data.trades) ? data.trades : []);
+        setOpenCount(typeof data.openCount === 'number' ? data.openCount : undefined);
       } catch {
         if (cancelled) return;
         setState('UNAVAILABLE');
         setTrades([]);
+        setOpenCount(undefined);
       }
     };
     load();
@@ -36,5 +39,5 @@ export const RobotConsole: React.FC = () => {
     };
   }, []);
 
-  return <AITradingAssistant state={state} trades={trades} />;
+  return <AITradingAssistant state={state} trades={trades} openCount={openCount} />;
 };

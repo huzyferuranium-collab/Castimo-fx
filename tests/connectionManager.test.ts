@@ -1062,7 +1062,7 @@ test('a client sees only their own trades', async () => {
   assert.equal(await m.getClientTrades('nobody'), null);
 });
 
-test('trades that are in the answer but cannot be read make the master "unreadable", never "no trade", and are logged once', async () => {
+test('trades in the answer that cannot be read are logged once, and the master count still says a trade is open', async () => {
   const { fake, m } = setup();
   await m.refreshAll();
   fake.getOpenPositions = async () => {
@@ -1074,8 +1074,9 @@ test('trades that are in the answer but cannot be read make the master "unreadab
   const lines: string[] = [];
   console.warn = (...a: any[]) => void lines.push(a.join(' '));
   try {
-    await assert.rejects(() => m.getMasterTrades(), /could not be read/);
-    await assert.rejects(() => m.getMasterTrades(), /could not be read/);
+    assert.deepEqual(await m.getMasterTrades(), [], 'no details could be read');
+    assert.equal(m.getMasterOpenCount(), 1, "but Duplikium's own count says the master has a trade open (the route shows TRADE FOUND from it)");
+    await m.getMasterTrades();
     const r = await m.runConnectionCheck();
     const t = r.steps.find((s: any) => s.name === 'Master open trades')!;
     assert.equal(t.ok, false);
@@ -1146,6 +1147,35 @@ test('a client is told only when trades stay unreadable: rows that cannot be rea
   } finally {
     Date.now = realNow2;
   }
+});
+
+test('a client\'s open count comes from Duplikium\'s account list, even when the trade details are unreadable', async () => {
+  const { fake, m } = setup();
+  await m.refreshAll();
+  await m.provisionClientTerminal(creds('u1', '5551234'), () => {});
+  fake.accounts.get('D1')!.openTrades = 2;
+  await m.refreshAll();
+  fake.getOpenPositions = async () => ({ positions: [], skipped: 0 });
+  const t = await m.getClientTrades('u1');
+  assert.equal(t!.open.length, 0);
+  assert.equal(t!.openReported, 2);
+  fake.accounts.get('MASTER')!.openTrades = 0;
+  await m.refreshAll();
+  assert.equal(m.getMasterOpenCount(), 0);
+});
+
+test('the connection check also reads the master\'s closed trades and shows the answer\'s layout', async () => {
+  const { fake, m } = setup();
+  fake.getClosedPositions = async () => {
+    const r: any = { positions: [{ ...pos('c1', 'SELL'), closeTime: '2026-11-02T20:00:00.000Z', profit: 1.2 }], skipped: 0 };
+    Object.defineProperty(r, 'layout', { value: '{positions:[1× {ticket:number, type:number=1}]}', enumerable: false });
+    return r;
+  };
+  const r = await m.runConnectionCheck();
+  const t = r.steps.find((s: any) => s.name === 'Master closed trades')!;
+  assert.equal(t.ok, true);
+  assert.match(t.detail, /1 closed trade/);
+  assert.match(t.detail, /type:number=1/);
 });
 
 // ---------- administrator tools ----------

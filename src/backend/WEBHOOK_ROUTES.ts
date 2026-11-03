@@ -575,10 +575,15 @@ tradeRouter.get('/robot-state', requireUser, async (_req: Request, res: Response
   if (!connectionManager.isConnected()) return unavailable();
   try {
     const trades = await connectionManager.getMasterTrades();
+    // Duplikium's own count of open trades: when it says a trade is open but its details could not be read, the answer is
+    // still "trade found" (with the count), never "no trade".
+    const reported = connectionManager.getMasterOpenCount();
+    const openCount = Math.max(trades.length, reported ?? 0);
     return res.status(200).json({
       success: true,
-      state: trades.length > 0 ? 'TRADE' : 'NO_TRADE',
+      state: openCount > 0 ? 'TRADE' : 'NO_TRADE',
       trades,
+      openCount,
       updatedAt: new Date().toISOString(),
     });
   } catch {
@@ -619,6 +624,7 @@ tradeRouter.get('/my-trades', requireUser, async (req: Request, res: Response) =
       success: true,
       connected: true,
       unreadable: t.unreadable ?? 0,
+      openReported: t.openReported ?? null,
       trades: [...t.open.map((p) => toTrade(p, 'OPEN')), ...t.closed.map((p) => toTrade(p, 'CLOSED'))],
     });
   } catch (e: any) {

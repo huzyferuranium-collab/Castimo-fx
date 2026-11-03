@@ -197,6 +197,12 @@ class TradingEngine {
     return null;
   }
 
+  /** How many open trades the account has, as the copier service counts them (0 when not known). */
+  private openReported = 0;
+  public getOpenReported(): number {
+    return this.openReported;
+  }
+
   private setTradesLoad(failed: boolean, unreadable: number): void {
     if (this.tradesLoad.failed === failed && this.tradesLoad.unreadable === unreadable) return;
     this.tradesLoad = { failed, unreadable };
@@ -1237,6 +1243,12 @@ class TradingEngine {
       const data = await res.json();
       if (data && data.success && data.connected !== false && Array.isArray(data.trades)) {
         this.trades = data.trades as CopiedTrade[];
+        const reported = Number(data.openReported);
+        const nextReported = Number.isFinite(reported) && reported > 0 ? reported : 0;
+        if (nextReported !== this.openReported) {
+          this.openReported = nextReported;
+          this.notify();
+        }
         this.setTradesLoad(false, Number(data.unreadable) > 0 ? Number(data.unreadable) : 0);
       }
     } catch {
