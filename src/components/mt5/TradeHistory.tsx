@@ -153,7 +153,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
         </div>
 
         <div className="bg-slate-950/70 p-3 sm:p-4">
-          <span className="text-[10px] text-slate-500 block uppercase font-bold">50% Profit Share Base</span>
+          <span className="text-[10px] text-slate-500 block uppercase font-bold">50% of profit shown (estimate)</span>
           <div className="text-base sm:text-lg font-black font-mono text-amber-400 mt-0.5">
             ${Math.max(0, totalProfit * 0.5).toFixed(2)}{' '}
             <span className="text-[10px] font-normal text-slate-400">USDT</span>
@@ -282,7 +282,7 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
             <tr>
               <th className="py-3 px-4">Symbol / Type</th>
               <th className="py-3 px-4">Volume</th>
-              <th className="py-3 px-4">Entry Time (UTC)</th>
+              <th className="py-3 px-4">Entry Time (your time)</th>
               <th className="py-3 px-4">Exit Time</th>
               <th className="py-3 px-4">Execution Prices</th>
               <th className="py-3 px-4 text-right">Profit / PnL</th>
