@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { tradingEngine } from '../../services/tradingEngine';
-import { AlertTriangle, Power, RefreshCw, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Power, RefreshCw, CheckCircle2 } from 'lucide-react';
 
 interface Mt5DisconnectModalProps {
   isOpen: boolean;

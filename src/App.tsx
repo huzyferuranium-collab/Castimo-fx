@@ -12,16 +12,10 @@ import { AuthModal } from './components/auth/AuthModal';
 import { ClientDashboard } from './components/dashboard/ClientDashboard';
 import { AdminDashboard } from './components/dashboard/AdminDashboard';
 import { ReferralCommissionView } from './components/referrals/ReferralCommissionView';
-import { FAQSection } from './components/landing/FAQSection';
 import {
-  Shield,
   TrendingUp,
-  Sparkles,
   Server,
-  ArrowRight,
   Share2,
-  Lock,
-  Download,
 } from 'lucide-react';
 
 captureReferralFromUrl();
@@ -49,7 +43,7 @@ const TickerBar: React.FC = () => {
 type ActivePortalTab = 'client' | 'referrals' | 'admin';
 
 const MainContent: React.FC = () => {
-  const { userProfile, loading, switchRole } = useAuth();
+  const { userProfile, loading } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActivePortalTab>('client');
 

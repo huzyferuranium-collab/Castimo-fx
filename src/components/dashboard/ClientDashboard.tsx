@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { tradingEngine, CASTIMO_TREASURY_ADDRESS, type PayableNowView } from '../../services/tradingEngine';
 import { authHeaders } from '../../services/apiAuth';
@@ -36,19 +36,12 @@ import {
   Shield,
   ShieldAlert,
   Power,
-  Clock,
-  Award,
-  FileText,
   Share2,
   History,
   Activity,
-  ArrowRight,
-  Sliders,
   Cpu,
   ArrowUpRight,
   ArrowDownRight,
-  Mail,
-  Send,
   Zap,
   Radio,
   RefreshCw,
@@ -57,13 +50,9 @@ import {
   AlertCircle,
   ShieldCheck,
   CreditCard,
-  User,
-  UserCheck,
   Copy,
   Check,
-  ExternalLink,
   QrCode,
-  Lock,
 } from 'lucide-react';
 
 interface ClientDashboardProps {
@@ -71,9 +60,8 @@ interface ClientDashboardProps {
 }
 
 export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToReferrals }) => {
-  const { userProfile, isEmailVerified, isAdmin, isClient } = useAuth();
+  const { userProfile, isEmailVerified, isAdmin } = useAuth();
   const isUserAdmin = isAdmin ?? (userProfile?.role === 'admin');
-  const isUserClient = isClient ?? (!isUserAdmin || userProfile?.role === 'client');
 
   const [activeSection, setActiveSection] = useState<string>('overview');
   // Paying the 50% before the daily settlement: what is payable now, and the button's state.
@@ -172,47 +160,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     setShowConnectModal(true);
   };
 
-  // Copier service status (master reading) and this client's copy switch
-  const [copierStatus, setCopierStatus] = useState<{
-    connected: boolean;
-    status: string;
-    masterBalance: number;
-    masterEquity: number;
-    openPositionsCount: number;
-    activeClientsCount: number;
-    mirrorActive: boolean;
-    loading: boolean;
-    error?: string;
-    mode?: string;
-  }>({
-    connected: false,
-    status: 'UNKNOWN',
-    masterBalance: 0,
-    masterEquity: 0,
-    openPositionsCount: 0,
-    activeClientsCount: 0,
-    mirrorActive: true,
-    loading: false,
-  });
-
-  const [isRetryingMaster, setIsRetryingMaster] = useState(false);
-  const [retryMessage, setRetryMessage] = useState<string | null>(null);
-
   const fetchCopierStatus = async () => {
     try {
       const res = await fetch('/api/trade/account-status', { headers: await authHeaders() });
       if (res.ok) {
         const data = await res.json();
-        setCopierStatus((prev) => ({
-          ...prev,
-          connected: data.connected === true,
-          status: data.status || 'UNKNOWN',
-          masterBalance: data.master?.balance != null ? Number(data.master.balance) : prev.masterBalance,
-          masterEquity: data.master?.equity != null ? Number(data.master.equity) : prev.masterEquity,
-          openPositionsCount: data.master?.openPositionsCount ?? 0,
-          activeClientsCount: Number(data.activeClientsCount) || 0,
-          mode: data.mode,
-        }));
         if (data.master) {
           tradingEngine.syncMasterAccountFromCloud(data.master, data.activeClientsCount);
           setAccount(tradingEngine.getMt5Account());
@@ -220,21 +172,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
       }
     } catch {
       // The last reading stays on screen until the next one succeeds
-    }
-  };
-
-  const handleRetryMasterTerminal = async () => {
-    try {
-      setIsRetryingMaster(true);
-      setRetryMessage(null);
-      const res = await fetch('/api/trade/retry-master', { method: 'POST', headers: await authHeaders() });
-      const data = await res.json();
-      setRetryMessage(data.message || data.error || (data.success ? 'Master connected' : 'Retry completed'));
-      await fetchCopierStatus();
-    } catch {
-      setRetryMessage('Network error while requesting master reconnect');
-    } finally {
-      setIsRetryingMaster(false);
     }
   };
 
@@ -251,38 +188,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     }, 4000);
     return () => clearInterval(interval);
   }, []);
-
-  const handleToggleMirror = async () => {
-    try {
-      setCopierStatus((prev) => ({ ...prev, loading: true, error: undefined }));
-      const targetState = copierStatus.mirrorActive ? 'IDLE' : 'ACTIVE';
-      const res = await fetch('/api/trade/toggle-mirror', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-        body: JSON.stringify({ targetState }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setCopierStatus((prev) => ({
-          ...prev,
-          mirrorActive: data.status === 'ACTIVE',
-          loading: false,
-        }));
-      } else {
-        setCopierStatus((prev) => ({
-          ...prev,
-          loading: false,
-          error: data.error || 'Failed to toggle mirror state',
-        }));
-      }
-    } catch (err: any) {
-      setCopierStatus((prev) => ({
-        ...prev,
-        loading: false,
-        error: err?.message || 'Network error while contacting trade server',
-      }));
-    }
-  };
 
   useEffect(() => {
     const unsubscribe = tradingEngine.subscribe(() => {
@@ -356,7 +261,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
       } else {
         const hours = Math.floor(diff / (1000 * 60 * 60));
         const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
         setCountdownText(`${hours}h ${minutes}m remaining`);
       }
     };
@@ -368,7 +272,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
 
   const isConnected = account.status === 'copying' || account.status === 'connected';
   const isBlockedUnpaid = account.status === 'blocked_unpaid';
-  const isRiskBlocked = account.status === 'blocked' || account.riskStatus === 'blocked';
   // Connected, but below the minimum equity: nothing is copied yet, and it starts by itself once the account reaches the minimum.
   const copyHeld = isConnected && !!account.copyHeld;
   const readingBalance = account.copyHeld === 'reading_balance';

@@ -4,18 +4,13 @@ import { CopiedTrade } from '../../types';
 import { price, hasCosts } from '../../utils/tradeFormat';
 import {
   History,
-  TrendingUp,
-  TrendingDown,
   Clock,
   CheckCircle2,
   RefreshCw,
   Search,
   Filter,
-  DollarSign,
-  Award,
   ArrowUpRight,
   ArrowDownRight,
-  Calendar,
 } from 'lucide-react';
 
 interface TradeHistoryProps {

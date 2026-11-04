@@ -4,9 +4,6 @@ import {
   Award,
   Share2,
   Shield,
-  Clock,
-  Wallet,
-  Zap,
   Search,
   ArrowRight,
 } from 'lucide-react';

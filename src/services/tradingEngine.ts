@@ -1,5 +1,4 @@
 import {
-  Subscription,
   Mt5Account,
   MasterMt5Account,
   CopiedTrade,
@@ -10,12 +9,6 @@ import {
   AuditLog,
   ReconciliationReport,
   ProfitShareInvoice,
-  ReferralPhase,
-  ReferralUser,
-  ReferralCommissionEvent,
-  ReferralStats,
-  ClientNotification,
-  NotificationType,
 } from '../types';
 import { authHeaders } from './apiAuth';
 
@@ -106,10 +99,6 @@ const INITIAL_PROFIT_INVOICES: ProfitShareInvoice[] = [];
 
 const INITIAL_SUPERVISED_ACCOUNTS: Mt5Account[] = [];
 
-const INITIAL_REFERRALS: ReferralUser[] = [];
-
-const INITIAL_COMMISSION_HISTORY: ReferralCommissionEvent[] = [];
-
 const INITIAL_TRADES: CopiedTrade[] = [];
 
 const INITIAL_WITHDRAWALS: WithdrawalRequest[] = [];
@@ -129,17 +118,6 @@ const INITIAL_AUDIT_LOGS: AuditLog[] = [
     ip: '',
     timestamp: new Date().toISOString(),
     status: 'SUCCESS',
-  },
-];
-
-const INITIAL_NOTIFICATIONS: ClientNotification[] = [
-  {
-    id: 'notif-001',
-    type: 'AUTONOMOUS_WATCHER',
-    title: 'Terminal Initialized',
-    message: 'Castimo FX Terminal initialized in clean standby state. Connect your MT5 account to activate automated 50% profit share copying.',
-    timestamp: new Date().toISOString(),
-    read: false,
   },
 ];
 
@@ -166,15 +144,10 @@ export class ConnectError extends Error {
 }
 
 class TradingEngine {
-  private subscription: Subscription | null = null;
   private masterAccount: MasterMt5Account = INITIAL_MASTER_ACCOUNT;
   private mt5Account: Mt5Account = INITIAL_ACCOUNT;
   private supervisedAccounts: Mt5Account[] = INITIAL_SUPERVISED_ACCOUNTS;
   private profitInvoices: ProfitShareInvoice[] = INITIAL_PROFIT_INVOICES;
-  private referrals: ReferralUser[] = INITIAL_REFERRALS;
-  private commissionHistory: ReferralCommissionEvent[] = INITIAL_COMMISSION_HISTORY;
-  private referralBalance: number = 0.0;
-  private notifications: ClientNotification[] = INITIAL_NOTIFICATIONS;
   private trades: CopiedTrade[] = INITIAL_TRADES;
   private riskSettings: RiskSettings = DEFAULT_RISK_SETTINGS;
   private withdrawals: WithdrawalRequest[] = INITIAL_WITHDRAWALS;
@@ -191,7 +164,6 @@ class TradingEngine {
   private pendingConnection: PendingConnectionView | null = null;
 
   constructor() {
-    this.subscription = null;
     this.runRiskCheck();
   }
 
@@ -240,18 +212,8 @@ class TradingEngine {
     this.listeners.forEach((l) => l());
   }
 
-  // --- GETTERS ---
-  public getSubscription(): Subscription | null {
-    return this.subscription;
-  }
-
   public getMt5Account(): Mt5Account {
     return this.mt5Account;
-  }
-
-  // --- MASTER MT5 ACCOUNT (MAIN SIGNAL PROVIDER IN ADMIN CONSOLE) ---
-  public getMasterAccount(): MasterMt5Account {
-    return this.masterAccount;
   }
 
   /**
@@ -273,138 +235,6 @@ class TradingEngine {
       signalBroadcasting: true,
       lastPing: new Date().toISOString(),
     };
-    this.notify();
-  }
-
-  public connectMasterAccount(params: {
-    accountNumber: string;
-    brokerServer: string;
-    accountName?: string;
-    password?: string;
-  }): MasterMt5Account {
-    this.masterAccount = {
-      ...this.masterAccount,
-      accountNumber: params.accountNumber,
-      brokerServer: params.brokerServer,
-      accountName: params.accountName || `Castimo Master #${params.accountNumber}`,
-      status: 'broadcasting',
-      signalBroadcasting: true,
-      lastPing: new Date().toISOString(),
-      connectedAt: new Date().toISOString(),
-    };
-
-    this.logAudit(
-      'admin-lead-master',
-      'Administrator',
-      'MASTER_ACCOUNT_CONNECTED',
-      'ADMIN',
-      `Main Master MT5 Account #${params.accountNumber} successfully connected on server ${params.brokerServer}. Institutional trade signal broadcasting active.`,
-      'SUCCESS'
-    );
-
-    this.notify();
-    return this.masterAccount;
-  }
-
-  public toggleMasterSignalBroadcasting(): boolean {
-    this.masterAccount.signalBroadcasting = !this.masterAccount.signalBroadcasting;
-    this.masterAccount.status = this.masterAccount.signalBroadcasting ? 'broadcasting' : 'paused';
-    this.masterAccount.lastPing = new Date().toISOString();
-
-    this.logAudit(
-      'admin-lead-master',
-      'Administrator',
-      this.masterAccount.signalBroadcasting ? 'MASTER_BROADCAST_RESUMED' : 'MASTER_BROADCAST_PAUSED',
-      'ADMIN',
-      `Master signal replication to all slave client accounts is now ${this.masterAccount.signalBroadcasting ? 'ACTIVE' : 'PAUSED'}.`,
-      'SUCCESS'
-    );
-
-    this.notify();
-    return this.masterAccount.signalBroadcasting;
-  }
-
-  public disconnectMasterAccount(): void {
-    this.masterAccount.status = 'disconnected';
-    this.masterAccount.signalBroadcasting = false;
-    this.masterAccount.lastPing = new Date().toISOString();
-
-    this.logAudit(
-      'admin-lead-master',
-      'Administrator',
-      'MASTER_ACCOUNT_DISCONNECTED',
-      'ADMIN',
-      'Main Master MT5 Account disconnected from bridge. Trade broadcast suspended.',
-      'WARNING'
-    );
-
-    this.notify();
-  }
-
-  public resetAdminToInitialState(): void {
-    this.masterAccount = {
-      id: 'master-mt5-castimo-001',
-      accountName: 'Castimo Master Bridge',
-      accountNumber: 'Not Connected',
-      brokerServer: 'Awaiting MT5 Bridge',
-      status: 'disconnected',
-      balance: 0.0,
-      equity: 0.0,
-      freeMargin: 0.0,
-      floatingPL: 0.0,
-      marginLevel: 0.0,
-      leverage: 100,
-      latencyMs: 0,
-      activeCopiersCount: 0,
-      signalBroadcasting: false,
-      bridgePort: 8443,
-      lastPing: new Date().toISOString(),
-      connectedAt: new Date().toISOString(),
-      openTradesCount: 0,
-      activeTrades: [],
-      tradeHistory: [],
-    };
-    this.supervisedAccounts = [];
-    this.profitInvoices = [];
-
-    this.logAudit(
-      'admin-lead-master',
-      'Administrator',
-      'ADMIN_INITIAL_STATE_RESET',
-      'ADMIN',
-      'Admin console and Master MT5 Bridge reset to initial state configuration ($0.00 balance, awaiting MT5 bridge).',
-      'SUCCESS'
-    );
-
-    this.notify();
-  }
-
-  public resetAllToInitialState(): void {
-    this.resetAdminToInitialState();
-    this.mt5Account = {
-      id: 'mt5-acc-initial',
-      userId: 'verified-client-castimo-001',
-      accountNumber: 'Not Connected',
-      brokerServer: 'Awaiting MT5 Bridge',
-      status: 'disconnected',
-      balance: 0.0,
-      equity: 0.0,
-      freeMargin: 0.0,
-      marginLevel: 0.0,
-      leverage: 100,
-      riskStatus: 'normal',
-      profitShareStatus: 'up_to_date',
-      unpaidProfitShareUsdt: 0.0,
-      profitShareDueAt: undefined,
-      lastProfitGenerated: 0.0,
-      lastPing: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      copiedFromMasterAccount: undefined,
-      masterAccountName: undefined,
-    };
-    this.trades = [];
-    this.settlements = [];
-    this.withdrawals = [];
     this.notify();
   }
 
@@ -442,14 +272,6 @@ class TradingEngine {
       .slice(0, limit);
   }
 
-  public getRiskSettings(): RiskSettings {
-    return this.riskSettings;
-  }
-
-  public getWithdrawals(): WithdrawalRequest[] {
-    return this.withdrawals;
-  }
-
   public getSettlements(): ProfitShareSettlement[] {
     return this.settlements;
   }
@@ -460,61 +282,6 @@ class TradingEngine {
 
   public getAuditLogs(): AuditLog[] {
     return this.auditLogs;
-  }
-
-  // --- NOTIFICATION CENTER API ---
-  public getNotifications(): ClientNotification[] {
-    return this.notifications;
-  }
-
-  public getUnreadNotificationCount(): number {
-    return this.notifications.filter((n) => !n.read).length;
-  }
-
-  public markNotificationAsRead(id: string): void {
-    const notif = this.notifications.find((n) => n.id === id);
-    if (notif) {
-      notif.read = true;
-      this.notify();
-    }
-  }
-
-  public markAllNotificationsAsRead(): void {
-    this.notifications.forEach((n) => (n.read = true));
-    this.notify();
-  }
-
-  public clearNotifications(): void {
-    this.notifications = [];
-    this.notify();
-  }
-
-  public addNotification(
-    type: NotificationType,
-    title: string,
-    message: string,
-    amountUsdt?: number,
-    linkAction?: 'open_settlements' | 'open_referrals' | 'open_payment'
-  ): ClientNotification {
-    const notif: ClientNotification = {
-      id: `notif-${Date.now().toString().slice(-5)}`,
-      type,
-      title,
-      message,
-      amountUsdt,
-      timestamp: new Date().toISOString(),
-      read: false,
-      linkAction,
-    };
-    this.notifications.unshift(notif);
-    this.notify();
-    return notif;
-  }
-
-  public getPendingWithdrawalsTotal(): number {
-    return this.withdrawals
-      .filter((w) => w.status === 'requested' || w.status === 'reserved' || w.status === 'approved')
-      .reduce((sum, w) => sum + w.amount, 0);
   }
 
   // --- RISK ENGINE (Section 9) ---
@@ -558,250 +325,7 @@ class TradingEngine {
     return { riskStatus: status, blockedReason: reason };
   }
 
-  public updateRiskSettings(newSettings: Partial<RiskSettings>, adminActor: string) {
-    this.riskSettings = { ...this.riskSettings, ...newSettings };
-    this.runRiskCheck();
-    this.logAudit(
-      'system',
-      adminActor,
-      'RISK_SETTINGS_UPDATED',
-      'ADMIN',
-      `Updated risk parameters: Min Equity=$${this.riskSettings.minEquityToTrade}, Max Lot=${this.riskSettings.maxLotSize}`,
-      'SUCCESS'
-    );
-    this.notify();
-  }
-
-  public updateClientRiskSettings(newSettings: Partial<RiskSettings>): RiskSettings {
-    // Platform rule: Mandatory minEquity cannot be set below $100
-    if (newSettings.minEquityToTrade !== undefined && newSettings.minEquityToTrade < 100) {
-      newSettings.minEquityToTrade = 100;
-    }
-    this.riskSettings = { ...this.riskSettings, ...newSettings };
-    this.runRiskCheck();
-    this.logAudit(
-      this.mt5Account.userId,
-      'Client Trader',
-      'CLIENT_RISK_SETTINGS_SAVED',
-      'RISK',
-      `Custom risk parameters updated: Lot Multiplier=${this.riskSettings.lotSizeMultiplier}x, Max Drawdown=${this.riskSettings.maxDrawdownPercent}% ($${this.riskSettings.maxDrawdownLimitUsd} USD)`,
-      'SUCCESS'
-    );
-    this.notify();
-    return this.riskSettings;
-  }
-
-  // --- WITHDRAWAL SAFETY ENGINE (Section 10) ---
-  /**
-   * Implements strict formula:
-   * If open trades exist:
-   * withdrawable amount = min(
-   *   (free margin * 50%) - pending withdrawal reservations,
-   *   equity - $200
-   * )
-   * If <= 0, withdrawable amount is 0.
-   * Emergency rule: If open trades exist and equity <= $200, withdrawals are completely blocked.
-   *
-   * If no open trades exist:
-   * withdrawable amount = free margin - pending withdrawal reservations
-   */
-  public calculateWithdrawableAmount(): {
-    withdrawable: number;
-    isBlocked: boolean;
-    reason?: string;
-    hasOpenTrades: boolean;
-    formulaDetails: {
-      freeMargin: number;
-      equity: number;
-      pendingReservations: number;
-      margin50Pct: number;
-      equityMinus200: number;
-    };
-  } {
-    const openTrades = this.getOpenTrades();
-    const hasOpenTrades = openTrades.length > 0;
-    const freeMargin = this.mt5Account.freeMargin;
-    const equity = this.mt5Account.equity;
-    const pendingReservations = this.getPendingWithdrawalsTotal();
-    const margin50Pct = freeMargin * 0.5;
-    const equityMinus200 = equity - 200;
-
-    // Emergency rule: If open trades exist and equity <= $200, withdrawals are completely blocked!
-    if (hasOpenTrades && equity <= 200) {
-      return {
-        withdrawable: 0,
-        isBlocked: true,
-        reason: 'Emergency Rule: Account equity is $200.00 or lower while open copied trades exist. Withdrawals are completely blocked to prevent liquidation.',
-        hasOpenTrades,
-        formulaDetails: {
-          freeMargin,
-          equity,
-          pendingReservations,
-          margin50Pct,
-          equityMinus200,
-        },
-      };
-    }
-
-    let calculatedWithdrawable = 0;
-
-    if (hasOpenTrades) {
-      const optionA = margin50Pct - pendingReservations;
-      const optionB = equityMinus200;
-      calculatedWithdrawable = Math.min(optionA, optionB);
-    } else {
-      calculatedWithdrawable = freeMargin - pendingReservations;
-    }
-
-    if (calculatedWithdrawable < 0) {
-      calculatedWithdrawable = 0;
-    }
-
-    return {
-      withdrawable: Math.max(0, parseFloat(calculatedWithdrawable.toFixed(2))),
-      isBlocked: calculatedWithdrawable <= 0,
-      reason:
-        calculatedWithdrawable <= 0
-          ? 'Calculated withdrawable margin is $0.00 after margin safety reserve and pending reservations.'
-          : undefined,
-      hasOpenTrades,
-      formulaDetails: {
-        freeMargin,
-        equity,
-        pendingReservations,
-        margin50Pct,
-        equityMinus200,
-      },
-    };
-  }
-
-  public submitWithdrawalRequest(
-    userId: string,
-    userEmail: string,
-    amount: number,
-    destinationAddress: string
-  ): WithdrawalRequest {
-    const calc = this.calculateWithdrawableAmount();
-
-    if (calc.isBlocked && calc.withdrawable <= 0) {
-      throw new Error(calc.reason || 'Withdrawal is currently blocked by risk safety rules.');
-    }
-
-    if (amount <= 0) {
-      throw new Error('Withdrawal amount must be greater than 0.');
-    }
-
-    if (amount > calc.withdrawable) {
-      throw new Error(
-        `Requested amount ($${amount.toFixed(2)}) exceeds maximum safe withdrawable capacity ($${calc.withdrawable.toFixed(2)}).`
-      );
-    }
-
-    if (!destinationAddress.startsWith('T') || destinationAddress.length < 34) {
-      throw new Error('Invalid TRC20 USDT payout address format (must begin with "T" and be 34 characters).');
-    }
-
-    // Atomic reservation
-    const newRequest: WithdrawalRequest = {
-      id: `wdr-${Date.now().toString().slice(-6)}`,
-      userId,
-      userEmail,
-      amount,
-      destinationAddress,
-      status: 'reserved',
-      estimatedWithdrawableAtRequest: calc.withdrawable,
-      hasOpenTrades: calc.hasOpenTrades,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    this.withdrawals.unshift(newRequest);
-
-    // Create immutable ledger entry for reservation
-    this.addLedgerEntry(
-      'WITHDRAWAL_RESERVE_LOCKED',
-      newRequest.id,
-      `Atomic reserve locked for TRC20 withdrawal to ${destinationAddress.slice(0, 6)}...${destinationAddress.slice(-4)}`,
-      amount,
-      0
-    );
-
-    this.logAudit(
-      userId,
-      userEmail,
-      'WITHDRAWAL_REQUEST_SUBMITTED',
-      'WITHDRAWAL',
-      `Locked $${amount.toFixed(2)} USDT in atomic reservation for request ${newRequest.id}`,
-      'SUCCESS'
-    );
-
-    this.notify();
-    return newRequest;
-  }
-
-  public updateWithdrawalStatus(
-    withdrawalId: string,
-    newStatus: 'approved' | 'processing' | 'paid' | 'rejected' | 'cancelled',
-    adminActor: string,
-    reason?: string,
-    txHash?: string
-  ) {
-    const req = this.withdrawals.find((w) => w.id === withdrawalId);
-    if (!req) throw new Error('Withdrawal request not found.');
-
-    const oldStatus = req.status;
-    req.status = newStatus;
-    req.updatedAt = new Date().toISOString();
-    if (reason) req.rejectionReason = reason;
-    if (txHash) req.txHash = txHash;
-
-    if (newStatus === 'paid') {
-      this.addLedgerEntry(
-        'WITHDRAWAL_PAYOUT_SETTLED',
-        req.id,
-        `TRC20 USDT Payout confirmed via TX ${txHash || 'TX-SIM-' + Date.now()}`,
-        req.amount,
-        0
-      );
-      // Deduct from balance
-      this.mt5Account.balance -= req.amount;
-      this.mt5Account.equity -= req.amount;
-      this.mt5Account.freeMargin -= req.amount;
-    } else if (newStatus === 'rejected' || newStatus === 'cancelled') {
-      this.addLedgerEntry(
-        'WITHDRAWAL_RESERVE_RELEASED',
-        req.id,
-        `Withdrawal reservation released (${newStatus}): ${reason || 'Client/Admin cancellation'}`,
-        0,
-        req.amount
-      );
-    }
-
-    this.logAudit(
-      req.userId,
-      adminActor,
-      `WITHDRAWAL_${newStatus.toUpperCase()}`,
-      'WITHDRAWAL',
-      `Withdrawal ${req.id} changed from ${oldStatus} to ${newStatus}. ${reason ? 'Note: ' + reason : ''}`,
-      'SUCCESS'
-    );
-
-    this.runRiskCheck();
-    this.notify();
-  }
-
   // --- 50% PROFIT SHARE (real: invoices come from the server, payments are checked on the TRON blockchain) ---
-  private billingInfo: { enabled: boolean; treasuryAddress: string; feePct: number; periodDays: number } = {
-    enabled: false,
-    treasuryAddress: '',
-    feePct: 50,
-    periodDays: 1,
-  };
-
-  public getBillingInfo() {
-    return this.billingInfo;
-  }
-
   /** Loads this user's invoices (or all invoices for an administrator) from the server. */
   public async syncInvoicesFromBackend(asAdmin = false): Promise<void> {
     try {
@@ -810,14 +334,6 @@ class TradingEngine {
       const res = await fetch(asAdmin ? '/api/trade/admin/invoices' : '/api/trade/invoices', { headers });
       if (!res.ok) return;
       const data = await res.json();
-      if (!asAdmin) {
-        this.billingInfo = {
-          enabled: Boolean(data.billingEnabled),
-          treasuryAddress: String(data.treasuryAddress || ''),
-          feePct: Number(data.feePct) || 50,
-          periodDays: Number(data.periodDays) || 1,
-        };
-      }
       const rows: any[] = Array.isArray(data.invoices) ? data.invoices : [];
       this.profitInvoices = rows.map((r) => ({
         id: String(r.id),
@@ -1413,86 +929,6 @@ class TradingEngine {
     return { success: true };
   }
 
-  // --- DAILY PROFIT SHARE & HIGH WATER MARK (Section 12) ---
-  public executeDailySettlement(adminActor: string): ProfitShareSettlement {
-    const previousHwm = this.settlements[0]?.newHwm ?? (this.mt5Account.equity || 0.0);
-    const currentEquity = this.mt5Account.equity || 0.0;
-    const newHwm = Math.max(previousHwm, currentEquity);
-    const eligibleGain = Math.max(0, newHwm - previousHwm);
-    const realizedGainToday = eligibleGain;
-    const profitSharePct = 50;
-    const feeAmount = (eligibleGain * profitSharePct) / 100;
-
-    const settlement: ProfitShareSettlement = {
-      id: `settle-${new Date().toISOString().split('T')[0]}`,
-      userId: this.mt5Account.userId,
-      periodStart: new Date(Date.now() - 86400000).toISOString(),
-      periodEnd: new Date().toISOString(),
-      realizedProfit: realizedGainToday,
-      commissions: 1.8,
-      swaps: 0.0,
-      previousLosses: 0.0,
-      previousHwm,
-      newHwm,
-      eligibleGain,
-      profitSharePct,
-      feeAmount,
-      status: 'SETTLED',
-      settledAt: new Date().toISOString(),
-      invoiceId: `INV-FEE-${Date.now().toString().slice(-4)}`,
-    };
-
-    this.settlements.unshift(settlement);
-
-    if (feeAmount > 0) {
-      this.addLedgerEntry(
-        'PROFIT_SHARE_FEE_LEVIED',
-        settlement.id,
-        `Daily UTC 50% Profit share fee on new gain ($${eligibleGain.toFixed(2)}) above HWM ($${previousHwm.toFixed(2)})`,
-        feeAmount,
-        0
-      );
-    }
-
-    this.logAudit(
-      this.mt5Account.userId,
-      adminActor,
-      'DAILY_PROFIT_SHARE_SETTLED',
-      'SETTLEMENT',
-      `Settlement completed. Previous HWM: $${previousHwm}, New HWM: $${newHwm}, Fee: $${feeAmount.toFixed(2)} USDT`,
-      'SUCCESS'
-    );
-
-    this.notify();
-    return settlement;
-  }
-
-  // --- IMMUTABLE LEDGER (Section 4 & 13) ---
-  private addLedgerEntry(
-    referenceType: LedgerEntry['referenceType'],
-    referenceId: string,
-    description: string,
-    debit: number,
-    credit: number
-  ) {
-    const lastBalance = this.ledger.length > 0 ? this.ledger[0].balanceAfter : 0;
-    const balanceAfter = lastBalance + credit - debit;
-
-    const newEntry: LedgerEntry = {
-      id: `ldg-${Date.now().toString().slice(-6)}`,
-      timestamp: new Date().toISOString(),
-      referenceType,
-      referenceId,
-      description,
-      debit,
-      credit,
-      balanceAfter: parseFloat(balanceAfter.toFixed(2)),
-      isImmutable: true,
-    };
-
-    this.ledger.unshift(newEntry);
-  }
-
   // --- AUDIT LOGGING (Section 14) ---
   /** The signed-in person's address as the server sees it. Empty until the server has told us. */
   private clientIp = '';
@@ -1537,7 +973,6 @@ class TradingEngine {
   // --- RECONCILIATION REPORT (Section 13) ---
   public generateReconciliationReport(): ReconciliationReport {
     const openTrades = this.getOpenTrades();
-    const pendingWithdrawals = this.getPendingWithdrawalsTotal();
     const report: ReconciliationReport = {
       id: `recon-${Date.now().toString().slice(-6)}`,
       timestamp: new Date().toISOString(),

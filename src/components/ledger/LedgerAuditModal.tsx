@@ -3,12 +3,10 @@ import { LedgerEntry, AuditLog, ReconciliationReport } from '../../types';
 import { tradingEngine } from '../../services/tradingEngine';
 import {
   FileText,
-  ShieldCheck,
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
   Search,
-  ExternalLink,
 } from 'lucide-react';
 
 interface LedgerAuditModalProps {

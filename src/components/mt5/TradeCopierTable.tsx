@@ -5,8 +5,6 @@ import {
   Activity,
   TrendingUp,
   TrendingDown,
-  Shield,
-  Layers,
   ArrowUpRight,
   ArrowDownRight,
   Clock,

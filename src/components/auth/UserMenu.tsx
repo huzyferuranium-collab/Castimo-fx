@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../context/ThemeContext';
-import { User, LogOut, ShieldCheck, ChevronDown, Check, RefreshCw, Zap, Sparkles, Sun, Moon, Mail } from 'lucide-react';
-import { UserRole } from '../../types';
+import { User, LogOut, ShieldCheck, ChevronDown, Check, Sun, Moon, Mail } from 'lucide-react';
 
 interface UserMenuProps {
   onOpenAuth: () => void;
@@ -10,7 +9,7 @@ interface UserMenuProps {
 
 export const UserMenu: React.FC<UserMenuProps> = ({ onOpenAuth }) => {
   const { userProfile, signOutUser, switchRole, isEmailVerified } = useAuth();
-  const { theme, isDark, toggleTheme } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 

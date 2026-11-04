@@ -6,7 +6,7 @@ export const ThemeToggle: React.FC<{ showLabel?: boolean; className?: string }> 
   showLabel = false,
   className = '',
 }) => {
-  const { theme, isDark, toggleTheme } = useTheme();
+  const { isDark, toggleTheme } = useTheme();
 
   return (
     <button

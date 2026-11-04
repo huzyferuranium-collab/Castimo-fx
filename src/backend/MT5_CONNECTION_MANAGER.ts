@@ -696,12 +696,10 @@ export class Mt5ConnectionManager {
 
       let accountId: string;
       let previouslyVerified = false;
-      let resumed = false;
 
       if (existing) {
         // The user's own account from an earlier attempt: reuse it and give it the password they just typed.
         accountId = existing.accountId;
-        resumed = true;
         previouslyVerified = this.wasVerified ? (await this.wasVerified(userId, accountId).catch(() => 'unknown')) === 'yes' : false;
         go('creating');
         await api.updateAccount(accountId, { password: params.password, enabled: true });

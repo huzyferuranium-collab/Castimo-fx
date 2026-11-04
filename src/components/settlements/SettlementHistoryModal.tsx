@@ -1,6 +1,6 @@
 import React from 'react';
 import { ProfitShareSettlement } from '../../types';
-import { Award, TrendingUp, Calendar, CheckCircle2, ShieldCheck, DollarSign } from 'lucide-react';
+import { Award, Calendar, ShieldCheck } from 'lucide-react';
 
 interface SettlementHistoryModalProps {
   isOpen: boolean;

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   CASTIMO_TREASURY_ADDRESS,
-  TRC20_USDT_CONTRACT,
   tradingEngine,
 } from '../../services/tradingEngine';
 import { ProfitShareInvoice } from '../../types';
@@ -11,9 +10,7 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
-  ArrowRight,
   ShieldCheck,
-  Zap,
 } from 'lucide-react';
 
 interface ProfitSharePaymentModalProps {

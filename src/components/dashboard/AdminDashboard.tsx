@@ -3,7 +3,6 @@ import { AdminIncomePanel } from '../admin/AdminIncomePanel';
 import { AdminConnectLogPanel } from '../admin/AdminConnectLogPanel';
 import { AdminTerminalsPanel } from '../admin/AdminTerminalsPanel';
 import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../../hooks/useAuth';
 import { tradingEngine, CASTIMO_TREASURY_ADDRESS } from '../../services/tradingEngine';
 import { authHeaders } from '../../services/apiAuth';
 import { Mt5Account, ProfitShareInvoice } from '../../types';
@@ -20,21 +19,14 @@ import {
   Server,
   DollarSign,
   Clock,
-  Zap,
   RefreshCw,
   Wallet,
-  Activity,
   Check,
   FileText,
   Award,
   ChevronDown,
-  AlertTriangle,
   CheckCircle2,
-  Lock,
   Layers,
-  ArrowRight,
-  CreditCard,
-  ExternalLink,
 } from 'lucide-react';
 
 /** A compact summary card: a small label, one figure, and an optional short note. */
@@ -53,7 +45,6 @@ const Stat: React.FC<{ label: string; value: React.ReactNode; note?: string; ton
 );
 
 export const AdminDashboard: React.FC = () => {
-  const { userProfile } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('master');
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
