@@ -229,7 +229,7 @@ export const FAQSection: React.FC<FAQSectionProps> = ({ onSelectTab, hideCta }) 
                 onClick={() => onSelectTab('client')}
                 className="btn-gold flex-1 sm:flex-none px-4 py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <span>My Trading</span>
+                <span>Client Terminal</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
               <button

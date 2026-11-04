@@ -129,7 +129,7 @@ const MainContent: React.FC = () => {
               }`}
             >
               <TrendingUp className="w-3.5 h-3.5" />
-              <span>My Trading</span>
+              <span>Client Terminal</span>
             </button>
             <button
               onClick={() => handleSelectTab('referrals')}
