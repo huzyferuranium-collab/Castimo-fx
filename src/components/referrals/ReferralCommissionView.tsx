@@ -89,7 +89,7 @@ export const ReferralCommissionView: React.FC = () => {
         tone="ruby"
         art="network"
         title="Referral Hub"
-        subtitle={`${rateText(s.ratesPct)} once on the $100 Monthly Plan · ${rateText(weekly)} every week on every client's equity.`}
+        subtitle={`${rateText(s.ratesPct)} once on the $100 Monthly Plan · ${rateText(weekly)} once a week on every client's equity.`}
       />
       <div className="flex gap-2">
         {(['overview', 'withdraw'] as const).map((t) => (
@@ -128,7 +128,7 @@ export const ReferralCommissionView: React.FC = () => {
             <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
               <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Weekly commission · every client</span>
               <div className="text-lg font-black font-mono text-amber-500 mt-0.5">{rateText(weekly)}</div>
-              <span className="text-[11px] text-slate-500">of the client's average equity, every week</span>
+              <span className="text-[11px] text-slate-500">of the client's equity, paid once a week</span>
             </div>
           </div>
 
@@ -136,7 +136,7 @@ export const ReferralCommissionView: React.FC = () => {
             <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               <p><b>Levels.</b> Level 1 is someone who joined with your link. Level 2 joined with their link, and level 3 with the next one down.</p>
               <p><b>Monthly Plan commission ({rateText(s.ratesPct)}), paid once.</b> When a client you referred pays the $100 Monthly Plan for the first time, you earn ${(100 * s.ratesPct[0] / 100).toFixed(0)} (level 1), ${(100 * s.ratesPct[1] / 100).toFixed(0)} (level 2) or ${(100 * s.ratesPct[2] / 100).toFixed(0)} (level 3). Renewals in later months earn nothing. Nothing is earned until the payment is verified.</p>
-              <p><b>Weekly commission ({rateText(weekly)}).</b> For each client you referred with a real MT5 account, on the Monthly Plan or 50% Profit Share, you earn that percentage of their equity every week, as shown by the copier. It builds up in five equal parts, one on each business day (Monday to Friday) the account is connected and copying, so it follows their average equity, and a day without that earns nothing. It starts once the account has been connected for 24 hours, and it is on top of the one-time Monthly Plan commission. Practice (demo) accounts earn nothing. Example: a level 1 client with $1,000 equity earns you ${(1000 * weekly[0] / 100).toFixed(2)} a week (${(1000 * weekly[0] / 500).toFixed(2)} a business day).</p>
+              <p><b>Weekly commission ({rateText(weekly)}).</b> For each client you referred with a real MT5 account, on the Monthly Plan or 50% Profit Share, you earn that percentage of their equity once a week, as shown by the copier. The week is the trading week, Monday to Friday (no weekends), and the equity used is the figure at the close of the week (Friday evening, GMT). The client's account must be connected and copying then, and must have been connected for at least 24 hours. It is on top of the one-time Monthly Plan commission. Practice (demo) accounts earn nothing. Example: a level 1 client with $1,000 equity earns you ${(1000 * weekly[0] / 100).toFixed(2)} a week.</p>
               <p><b>Getting paid.</b> Commissions build up as your balance here. Save your TRON (TRC20) address under Withdraw and request a withdrawal (minimum ${s.rules.minUsdt}, {s.rules.feePct}% processing fee). The admin checks it and sends the USDT to your address.</p>
             </div>
           </Collapsible>
@@ -174,7 +174,7 @@ export const ReferralCommissionView: React.FC = () => {
                       {c.basePaidUsdt != null && (
                         <span className="block text-[10px] text-slate-500">
                           of ${Number(c.basePaidUsdt).toFixed(2)}
-                          {c.sourceType === 'subscription' ? ' · Monthly Plan' : c.sourceType === 'profit_invoice' ? ' · Profit Share fee' : c.sourceType === 'daily_equity' ? ' equity · weekly commission' : ''}
+                          {c.sourceType === 'subscription' ? ' · Monthly Plan' : c.sourceType === 'profit_invoice' ? ' · Profit Share fee' : c.sourceType === 'weekly_equity' || c.sourceType === 'daily_equity' ? ' equity · weekly commission' : ''}
                         </span>
                       )}
                     </span>

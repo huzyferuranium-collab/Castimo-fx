@@ -26,8 +26,8 @@ import {
 import { type RunDeps, dailyUpdateFor, dailyWindowOpen, previewShare, previousUtcDay, settleClient } from './profitShareRun.ts';
 import { settlementAllowed, upgradeLedger } from './profitShareRealized.ts';
 import { readLimit } from './brokerVerification.ts';
-import { accrueCommissions, accrueDailyEquityCommission, recordEvent } from './referralService.ts';
-import { commissionBaseUsdt, isDailyCommissionDay } from './referrals.ts';
+import { accrueCommissions, accrueWeeklyEquityCommission, recordEvent } from './referralService.ts';
+import { commissionBaseUsdt, isWeekCommissionTime, tradingWeekKey } from './referrals.ts';
 import {
   DEFAULT_SUBSCRIPTION_PERIOD_DAYS,
   DEFAULT_SUBSCRIPTION_PRICE_USDT,
@@ -148,11 +148,11 @@ export function connectedLongEnough(connectedAtIso: unknown, nowMs: number, hour
 }
 
 /**
- * Whether a connected account earns its referrers the daily equity commission. A demo (practice) account never does: its
+ * Whether a connected account earns its referrers the weekly equity commission. A demo (practice) account never does: its
  * equity is virtual and free to create, so paying 1% of it every day would reward fake accounts. Disconnected or errored
  * accounts, non-USD accounts and accounts with no readable equity earn nothing either.
  */
-export function dailyCommissionEligible(rec: { connectionState?: string; equity?: unknown; currency?: unknown; accountType?: string; server?: string; billingBlocked?: boolean; lowFunds?: boolean; figuresPending?: boolean }): boolean {
+export function weeklyCommissionEligible(rec: { connectionState?: string; equity?: unknown; currency?: unknown; accountType?: string; server?: string; billingBlocked?: boolean; lowFunds?: boolean; figuresPending?: boolean }): boolean {
   if (isDemoAccount(rec)) return false;
   // Only an account that is really copying earns: not one held for payment, below the copying minimum, or still waiting for its figures.
   if (rec.billingBlocked || rec.lowFunds || rec.figuresPending) return false;
@@ -203,39 +203,42 @@ export class BillingService {
     return b;
   }
 
-  /** Starts the periodic sweep. Safe to call when billing is not configured (it then does nothing). */
-  private dailyEquityDone = new Set<string>();
+  /** Weeks already credited (or found credited) in this run, so the database is asked about each client once a week. */
+  private weeklyEquityDone = new Set<string>();
 
   /**
-   * The weekly equity commission, earned a fifth per day: on every business day (Mon-Fri, UTC), for as long as it stays connected and copying, every real client on either plan
-   * earns their three referrers 3% / 2% / 1% a week of the client's equity, a fifth per day (as the copier service reports it at that moment). Runs every 10 minutes and credits
-   * each client once a day (the credits have fixed ids). A disconnected account earns nothing that day.
+   * The weekly equity commission. Once the trading week (Monday to Friday, UTC) has closed, each real client on either plan whose
+   * account is connected and copying earns their three referrers 3% / 2% / 1% of the client's equity at that moment (as the copier
+   * service reports it). The credit has a fixed id per client and week, so it is made once; a client who is not eligible at the
+   * close, or not yet 24 hours connected, earns nothing for that week. Checked every 10 minutes, so a restart cannot lose a week.
    */
-  async dailyEquityPass(now = Date.now()): Promise<void> {
-    if (!isFirestoreAdminConfigured() || !isDailyCommissionDay(now)) return;
-    const day = new Date(now).toISOString().slice(0, 10).replace(/-/g, '');
-    for (const k of this.dailyEquityDone) if (!k.endsWith(`_${day}`)) this.dailyEquityDone.delete(k);
+  async weeklyEquityPass(now = Date.now()): Promise<void> {
+    if (!isFirestoreAdminConfigured() || !isWeekCommissionTime(now)) return;
+    const week = tradingWeekKey(now);
+    for (const k of this.weeklyEquityDone) if (!k.endsWith(`_${week}`)) this.weeklyEquityDone.delete(k);
     let credited = 0;
     for (const rec of uniqueVerifiedClients(this.manager)) {
-      const mark = `${rec.userId}_${day}`;
-      if (this.dailyEquityDone.has(mark)) continue;
-      if (!dailyCommissionEligible(rec)) continue;
+      const mark = `${rec.userId}_${week}`;
+      if (this.weeklyEquityDone.has(mark)) continue;
+      if (!weeklyCommissionEligible(rec)) continue;
       const equity = Number(rec.equity);
       try {
-        if (!(await this.connectedLongEnoughFor(rec.userId, now))) continue; // not paid before 24 hours of being connected; asked again next round
-        credited += await accrueDailyEquityCommission(rec.userId, equity, day);
-        this.dailyEquityDone.add(mark);
+        if (!(await this.connectedLongEnoughFor(rec.userId, now))) continue;
+        credited += await accrueWeeklyEquityCommission(rec.userId, equity, week);
+        this.weeklyEquityDone.add(mark);
       } catch (e: any) {
-        console.warn(`⚠️ [REFERRALS] Equity commission for ${rec.userId} not credited yet:`, e?.message);
+        console.warn(`⚠️ [REFERRALS] Weekly commission for ${rec.userId} not credited yet:`, e?.message);
       }
     }
-    if (credited) console.log(`💸 [REFERRALS] Daily equity commission ${day}: ${credited} credit(s).`);
+    if (credited) console.log(`💸 [REFERRALS] Weekly equity commission, week of ${week}: ${credited} credit(s).`);
   }
 
+
+  /** Starts the periodic sweep. Safe to call when billing is not configured (it then does nothing). */
   start(): void {
     if (isFirestoreAdminConfigured()) {
       const run = () => {
-        void this.dailyEquityPass().catch((e) => console.warn('[REFERRALS] daily:', e?.message));
+        void this.weeklyEquityPass().catch((e) => console.warn('[REFERRALS] weekly:', e?.message));
         void this.subscriptionCommissionPass().catch((e) => console.warn('[REFERRALS] plan:', e?.message));
       };
       const t = setInterval(run, 10 * 60_000);

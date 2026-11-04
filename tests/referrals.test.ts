@@ -96,24 +96,28 @@ test('names are masked', () => {
   assert.equal(maskName(''), 'A client');
 });
 
-test('equity commission: 3% / 2% / 1% of the client equity per WEEK, earned a fifth per business day, three levels', async () => {
-  const { dailyEquityLines } = await import('../src/backend/referrals.ts');
-  const lines = dailyEquityLines(['A', 'B', 'C'], 1000);
-  assert.deepEqual(lines.map((l) => [l.beneficiaryUid, l.level, l.ratePct, l.amountUsdt]), [['A', 1, 3, 6], ['B', 2, 2, 4], ['C', 3, 1, 2]]);
-  assert.equal(dailyEquityLines(['A'], 394.01)[0].amountUsdt, 2.36);
-  const { WEEKLY_EQUITY_RATES_PCT, DAILY_EQUITY_RATES_PCT } = await import('../src/backend/referrals.ts');
+test('weekly equity commission: 3% / 2% / 1% of the client equity at the close of the week, three levels', async () => {
+  const { weeklyEquityLines, WEEKLY_EQUITY_RATES_PCT } = await import('../src/backend/referrals.ts');
+  const lines = weeklyEquityLines(['A', 'B', 'C'], 1000);
+  assert.deepEqual(lines.map((l) => [l.beneficiaryUid, l.level, l.ratePct, l.amountUsdt]), [['A', 1, 3, 30], ['B', 2, 2, 20], ['C', 3, 1, 10]]);
+  assert.equal(weeklyEquityLines(['A'], 394.01)[0].amountUsdt, 11.82);
   assert.deepEqual([...WEEKLY_EQUITY_RATES_PCT], [3, 2, 1]);
-  assert.equal(Math.round(DAILY_EQUITY_RATES_PCT.reduce((a, b) => a + b, 0) * 5 * 1e6) / 1e6, 6, 'five business days add up to the full weekly rates');
-  assert.deepEqual(dailyEquityLines([], 1000), []);
-  assert.deepEqual(dailyEquityLines(['A'], 0), []);
+  assert.deepEqual(weeklyEquityLines([], 1000), []);
+  assert.deepEqual(weeklyEquityLines(['A'], 0), []);
 });
 
-test('equity commission accrues every business day (Mon-Fri), with no monthly limit', async () => {
-  const { isDailyCommissionDay } = await import('../src/backend/referrals.ts');
-  const at = (d: string) => Date.parse(`${d}T12:00:00Z`);
-  assert.equal(isDailyCommissionDay(at('2026-11-02')), true, 'Monday');
-  assert.equal(isDailyCommissionDay(at('2026-11-06')), true, 'Friday');
-  assert.equal(isDailyCommissionDay(at('2026-11-07')), false, 'Saturday');
-  assert.equal(isDailyCommissionDay(at('2026-11-08')), false, 'Sunday');
-  assert.equal(isDailyCommissionDay(at('2026-11-30')), true, 'the 21st business day of the month is paid too');
+test('the trading week is Monday to Friday and is credited once it has closed', async () => {
+  const { tradingWeekKey, isWeekCommissionTime } = await import('../src/backend/referrals.ts');
+  const at = (iso: string) => Date.parse(iso);
+  assert.equal(tradingWeekKey(at('2026-11-02T00:30:00Z')), '20261102', 'Monday');
+  assert.equal(tradingWeekKey(at('2026-11-06T23:00:00Z')), '20261102', 'Friday night');
+  assert.equal(tradingWeekKey(at('2026-11-07T10:00:00Z')), '20261102', 'Saturday belongs to the week that ended');
+  assert.equal(tradingWeekKey(at('2026-11-08T23:59:00Z')), '20261102', 'Sunday too');
+  assert.equal(tradingWeekKey(at('2026-11-09T00:01:00Z')), '20261109', 'the next Monday starts a new week');
+  assert.equal(isWeekCommissionTime(at('2026-11-02T12:00:00Z')), false, 'Monday');
+  assert.equal(isWeekCommissionTime(at('2026-11-05T23:00:00Z')), false, 'Thursday night');
+  assert.equal(isWeekCommissionTime(at('2026-11-06T21:59:00Z')), false, 'Friday before the close');
+  assert.equal(isWeekCommissionTime(at('2026-11-06T22:00:00Z')), true, 'Friday at the close');
+  assert.equal(isWeekCommissionTime(at('2026-11-07T08:00:00Z')), true, 'Saturday: a missed Friday is caught up');
+  assert.equal(isWeekCommissionTime(at('2026-11-08T08:00:00Z')), true, 'Sunday');
 });

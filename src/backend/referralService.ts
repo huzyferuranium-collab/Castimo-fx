@@ -10,7 +10,7 @@ import { TXID_PATTERN as HASH, checkUsdtPayment, fetchTxEvents, isTxFinalAndSucc
 import {
   REFERRAL_RATES_PCT,
   WEEKLY_EQUITY_RATES_PCT,
-  dailyEquityLines,
+  weeklyEquityLines,
   WITHDRAW_FEE_PCT,
   WITHDRAW_MIN_USDT,
   PROCESSING_HOURS,
@@ -143,13 +143,13 @@ export async function accrueCommissions(
 }
 
 /**
- * Credits one day's equity commission for a connected 50% Profit Share client. Safe to call many times a day: each credit has a
- * fixed id per client, day and level, so it can only exist once. Returns how many credits were new.
+ * Credits one trading week's equity commission for a connected client, on the equity at the close of the week. Safe to call many
+ * times: each credit has a fixed id per client, week and level, so it can only exist once. Returns how many credits were new.
  */
-export async function accrueDailyEquityCommission(sourceUid: string, equityUsd: number, dayKey: string): Promise<number> {
+export async function accrueWeeklyEquityCommission(sourceUid: string, equityUsd: number, weekKey: string): Promise<number> {
   if (!isFirestoreAdminConfigured()) return 0;
-  const lines = dailyEquityLines(await chainFor(sourceUid), equityUsd);
-  const sourceId = `eq-${sourceUid}-${dayKey}`;
+  const lines = weeklyEquityLines(await chainFor(sourceUid), equityUsd);
+  const sourceId = `eqw-${sourceUid}-${weekKey}`;
   let added = 0;
   for (const l of lines) {
     try {
@@ -158,11 +158,11 @@ export async function accrueDailyEquityCommission(sourceUid: string, equityUsd: 
         sourceUid,
         level: l.level,
         ratePct: l.ratePct,
-        basePaidUsdt: Math.round(equityUsd * 100) / 100, // the client's equity that day
+        basePaidUsdt: Math.round(equityUsd * 100) / 100, // the client's equity at the close of the week
         amountUsdt: l.amountUsdt,
-        sourceType: 'daily_equity',
+        sourceType: 'weekly_equity',
         sourceId,
-        day: dayKey,
+        week: weekKey,
         createdAt: new Date().toISOString(),
       });
       added++;
@@ -237,7 +237,7 @@ export async function summary(uid: string) {
         ratePct: c.ratePct,
         amountUsdt: c.amountUsdt,
         basePaidUsdt: c.basePaidUsdt ?? null,
-        sourceType: c.sourceType === 'subscription' || c.sourceType === 'profit_invoice' || c.sourceType === 'daily_equity' ? c.sourceType : null,
+        sourceType: c.sourceType === 'subscription' || c.sourceType === 'profit_invoice' || c.sourceType === 'weekly_equity' || c.sourceType === 'daily_equity' ? c.sourceType : null,
         createdAt: c.createdAt,
       })),
     withdrawals: withdrawals
@@ -407,8 +407,8 @@ export async function notificationsFor(uid: string) {
       id: `cm-${c.sourceId}-L${c.level}`,
       kind: 'personal',
       title: 'Referral commission',
-      message: c.sourceType === 'daily_equity'
-        ? `Equity commission: $${Number(c.amountUsdt).toFixed(2)} for today (level ${c.level}, one fifth of the ${c.ratePct}% weekly rate on a client's equity).`
+      message: c.sourceType === 'weekly_equity' || c.sourceType === 'daily_equity'
+        ? `Weekly commission: $${Number(c.amountUsdt).toFixed(2)} (level ${c.level}, ${c.ratePct}% of a client's equity at the close of the trading week).`
         : `You earned $${Number(c.amountUsdt).toFixed(2)} (level ${c.level}, ${c.ratePct}%).`,
       at: String(c.createdAt),
     });

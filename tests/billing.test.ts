@@ -97,21 +97,21 @@ test('a transfer made before the invoice existed cannot pay it (and an undated e
   assert.equal(sinceMs('not a date'), 0);
 });
 
-test('the daily referral commission is never paid on a demo account, or on one that is disconnected, not USD, or has no equity', async () => {
-  const { dailyCommissionEligible } = await import('../src/backend/billing.ts');
+test('the weekly referral commission is never paid on a demo account, or on one that is disconnected, not USD, or has no equity', async () => {
+  const { weeklyCommissionEligible } = await import('../src/backend/billing.ts');
   const ok = { connectionState: 'CONNECTED', equity: 500, currency: 'USD', accountType: 'real' };
-  assert.equal(dailyCommissionEligible(ok), true);
-  assert.equal(dailyCommissionEligible({ ...ok, accountType: 'demo' }), false, 'free practice accounts would farm commission');
-  assert.equal(dailyCommissionEligible({ ...ok, accountType: undefined, server: 'ExnessKE-MT5Trial9' }), false, 'a demo server name is enough');
-  assert.equal(dailyCommissionEligible({ ...ok, connectionState: 'DISCONNECTED' }), false);
-  assert.equal(dailyCommissionEligible({ ...ok, connectionState: 'ERROR' }), false);
-  assert.equal(dailyCommissionEligible({ ...ok, currency: 'EUR' }), false);
-  assert.equal(dailyCommissionEligible({ ...ok, equity: 0 }), false);
-  assert.equal(dailyCommissionEligible({ ...ok, billingBlocked: true }), false, 'copying held for an unpaid invoice or an expired plan');
-  assert.equal(dailyCommissionEligible({ ...ok, lowFunds: true }), false, 'below the copying minimum');
-  assert.equal(dailyCommissionEligible({ ...ok, figuresPending: true }), false);
-  assert.equal(dailyCommissionEligible({ ...ok, equity: 'abc' }), false);
-  assert.equal(dailyCommissionEligible({ ...ok, accountType: undefined }), true, 'unknown type: judged on the other rules');
+  assert.equal(weeklyCommissionEligible(ok), true);
+  assert.equal(weeklyCommissionEligible({ ...ok, accountType: 'demo' }), false, 'free practice accounts would farm commission');
+  assert.equal(weeklyCommissionEligible({ ...ok, accountType: undefined, server: 'ExnessKE-MT5Trial9' }), false, 'a demo server name is enough');
+  assert.equal(weeklyCommissionEligible({ ...ok, connectionState: 'DISCONNECTED' }), false);
+  assert.equal(weeklyCommissionEligible({ ...ok, connectionState: 'ERROR' }), false);
+  assert.equal(weeklyCommissionEligible({ ...ok, currency: 'EUR' }), false);
+  assert.equal(weeklyCommissionEligible({ ...ok, equity: 0 }), false);
+  assert.equal(weeklyCommissionEligible({ ...ok, billingBlocked: true }), false, 'copying held for an unpaid invoice or an expired plan');
+  assert.equal(weeklyCommissionEligible({ ...ok, lowFunds: true }), false, 'below the copying minimum');
+  assert.equal(weeklyCommissionEligible({ ...ok, figuresPending: true }), false);
+  assert.equal(weeklyCommissionEligible({ ...ok, equity: 'abc' }), false);
+  assert.equal(weeklyCommissionEligible({ ...ok, accountType: undefined }), true, 'unknown type: judged on the other rules');
 });
 
 test('a demo account is recognised by its type or its server name', async () => {

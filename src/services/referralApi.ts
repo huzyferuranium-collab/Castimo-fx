@@ -21,7 +21,7 @@ export interface ReferralSummary {
   code: string;
   link: string;
   ratesPct: number[];
-  /** Weekly equity commission (every real client), levels 1-3, percent of the client's equity per week (earned a fifth per business day). */
+  /** Weekly equity commission (every real client), levels 1-3, percent of the client's equity at the close of the trading week. */
   weeklyRatesPct?: number[];
   /** The TRON address saved for withdrawals ('' when none). */
   wallet?: string;
@@ -36,7 +36,7 @@ export interface ReferralSummary {
     amountUsdt: number;
     /** The payment this commission is a percentage of (the plan fee or the profit-share invoice). */
     basePaidUsdt: number | null;
-    sourceType: 'subscription' | 'profit_invoice' | 'daily_equity' | null;
+    sourceType: 'subscription' | 'profit_invoice' | 'weekly_equity' | 'daily_equity' | null;
     createdAt: string;
   }>;
   withdrawals: WithdrawalRow[];
