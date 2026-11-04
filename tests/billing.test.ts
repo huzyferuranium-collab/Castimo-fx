@@ -110,3 +110,21 @@ test('the daily referral commission is never paid on a demo account, or on one t
   assert.equal(dailyCommissionEligible({ ...ok, equity: 'abc' }), false);
   assert.equal(dailyCommissionEligible({ ...ok, accountType: undefined }), true, 'unknown type: judged on the other rules');
 });
+
+test('a demo account is recognised by its type or its server name', async () => {
+  const { isDemoAccount } = await import('../src/backend/billing.ts');
+  assert.equal(isDemoAccount({ accountType: 'demo' }), true);
+  assert.equal(isDemoAccount({ accountType: 'real', server: 'ExnessKE-MT5Trial9' }), true);
+  assert.equal(isDemoAccount({ accountType: 'real', server: 'HFMarketsSV-Live Server' }), false);
+  assert.equal(isDemoAccount({}), false);
+});
+
+test('referrers are paid only after the account has been connected for 24 hours', async () => {
+  const { connectedLongEnough } = await import('../src/backend/billing.ts');
+  const now = Date.parse('2026-11-04T12:00:00Z');
+  assert.equal(connectedLongEnough('2026-11-03T11:59:00Z', now), true);
+  assert.equal(connectedLongEnough('2026-11-03T12:00:00Z', now), true, 'exactly 24 hours is enough');
+  assert.equal(connectedLongEnough('2026-11-03T12:01:00Z', now), false, 'a minute short');
+  assert.equal(connectedLongEnough(undefined, now), false, 'an unknown connect time never pays');
+  assert.equal(connectedLongEnough('not a date', now), false);
+});

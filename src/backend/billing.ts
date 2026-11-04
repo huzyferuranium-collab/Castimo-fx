@@ -133,13 +133,27 @@ export function billingEnabled(): boolean {
 }
 
 
+/** A practice (demo) account: by its type, or by a demo/trial server name in case the type was not kept. */
+export function isDemoAccount(rec: { accountType?: string; server?: string }): boolean {
+  return rec.accountType === 'demo' || /demo|trial/i.test(String(rec.server ?? ''));
+}
+
+/** Hours an account must have been connected before its referrers are paid. */
+export const COMMISSION_WAIT_HOURS = 24;
+
+/** True when the account was first connected at least COMMISSION_WAIT_HOURS ago. An unknown or unreadable time is not enough. */
+export function connectedLongEnough(connectedAtIso: unknown, nowMs: number, hours = COMMISSION_WAIT_HOURS): boolean {
+  const t = Date.parse(String(connectedAtIso ?? ''));
+  return Number.isFinite(t) && nowMs - t >= hours * 3_600_000;
+}
+
 /**
  * Whether a connected account earns its referrers the daily equity commission. A demo (practice) account never does: its
  * equity is virtual and free to create, so paying 1% of it every day would reward fake accounts. Disconnected or errored
  * accounts, non-USD accounts and accounts with no readable equity earn nothing either.
  */
 export function dailyCommissionEligible(rec: { connectionState?: string; equity?: unknown; currency?: unknown; accountType?: string; server?: string }): boolean {
-  if (rec.accountType === 'demo' || /demo|trial/i.test(String(rec.server ?? ''))) return false; // the server name is checked too, in case the type was not kept
+  if (isDemoAccount(rec)) return false;
   if (rec.connectionState === 'DISCONNECTED' || rec.connectionState === 'ERROR') return false;
   const equity = Number(rec.equity);
   return Number.isFinite(equity) && equity > 0 && String(rec.currency).toUpperCase() === 'USD';
@@ -206,6 +220,7 @@ export class BillingService {
       if (!dailyCommissionEligible(rec)) continue;
       const equity = Number(rec.equity);
       try {
+        if (!(await this.connectedLongEnoughFor(rec.userId, now))) continue; // not paid before 24 hours of being connected; asked again next round
         const plan = await this.getPlan(rec.userId);
         if (plan?.model !== 'profit_share') {
           this.dailyEquityDone.add(mark); // Monthly Plan clients earn their referrers the one-time plan commission instead
@@ -222,9 +237,13 @@ export class BillingService {
 
   start(): void {
     if (isFirestoreAdminConfigured()) {
-      const t = setInterval(() => void this.dailyEquityPass().catch((e) => console.warn('[REFERRALS] daily:', e?.message)), 10 * 60_000);
+      const run = () => {
+        void this.dailyEquityPass().catch((e) => console.warn('[REFERRALS] daily:', e?.message));
+        void this.subscriptionCommissionPass().catch((e) => console.warn('[REFERRALS] plan:', e?.message));
+      };
+      const t = setInterval(run, 10 * 60_000);
       (t as any).unref?.();
-      setTimeout(() => void this.dailyEquityPass().catch(() => undefined), 90_000).unref?.();
+      setTimeout(run, 90_000).unref?.();
     }
     if (!billingEnabled()) {
       console.warn('⚠️ [BILLING] Billing is OFF: set FIREBASE_SERVICE_ACCOUNT and TREASURY_ADDRESS to turn it on.');
@@ -236,7 +255,7 @@ export class BillingService {
         // Judge the client's payment standing first, so a client who connects or is restored while overdue is held back at once.
         const plan = await this.getPlan(rec.userId);
         await this.applyBlocking(rec.userId, plan).catch((e) => console.warn('[BILLING] standing:', e?.message));
-        if (plan?.model === 'subscription') return; // subscribers have no profit-share ledger
+        if (plan?.model === 'subscription' || isDemoAccount(rec)) return; // subscribers, and practice accounts, have no profit-share ledger
         await this.openLedger(rec);
       })().catch((e) => console.warn('[BILLING] ledger:', e?.message));
     // Hold back anyone who is overdue right away (a restart must not give them copying back while the first full sweep waits).
@@ -253,6 +272,35 @@ export class BillingService {
     this.timer = null;
     this.firstSweepTimer = null;
   }
+
+  /** Whether this client's account was first connected at least 24 hours ago (as saved when it connected). */
+  private async connectedLongEnoughFor(userId: string, now: number): Promise<boolean> {
+    const doc = (await getDoc('mt5_accounts', userId).catch(() => null)) as any;
+    return connectedLongEnough(doc?.connectedAt, now);
+  }
+
+  /**
+   * The one-time Monthly Plan commission waits until the referred client's REAL account has been connected for 24 hours.
+   * Paid here once that is true (the credit has a fixed id per client, so it can never be made twice).
+   */
+  async subscriptionCommissionPass(now = Date.now()): Promise<void> {
+    if (!isFirestoreAdminConfigured() || !billingEnabled()) return;
+    const cfg = billingConfig();
+    for (const rec of uniqueVerifiedClients(this.manager)) {
+      if (this.subscriptionCommissionDone.has(rec.userId) || isDemoAccount(rec)) continue;
+      try {
+        const plan = await this.getPlan(rec.userId);
+        const paid = Number(plan?.subscription?.paidUsdt);
+        if (plan?.model !== 'subscription' || !Number.isFinite(paid) || paid <= 0) continue;
+        if (!(await this.connectedLongEnoughFor(rec.userId, now))) continue;
+        await accrueCommissions(rec.userId, commissionBaseUsdt(cfg.subscriptionPriceUsdt, paid), 'subscription', `sub-first-${rec.userId}`);
+        this.subscriptionCommissionDone.add(rec.userId);
+      } catch (e: any) {
+        console.warn(`⚠️ [REFERRALS] Plan commission for ${rec.userId} not credited yet:`, e?.message);
+      }
+    }
+  }
+  private subscriptionCommissionDone = new Set<string>();
 
   private async openLedger(rec: ClientConnectionRecord): Promise<ClientLedger> {
     const existing = (await getDoc('client_ledgers', rec.userId)) as ClientLedger | null;
@@ -314,6 +362,7 @@ export class BillingService {
       for (const rec of uniqueVerifiedClients(this.manager)) {
         if (!plans.has(rec.userId)) continue;
         if (plans.get(rec.userId)?.model === 'subscription') continue; // subscribers have no profit-share ledger
+        if (isDemoAccount(rec)) continue; // practice accounts are never invoiced
         try {
           let ledger = await this.openLedger(rec);
           const up = upgradeLedger(ledger, Date.now());
@@ -400,6 +449,12 @@ export class BillingService {
 
   /** Applies the client's own plan terms: pauses copying when they are not met, resumes when they are. */
   async applyBlocking(userId: string, knownPlan?: PlanRecord | null): Promise<void> {
+    // A practice (demo) account is never charged, so it is never held back for payment.
+    const live = this.manager.getClientConnection(userId);
+    if (live && isDemoAccount(live)) {
+      this.manager.setBillingBlocked(userId, false);
+      return;
+    }
     const plan = knownPlan !== undefined ? knownPlan : await this.getPlan(userId);
     // A subscriber is never judged by profit-share invoices, so they are not even read.
     const invoices = plan?.model === 'subscription' ? [] : ((await queryEquals('profit_invoices', 'userId', userId)) as unknown as Invoice[]);
@@ -475,6 +530,8 @@ export class BillingService {
     if (!HASH.test(txHash)) throw new BillingError('Please paste the 64-character transaction ID (TXID) of your USDT payment.');
     const plan = await this.getPlan(userId);
     if (!plan || plan.model !== 'subscription') throw new BillingError('Choose the Monthly plan first.', 409);
+    const live = this.manager.getClientConnection(userId);
+    if (live && isDemoAccount(live)) throw new BillingError('Your account is a practice (demo) account, so there is nothing to pay. The plan starts when you connect a real account.', 409);
 
     let events: any[];
     let final: boolean;
@@ -520,7 +577,10 @@ export class BillingService {
     });
     // Commission is a share of the plan fee, not of any extra the client happened to send, and is paid ONCE per client: on the
     // first Monthly Plan payment. The id is fixed per client, so a renewal can never credit it again.
-    await this.creditReferrers(userId, commissionBaseUsdt(cfg.subscriptionPriceUsdt, check.amountUsdt), 'subscription', `sub-first-${userId}`);
+    // It is paid now only when the account is real and has been connected for 24 hours; otherwise subscriptionCommissionPass pays it later.
+    if (live && !isDemoAccount(live) && (await this.connectedLongEnoughFor(userId, now))) {
+      await this.creditReferrers(userId, commissionBaseUsdt(cfg.subscriptionPriceUsdt, check.amountUsdt), 'subscription', `sub-first-${userId}`);
+    }
     await recordEvent('SUBSCRIBED', userId, `sub-${txHash}`);
     await this.applyBlocking(userId);
     return updated;
@@ -650,6 +710,7 @@ export class BillingService {
     if (!billingEnabled()) return { ...base, canPay: false, reason: 'Payments are not open yet.' };
     const rec = await this.connectedRecord(userId);
     if (!rec) return { ...base, canPay: false, reason: 'Your MT5 account is not connected right now. If it was just reconnected, wait a minute and this updates by itself.' };
+    if (isDemoAccount(rec)) return { ...base, canPay: false, reason: 'Your account is a practice (demo) account, so nothing is charged. Billing starts when you connect a real account.' };
     const plan = await this.getPlan(userId);
     if (plan?.model === 'subscription') return { ...base, canPay: false, reason: 'You are on the monthly plan: there is no profit share to pay.' };
     if (String(rec.currency).toUpperCase() !== 'USD') return { ...base, canPay: false, reason: 'Only USD accounts can pay the profit share here.' };
