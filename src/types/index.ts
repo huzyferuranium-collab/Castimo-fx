@@ -165,7 +165,7 @@ export interface CopiedTrade {
 }
 
 export interface RiskSettings {
-  minEquityToTrade: number; // $100 default
+  minEquityToTrade: number; // $200 default
   maxLotSize: number;
   maxExposureUsd: number;
   maxOpenPositions: number;

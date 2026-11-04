@@ -94,7 +94,7 @@ export function validateSubmittedCredentials(input: {
 }
 
 /** Smallest equity (in USD) an account needs for trades to be copied to it. Below it the account still connects, it just does not copy yet. */
-export const DEFAULT_MIN_CONNECT_EQUITY = 100;
+export const DEFAULT_MIN_CONNECT_EQUITY = 200;
 
 /**
  * What a NEW connection needs. Only USD accounts are accepted, because the minimum and the profit share are measured in USD.

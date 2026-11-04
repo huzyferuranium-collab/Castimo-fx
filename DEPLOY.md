@@ -41,7 +41,7 @@ If a setting is missing the server does not guess: connecting clients is refused
 ## Test
 Sign in with a real client account and connect one HFM **demo** MT5 login. A wrong password or a fake number must be rejected. A right one shows the
 balance the broker reports (Duplikium refreshes balances after each trade and about every five minutes, so a figure can be a few minutes old).
-Accounts must be USD. An account below `MIN_CONNECT_EQUITY` (default $100) still connects, but shows "connected, not copying yet" and is held at "close only" at Duplikium until its equity reaches the minimum, when copying starts by itself. Read-only (investor) passwords are refused.
+Accounts must be USD. An account below `MIN_CONNECT_EQUITY` (default $200) still connects, but shows "connected, not copying yet" and is held at "close only" at Duplikium until its equity reaches the minimum, when copying starts by itself. Read-only (investor) passwords are refused.
 
 ## What the server does with a client
 - **Connect:** the client gives login, server and trading password. The password goes to Duplikium to log in; the server keeps only Duplikium's
@@ -73,7 +73,7 @@ More linked accounts means a larger allowance; asking Duplikium to raise the lim
 Optional settings (defaults in brackets):
 - `DUPLIKIUM_REFRESH_SECONDS` [60] how often the server reads accounts from Duplikium.
 - `DUPLIKIUM_RISK_TYPE` / `DUPLIKIUM_RISK_VALUE` copy size given to every new client; if unset the template's own is used.
-- `MIN_CONNECT_EQUITY` [100], `CONNECT_SYNC_WAIT_SECONDS` [120], `CONNECT_PROBE_MS` [5000], `CONNECT_FIRST_PROBE_MS` [6000], `CONNECT_KEEP_READS` [3], `CONNECT_DISCONNECT_GRACE_MS` [45000],
+- `MIN_CONNECT_EQUITY` [200], `CONNECT_SYNC_WAIT_SECONDS` [120], `CONNECT_PROBE_MS` [5000], `CONNECT_FIRST_PROBE_MS` [6000], `CONNECT_KEEP_READS` [3], `CONNECT_DISCONNECT_GRACE_MS` [45000],
   `CONNECT_BACKGROUND_MINUTES` [20], `CONNECT_MAX_PARALLEL` [3]. A slow broker is not a failure: when the browser's wait is over the connection keeps going in the
   background and the dashboard updates by itself.
 - `MASTER_LOGIN` / `MASTER_SERVER` an extra guard so the master account can never be added as a client.

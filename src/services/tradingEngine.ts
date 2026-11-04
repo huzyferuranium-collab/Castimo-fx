@@ -35,7 +35,7 @@ export const CASTIMO_TREASURY_ADDRESS = /^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(RAW_T
 export const PAYMENTS_ENABLED = CASTIMO_TREASURY_ADDRESS !== '';
 
 export const DEFAULT_RISK_SETTINGS: RiskSettings = {
-  minEquityToTrade: 100,
+  minEquityToTrade: 200,
   maxLotSize: 2.0,
   maxExposureUsd: 10000,
   maxOpenPositions: 5,
@@ -317,7 +317,7 @@ class TradingEngine {
         'SYSTEM_RISK_ENGINE',
         'TRADE_COPYING_BLOCKED',
         'RISK',
-        reason || 'Equity fell below $100 safety floor.',
+        reason || 'Equity fell below $200 safety floor.',
         'FAILED'
       );
     }
@@ -980,9 +980,9 @@ class TradingEngine {
       status: 'BALANCED',
     };
 
-    if (this.mt5Account.equity < 100 && openTrades.length > 0) {
+    if (this.mt5Account.equity < 200 && openTrades.length > 0) {
       report.status = 'DISCREPANCY_DETECTED';
-      report.discrepancies.push('CRITICAL: Equity is below $100 while positions remain unhedged!');
+      report.discrepancies.push('CRITICAL: Equity is below $200 while positions remain unhedged!');
     }
 
     return report;
