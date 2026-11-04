@@ -13,7 +13,7 @@ const money = (n: number) => `${n >= 0 ? '+' : '-'}$${Math.abs(n).toFixed(2)}`;
 const when = (t: CopiedTrade) => Date.parse(t.closeTime || t.openTime) || 0;
 
 /* ---------------------------------------------------------------- profit / loss per trade */
-export const TradeBars: React.FC<{ trades: CopiedTrade[]; max?: number }> = ({ trades, max = 14 }) => {
+export const TradeBars: React.FC<{ trades: CopiedTrade[]; max?: number }> = ({ trades, max = 24 }) => {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
   const [on, setOn] = useState(false);
   useEffect(() => {
@@ -48,7 +48,7 @@ export const TradeBars: React.FC<{ trades: CopiedTrade[]; max?: number }> = ({ t
           const h = total === 0 ? 4 : Math.max(4, (Math.abs(v) / total) * 100);
           const up = v >= 0;
           return (
-            <div key={t.id} className="relative flex-1 min-w-0 max-w-[52px] group" title={`${t.symbol} ${t.direction} · ${money(v)}`}>
+            <div key={t.id} className="relative flex-1 min-w-0 max-w-[40px] group" title={`${t.symbol} ${t.direction} · ${money(v)}${t.closeTime ? ' · ' + t.closeTime : ''}`}>
               <div
                 className={`absolute inset-x-0 rounded-full transition-[height] duration-[900ms] ease-out ${
                   up ? 'bottom-0 bg-gradient-to-t from-brand-turquoise to-brand-cyan shadow-[0_8px_18px_-6px_rgba(8,201,181,.7)]' : 'top-0 bg-gradient-to-b from-brand-crimson to-brand-magenta shadow-[0_8px_18px_-6px_rgba(245,34,54,.6)]'
@@ -67,7 +67,9 @@ export const TradeBars: React.FC<{ trades: CopiedTrade[]; max?: number }> = ({ t
       <div className="mt-3 flex items-center gap-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-brand-cyan to-brand-turquoise" /> Profit</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-brand-crimson to-brand-magenta" /> Loss</span>
-        <span className="ml-auto">Last {shown.length} trade{shown.length === 1 ? '' : 's'}</span>
+        <span className="ml-auto">
+          {trades.length > shown.length ? `Latest ${shown.length} of ${trades.length} closed trades` : `All ${shown.length} closed trade${shown.length === 1 ? '' : 's'}`}
+        </span>
       </div>
     </div>
   );
@@ -108,35 +110,68 @@ export const SideDonut: React.FC<{ trades: CopiedTrade[]; size?: number }> = ({ 
 };
 
 /* ---------------------------------------------------------------- the whole card */
+const Tile: React.FC<{ label: string; value: React.ReactNode; sub?: string; tone?: 'up' | 'down' | 'plain' }> = ({ label, value, sub, tone = 'plain' }) => (
+  <div className="rounded-2xl bg-slate-50/80 dark:bg-slate-800/60 px-3.5 py-3 min-w-0">
+    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{label}</div>
+    <div className={`mt-1 font-mono text-base sm:text-lg font-extrabold truncate ${tone === 'up' ? '!text-emerald-600 dark:!text-emerald-300' : tone === 'down' ? '!text-rose-600 dark:!text-rose-300' : 'text-slate-900 dark:text-white'}`}>{value}</div>
+    {sub && <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">{sub}</div>}
+  </div>
+);
+
+/** Every figure here comes from the closed trades the copier service reports for this account. Trades whose profit was not reported are left out and counted. */
 export const TradePerformance: React.FC<{ trades: CopiedTrade[] }> = ({ trades }) => {
-  if (trades.length === 0) return null;
-  const closed = trades.filter((t) => t.status === 'CLOSED');
-  const wins = closed.filter((t) => (t.pnl || 0) > 0).length;
+  const closedAll = trades.filter((t) => t.status === 'CLOSED');
+  if (closedAll.length === 0) return null;
+  const closed = closedAll.filter((t) => t.pnlKnown !== false);
+  const skipped = closedAll.length - closed.length;
+  const winners = closed.filter((t) => (t.pnl || 0) > 0);
+  const losers = closed.filter((t) => (t.pnl || 0) < 0);
+  const flat = closed.length - winners.length - losers.length;
+  const grossWin = winners.reduce((a, t) => a + (t.pnl || 0), 0);
+  const grossLoss = losers.reduce((a, t) => a + (t.pnl || 0), 0);
+  const net = grossWin + grossLoss;
+  const avg = closed.length > 0 ? net / closed.length : 0;
+  const rate = closed.length > 0 ? winners.length / closed.length : 0;
+  const best = closed.reduce((m, t) => Math.max(m, t.pnl || 0), 0);
+  const worst = closed.reduce((m, t) => Math.min(m, t.pnl || 0), 0);
 
   return (
     <div className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6" style={{ ['--rim-accent' as string]: '23,107,255' }}>
       <div aria-hidden className="absolute -left-10 -bottom-16 w-56 h-56 rounded-full bg-gradient-to-tr from-brand-electric via-brand-violet to-brand-magenta opacity-[0.28] bloom" />
       <div className="relative flex items-center justify-between gap-3 mb-4">
         <h3 className="font-display font-extrabold text-base text-slate-900 dark:text-white">Trade performance</h3>
-        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">From your mirrored trades</span>
+        <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">All closed trades on your account</span>
       </div>
+
+      <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-5">
+        <Tile label="Closed trades" value={closedAll.length} sub={`${winners.length} profit · ${losers.length} loss${flat ? ` · ${flat} even` : ''}`} />
+        <Tile label="Profit trades" value={money(grossWin)} sub={`${winners.length} trade${winners.length === 1 ? '' : 's'}${winners.length ? ` · best ${money(best)}` : ''}`} tone="up" />
+        <Tile label="Loss trades" value={money(grossLoss)} sub={`${losers.length} trade${losers.length === 1 ? '' : 's'}${losers.length ? ` · worst ${money(worst)}` : ''}`} tone="down" />
+        <Tile label="Net result" value={money(net)} sub={closed.length ? `Average ${money(avg)} per trade` : undefined} tone={net > 0 ? 'up' : net < 0 ? 'down' : 'plain'} />
+      </div>
+
       <div className="relative flex flex-col lg:flex-row gap-6 lg:gap-10">
-        <TradeBars trades={trades} />
+        <TradeBars trades={closed} />
         <div className="flex flex-wrap items-center gap-x-8 gap-y-5 lg:justify-end">
-          <SideDonut trades={trades} />
+          <SideDonut trades={closedAll} />
           {closed.length > 0 && (
             <div className="flex items-center gap-4">
-              <ProgressRing value={wins / closed.length} size={92}>
-                <AnimatedNumber value={(wins / closed.length) * 100} decimals={0} prefix="" suffix="%" className="font-display font-extrabold text-lg text-slate-900 dark:text-white" />
+              <ProgressRing value={rate} size={92}>
+                <AnimatedNumber value={rate * 100} decimals={0} prefix="" suffix="%" className="font-display font-extrabold text-lg text-slate-900 dark:text-white" />
               </ProgressRing>
               <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 leading-snug">
                 Win rate
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{wins} of {closed.length} closed</div>
+                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{winners.length} of {closed.length} closed</div>
               </div>
             </div>
           )}
         </div>
       </div>
+      {skipped > 0 && (
+        <p className="relative mt-4 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+          {skipped} closed trade{skipped === 1 ? '' : 's'} did not come with a profit figure, so {skipped === 1 ? 'it is' : 'they are'} not counted in the amounts above.
+        </p>
+      )}
     </div>
   );
 };
