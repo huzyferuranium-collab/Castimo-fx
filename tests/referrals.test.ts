@@ -55,22 +55,22 @@ test('pending, processing and completed withdrawals hold the money; rejected and
   assert.equal(availableBalance([], [{ status: 'completed', gross: 5 }]).available, 0);
 });
 
-test('cutoff is the next Thursday 23:59 UTC', () => {
-  // Wed 2026-10-28 12:00Z -> Thu 2026-10-29 23:59Z
-  assert.equal(new Date(weeklyCutoff(Date.parse('2026-10-28T12:00:00Z'))).toISOString(), '2026-10-29T23:59:00.000Z');
-  // Thu just before the cutoff stays in this week
-  assert.equal(new Date(weeklyCutoff(Date.parse('2026-10-29T23:58:59Z'))).toISOString(), '2026-10-29T23:59:00.000Z');
+test('cutoff is the next Friday 23:59 UTC', () => {
+  // Wed 2026-10-28 12:00Z -> Fri 2026-10-30 23:59Z
+  assert.equal(new Date(weeklyCutoff(Date.parse('2026-10-28T12:00:00Z'))).toISOString(), '2026-10-30T23:59:00.000Z');
+  // Fri just before the cutoff stays in this week
+  assert.equal(new Date(weeklyCutoff(Date.parse('2026-10-30T23:58:59Z'))).toISOString(), '2026-10-30T23:59:00.000Z');
   // At the cutoff, or after it, moves to next week
-  assert.equal(new Date(weeklyCutoff(Date.parse('2026-10-29T23:59:00Z'))).toISOString(), '2026-11-05T23:59:00.000Z');
-  assert.equal(new Date(weeklyCutoff(Date.parse('2026-10-30T08:00:00Z'))).toISOString(), '2026-11-05T23:59:00.000Z');
+  assert.equal(new Date(weeklyCutoff(Date.parse('2026-10-30T23:59:00Z'))).toISOString(), '2026-11-06T23:59:00.000Z');
+  assert.equal(new Date(weeklyCutoff(Date.parse('2026-10-31T08:00:00Z'))).toISOString(), '2026-11-06T23:59:00.000Z');
   // Sunday
-  assert.equal(new Date(weeklyCutoff(Date.parse('2026-11-01T00:00:00Z'))).toISOString(), '2026-11-05T23:59:00.000Z');
-  assert.equal(processingWindow(Date.parse('2026-10-28T12:00:00Z')).expectedBy, '2026-10-30T23:59:00.000Z');
+  assert.equal(new Date(weeklyCutoff(Date.parse('2026-11-01T00:00:00Z'))).toISOString(), '2026-11-06T23:59:00.000Z');
+  assert.equal(processingWindow(Date.parse('2026-10-28T12:00:00Z')).expectedBy, '2026-10-31T23:59:00.000Z');
 });
 
-test('Uganda time (UTC+3) late Thursday is still judged in GMT', () => {
-  // Fri 00:30 in Kampala = Thu 21:30 GMT, so it makes this week's cycle.
-  assert.equal(new Date(weeklyCutoff(Date.parse('2026-10-29T21:30:00Z'))).toISOString(), '2026-10-29T23:59:00.000Z');
+test('Uganda time (UTC+3) late Friday is still judged in GMT', () => {
+  // Sat 00:30 in Kampala = Fri 21:30 GMT, so it makes this week's cycle.
+  assert.equal(new Date(weeklyCutoff(Date.parse('2026-10-30T21:30:00Z'))).toISOString(), '2026-10-30T23:59:00.000Z');
 });
 
 test('amount rules', () => {

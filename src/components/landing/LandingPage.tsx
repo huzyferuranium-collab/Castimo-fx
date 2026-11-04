@@ -344,7 +344,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
               ))}
             </div>
             <p className={`${muted} text-xs leading-relaxed max-w-lg mx-auto lg:mx-0`}>
-              Withdrawals from $50, 10% fee. Requests before Thursday 23:59 GMT join that week's cycle.
+              Withdrawals from $50, 10% fee. Requests before Friday 23:59 GMT join that week's cycle.
             </p>
             <div className="pt-1">
               <button

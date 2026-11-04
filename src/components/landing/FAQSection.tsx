@@ -63,7 +63,7 @@ const FAQ_ITEMS: FAQItem[] = [
     category: 'referrals',
     question: 'How are referral commissions paid out?',
     answer:
-      'Commissions are credited to your Referral Hub once a referred client’s first $100 Monthly Plan payment is verified, and the weekly commission for every connected client is credited once a week, at the close of the trading week. You can withdraw from $50 to your own TRC20 USDT wallet, with a 10% processing fee. Requests made before Thursday 23:59 GMT join that week’s cycle and are processed within 24 hours after it.',
+      'Commissions are credited to your Referral Hub once a referred client’s first $100 Monthly Plan payment is verified, and the weekly commission for every connected client is credited once a week, at the close of the trading week. You can withdraw from $50 to your own TRC20 USDT wallet, with a 10% processing fee. Requests made before Friday 23:59 GMT join that week’s cycle and are processed within 24 hours after it.',
   },
   {
     id: 'sec-broker-custody',

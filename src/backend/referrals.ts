@@ -5,7 +5,7 @@
  *    pays for the $100 Monthly Plan, ONCE per client (the first verified payment; renewals earn nothing). On top of that, EVERY real connected
  *    client, on either plan, earns the three referrers the weekly equity commission (see WEEKLY_EQUITY_RATES_PCT).
  *  - A withdrawal request must be at least $50 (gross). A 10% processing fee is taken from it.
- *  - Requests made before Thursday 23:59 GMT join that week's cycle. Later ones join the next week's.
+ *  - Requests made before Friday 23:59 GMT join that week's cycle. Later ones join the next week's.
  *    GMT/UTC is the only clock used, and the server's time is the only time that counts.
  */
 
@@ -108,12 +108,12 @@ export function availableBalance(
   return { earned, held, available: round2(Math.max(0, earned - held)) };
 }
 
-/** The first Thursday 23:59:00 UTC strictly after `nowMs`. */
+/** The first Friday 23:59:00 UTC strictly after `nowMs`. */
 export function weeklyCutoff(nowMs: number): number {
   const d = new Date(nowMs);
-  const dow = d.getUTCDay(); // Thursday = 4
-  const thisThursday = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 0) + ((4 - dow + 7) % 7) * 86_400_000;
-  return thisThursday > nowMs ? thisThursday : thisThursday + 7 * 86_400_000;
+  const dow = d.getUTCDay(); // Friday = 5
+  const thisFriday = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 0) + ((5 - dow + 7) % 7) * 86_400_000;
+  return thisFriday > nowMs ? thisFriday : thisFriday + 7 * 86_400_000;
 }
 
 export function processingWindow(nowMs: number): { cutoff: string; expectedBy: string } {
