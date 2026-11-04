@@ -1,5 +1,6 @@
 import React from 'react';
 import { referralRatesLabel } from '../../utils/format';
+import { WEEKLY_EQUITY_RATES_PCT } from '../../backend/referrals';
 import {
   ArrowRight,
   CheckCircle2,
@@ -327,13 +328,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
               <span className="text-grad-flame">3-Tier</span> Commissions
             </h2>
             <p className={`${muted} text-sm sm:text-base leading-relaxed max-w-lg mx-auto lg:mx-0`}>
-              Share your link and earn USDT on what your network pays, across three levels. Only verified payments count.
+              Share your link and earn USDT every week on the account equity of the traders in your network, across three levels. Real, connected accounts only.
             </p>
             <div className="flex flex-wrap justify-center lg:justify-start gap-3 pt-1">
               {[
-                { l: 'Level 1', p: 5, c: 'from-rose-500 to-red-600' },
-                { l: 'Level 2', p: 3, c: 'from-fuchsia-500 to-violet-600' },
-                { l: 'Level 3', p: 2, c: 'from-sky-500 to-blue-700' },
+                { l: 'Level 1', p: WEEKLY_EQUITY_RATES_PCT[0], c: 'from-rose-500 to-red-600' },
+                { l: 'Level 2', p: WEEKLY_EQUITY_RATES_PCT[1], c: 'from-fuchsia-500 to-violet-600' },
+                { l: 'Level 3', p: WEEKLY_EQUITY_RATES_PCT[2], c: 'from-sky-500 to-blue-700' },
               ].map((t) => (
                 <span key={t.l} className={`inline-flex items-center gap-2 pl-1 pr-3.5 py-1 rounded-full text-xs font-bold text-slate-800 dark:text-slate-100 surface`}>
                   <span className={`px-2 py-0.5 rounded-full bg-gradient-to-r ${t.c} text-white font-mono`}>
@@ -344,7 +345,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
               ))}
             </div>
             <p className={`${muted} text-xs leading-relaxed max-w-lg mx-auto lg:mx-0`}>
-              Withdrawals from $50, 10% fee. Requests before Friday 23:59 GMT join that week's cycle.
+              Paid weekly, on equity at the close of the trading week. Plus {referralRatesLabel(' / ')} once on a first $100 Monthly Plan payment. Withdrawals from $50, 10% fee. Requests before Friday 23:59 GMT join that week's cycle.
             </p>
             <div className="pt-1">
               <button
