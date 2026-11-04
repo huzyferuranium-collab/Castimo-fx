@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { CopiedTrade } from '../../types';
 import { AnimatedNumber } from '../common/AnimatedNumber';
 import { ProgressRing } from './DashboardVisuals';
@@ -38,7 +38,11 @@ export const DayBars: React.FC<{ trades: CopiedTrade[]; endMs: number; days: num
       const v = net.get(k);
       out.push({ key: k, ms, sum: v?.sum ?? 0, n: v?.n ?? 0 });
     }
-    return out;
+    // Markets are closed at the weekend, so Saturday and Sunday are left out unless a trade really closed on one of them.
+    return out.filter((r) => {
+      const wd = new Date(r.ms).getUTCDay();
+      return (wd !== 0 && wd !== 6) || r.n > 0;
+    });
   }, [trades, endMs, days]);
 
   const pos = Math.max(0, ...rows.map((r) => r.sum));
@@ -60,12 +64,12 @@ export const DayBars: React.FC<{ trades: CopiedTrade[]; endMs: number; days: num
         </div>
       </div>
 
-      <div className="relative mt-3 h-36 flex items-stretch justify-evenly gap-1 sm:gap-1.5" role="img" aria-label={`Net result for each of the last ${days} days, ${money(sum)} in total`}>
+      <div className="relative mt-2 h-20 flex items-stretch justify-evenly gap-1 sm:gap-1.5" role="img" aria-label={`Net result for each trading day of the last ${days} days, ${money(sum)} in total`}>
         {rows.map((r, i) => {
           const up = r.sum >= 0;
           const h = r.n === 0 || total === 0 ? 0 : Math.max(4, (Math.abs(r.sum) / total) * 100);
           return (
-            <div key={r.key} className="relative flex-1 min-w-0 max-w-[44px] group" title={`${r.key} · ${r.n} trade${r.n === 1 ? '' : 's'} · ${money(r.sum)}`}>
+            <div key={r.key} className="relative flex-1 min-w-0 max-w-[40px] group" title={`${r.key} · ${r.n} trade${r.n === 1 ? '' : 's'} · ${money(r.sum)}`}>
               {r.n === 0 ? (
                 <div className="absolute inset-x-[30%] rounded-full bg-slate-300/60 dark:bg-slate-600/60 h-1" style={{ top: `calc(${baseTop}% - 2px)` }} />
               ) : (
@@ -82,58 +86,19 @@ export const DayBars: React.FC<{ trades: CopiedTrade[]; endMs: number; days: num
       </div>
       <div className="mt-1.5 flex justify-evenly gap-1 sm:gap-1.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500">
         {rows.map((r, i) => (
-          <span key={r.key} className="flex-1 min-w-0 max-w-[44px] text-center truncate">{days <= 31 || i % 5 === 0 ? label(r.ms) : ''}</span>
+          <span key={r.key} className="flex-1 min-w-0 max-w-[40px] text-center truncate">{rows.length <= 31 || i % 5 === 0 ? label(r.ms) : ''}</span>
         ))}
       </div>
 
-      <div className="mt-3 flex items-center gap-4 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-brand-cyan to-brand-turquoise" /> Profit day</span>
-        <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-brand-crimson to-brand-magenta" /> Loss day</span>
-        <span className="ml-auto">Days are counted in GMT</span>
-      </div>
-    </div>
-  );
-};
-
-/* ---------------------------------------------------------------- buy / sell mix */
-export const SideDonut: React.FC<{ trades: CopiedTrade[]; size?: number }> = ({ trades, size = 112 }) => {
-  const id = useId().replace(/[^a-zA-Z0-9]/g, '');
-  const buys = trades.filter((t) => t.direction === 'BUY').length;
-  const sells = trades.filter((t) => t.direction === 'SELL').length;
-  const n = buys + sells || 1;
-  const b = buys / n;
-  const gap = buys > 0 && sells > 0 ? 0.02 : 0;
-
-  return (
-    <div className="flex items-center gap-4">
-      <div className="relative shrink-0" style={{ width: size, height: size }}>
-        <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90" aria-hidden>
-          <defs>
-            <linearGradient id={`${id}b`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#176bff" /><stop offset="1" stopColor="#06d6e9" /></linearGradient>
-            <linearGradient id={`${id}s`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#f52236" /><stop offset="1" stopColor="#e83eff" /></linearGradient>
-          </defs>
-          <circle cx="50" cy="50" r="38" fill="none" stroke="rgba(148,163,184,.18)" strokeWidth="13" />
-          {buys > 0 && <circle cx="50" cy="50" r="38" fill="none" stroke={`url(#${id}b)`} strokeWidth="13" strokeLinecap="round" pathLength={1} strokeDasharray={`${Math.max(0.001, b - gap)} 1`} />}
-          {sells > 0 && <circle cx="50" cy="50" r="38" fill="none" stroke={`url(#${id}s)`} strokeWidth="13" strokeLinecap="round" pathLength={1} strokeDasharray={`${Math.max(0.001, 1 - b - gap)} 1`} strokeDashoffset={-b} />}
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <AnimatedNumber value={trades.length} decimals={0} prefix="" className="font-display font-extrabold text-xl text-slate-900 dark:text-white" />
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">trades</span>
-        </div>
-      </div>
-      <ul className="space-y-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
-        <li className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-brand-electric to-brand-cyan" /> Buy <span className="font-mono font-extrabold text-slate-900 dark:text-white">{buys}</span></li>
-        <li className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-gradient-to-br from-brand-crimson to-brand-magenta" /> Sell <span className="font-mono font-extrabold text-slate-900 dark:text-white">{sells}</span></li>
-      </ul>
     </div>
   );
 };
 
 /* ---------------------------------------------------------------- the whole card */
 const Tile: React.FC<{ label: string; value: React.ReactNode; sub?: string; tone?: 'up' | 'down' | 'plain' }> = ({ label, value, sub, tone = 'plain' }) => (
-  <div className="rounded-2xl bg-slate-50/80 dark:bg-slate-800/60 px-3.5 py-3 min-w-0">
-    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{label}</div>
-    <div className={`mt-1 font-mono text-base sm:text-lg font-extrabold truncate ${tone === 'up' ? '!text-emerald-600 dark:!text-emerald-300' : tone === 'down' ? '!text-rose-600 dark:!text-rose-300' : 'text-slate-900 dark:text-white'}`}>{value}</div>
+  <div className="rounded-xl bg-slate-50/80 dark:bg-slate-800/60 px-3 py-2 min-w-0">
+    <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">{label}</div>
+    <div className={`mt-0.5 font-mono text-sm sm:text-base font-extrabold truncate ${tone === 'up' ? '!text-emerald-600 dark:!text-emerald-300' : tone === 'down' ? '!text-rose-600 dark:!text-rose-300' : 'text-slate-900 dark:text-white'}`}>{value}</div>
     {sub && <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">{sub}</div>}
   </div>
 );
@@ -152,7 +117,7 @@ const PERIODS: Array<{ id: Period; label: string; days: number }> = [
  */
 export const TradePerformance: React.FC<{ trades: CopiedTrade[] }> = ({ trades }) => {
   const [period, setPeriod] = useState<Period>('7d');
-  const [showAll, setShowAll] = useState(false);
+  const [showList, setShowList] = useState(false);
   const closedEvery = trades.filter((t) => t.status === 'CLOSED');
   if (closedEvery.length === 0) return null;
 
@@ -179,20 +144,19 @@ export const TradePerformance: React.FC<{ trades: CopiedTrade[] }> = ({ trades }
   const best = closed.reduce((m, t) => Math.max(m, t.pnl || 0), 0);
   const worst = closed.reduce((m, t) => Math.min(m, t.pnl || 0), 0);
   const list = [...inPeriod].sort((a, b) => (closedMs(b) || 0) - (closedMs(a) || 0));
-  const listShown = showAll ? list : list.slice(0, 8);
   const fmtTime = (t: CopiedTrade) => {
     const ms = closedMs(t);
     return Number.isFinite(ms) ? new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) : '—';
   };
 
   return (
-    <div className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-5 sm:p-6" style={{ ['--rim-accent' as string]: '23,107,255' }}>
+    <div className="relative overflow-hidden rounded-3xl bg-white dark:bg-slate-900 p-4 sm:p-5" style={{ ['--rim-accent' as string]: '23,107,255' }}>
       <div aria-hidden className="absolute -left-10 -bottom-16 w-56 h-56 rounded-full bg-gradient-to-tr from-brand-electric via-brand-violet to-brand-magenta opacity-[0.28] bloom" />
-      <div className="relative flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div className="relative flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mb-3">
         <div>
           <h3 className="font-display font-extrabold text-base text-slate-900 dark:text-white">Trade performance</h3>
           <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-            Closed trades from {period === 'all' ? 'everything your account has reported' : `the last ${spec.days} days`}
+            Closed trades · {period === 'all' ? 'everything reported' : `last ${spec.days} days`} · days in GMT
           </span>
         </div>
         <div className="inline-flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5" role="group" aria-label="Period">
@@ -200,7 +164,7 @@ export const TradePerformance: React.FC<{ trades: CopiedTrade[] }> = ({ trades }
             <button
               key={p.id}
               type="button"
-              onClick={() => { setPeriod(p.id); setShowAll(false); }}
+              onClick={() => { setPeriod(p.id); setShowList(false); }}
               aria-pressed={period === p.id}
               className={`px-3 py-1 rounded-full text-[11px] font-bold transition-colors ${period === p.id ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
             >
@@ -216,60 +180,65 @@ export const TradePerformance: React.FC<{ trades: CopiedTrade[] }> = ({ trades }
         </p>
       ) : (
         <>
-          <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-5">
+          <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
             <Tile label="Closed trades" value={inPeriod.length} sub={`${winners.length} profit · ${losers.length} loss${flat ? ` · ${flat} even` : ''}`} />
             <Tile label="Profit trades" value={money(grossWin)} sub={`${winners.length} trade${winners.length === 1 ? '' : 's'}${winners.length ? ` · best ${money(best)}` : ''}`} tone="up" />
             <Tile label="Loss trades" value={money(grossLoss)} sub={`${losers.length} trade${losers.length === 1 ? '' : 's'}${losers.length ? ` · worst ${money(worst)}` : ''}`} tone="down" />
             <Tile label="Net result" value={money(net)} sub={closed.length ? `Average ${money(avg)} per trade` : undefined} tone={net > 0 ? 'up' : net < 0 ? 'down' : 'plain'} />
           </div>
 
-          <div className="relative flex flex-col lg:flex-row gap-6 lg:gap-10">
+          <div className="relative flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
             <DayBars trades={closed.filter((t) => Number.isFinite(closedMs(t)))} endMs={nowMs} days={barDays} />
-            <div className="flex flex-wrap items-center gap-x-8 gap-y-5 lg:justify-end">
-              <SideDonut trades={inPeriod} />
-              {closed.length > 0 && (
-                <div className="flex items-center gap-4">
-                  <ProgressRing value={rate} size={92}>
-                    <AnimatedNumber value={rate * 100} decimals={0} prefix="" suffix="%" className="font-display font-extrabold text-lg text-slate-900 dark:text-white" />
-                  </ProgressRing>
-                  <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 leading-snug">
-                    Win rate
-                    <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{winners.length} of {closed.length} closed</div>
-                  </div>
+            {closed.length > 0 && (
+              <div className="flex items-center gap-3 shrink-0">
+                <ProgressRing value={rate} size={64}>
+                  <AnimatedNumber value={rate * 100} decimals={0} prefix="" suffix="%" className="font-display font-extrabold text-sm text-slate-900 dark:text-white" />
+                </ProgressRing>
+                <div className="text-xs font-semibold text-slate-600 dark:text-slate-300 leading-snug">
+                  Win rate
+                  <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">{winners.length} of {closed.length} closed</div>
+                  <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Buy {inPeriod.filter((t) => t.direction === 'BUY').length} · Sell {inPeriod.filter((t) => t.direction === 'SELL').length}</div>
                 </div>
-              )}
-            </div>
-          </div>
-
-          <div className="relative mt-5 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
-                  <th className="py-1.5 pr-3 font-bold">Closed (GMT)</th>
-                  <th className="py-1.5 pr-3 font-bold">Symbol</th>
-                  <th className="py-1.5 pr-3 font-bold">Side</th>
-                  <th className="py-1.5 text-right font-bold">Result</th>
-                </tr>
-              </thead>
-              <tbody className="font-semibold text-slate-700 dark:text-slate-200">
-                {listShown.map((t) => (
-                  <tr key={t.id} className="border-t border-slate-100 dark:border-slate-800">
-                    <td className="py-1.5 pr-3 whitespace-nowrap">{fmtTime(t)}</td>
-                    <td className="py-1.5 pr-3">{t.symbol}</td>
-                    <td className="py-1.5 pr-3">{t.direction || '—'}</td>
-                    <td className={`py-1.5 text-right font-mono font-extrabold ${t.pnlKnown === false ? 'text-slate-400' : (t.pnl || 0) >= 0 ? '!text-emerald-600 dark:!text-emerald-300' : '!text-rose-600 dark:!text-rose-300'}`}>
-                      {t.pnlKnown === false ? '—' : money(t.pnl || 0)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {list.length > 8 && (
-              <button type="button" onClick={() => setShowAll((v) => !v)} className="mt-2 text-[11px] font-bold text-brand-electric hover:underline">
-                {showAll ? 'Show fewer' : `Show all ${list.length} trades`}
-              </button>
+              </div>
             )}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowList((v) => !v)}
+            aria-expanded={showList}
+            className="relative mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-brand-electric hover:underline"
+          >
+            {showList ? 'Hide trades' : `Show ${list.length} trade${list.length === 1 ? '' : 's'}`}
+            <span aria-hidden className={`transition-transform ${showList ? 'rotate-180' : ''}`}>▾</span>
+          </button>
+
+          {showList && (
+            <div className="relative mt-2 overflow-x-auto max-h-64 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-white dark:bg-slate-900">
+                  <tr className="text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+                    <th className="py-1.5 pr-3 font-bold">Closed (GMT)</th>
+                    <th className="py-1.5 pr-3 font-bold">Symbol</th>
+                    <th className="py-1.5 pr-3 font-bold">Side</th>
+                    <th className="py-1.5 text-right font-bold">Result</th>
+                  </tr>
+                </thead>
+                <tbody className="font-semibold text-slate-700 dark:text-slate-200">
+                  {list.map((t) => (
+                    <tr key={t.id} className="border-t border-slate-100 dark:border-slate-800">
+                      <td className="py-1.5 pr-3 whitespace-nowrap">{fmtTime(t)}</td>
+                      <td className="py-1.5 pr-3">{t.symbol}</td>
+                      <td className="py-1.5 pr-3">{t.direction || '—'}</td>
+                      <td className={`py-1.5 text-right font-mono font-extrabold ${t.pnlKnown === false ? 'text-slate-400' : (t.pnl || 0) >= 0 ? '!text-emerald-600 dark:!text-emerald-300' : '!text-rose-600 dark:!text-rose-300'}`}>
+                        {t.pnlKnown === false ? '—' : money(t.pnl || 0)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
 
