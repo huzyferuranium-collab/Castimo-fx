@@ -52,7 +52,7 @@ export const TERMS_SECTIONS: TermsSection[] = [
       'Money you deposit or withdraw never counts as profit or loss, and trades that are still open are not charged until they close. Losses must be recovered before a new fee is charged (the "high-water mark").',
       'Every 24 hours we add up the new profit from your closed trades. If it is at least 20 USD, we issue an invoice in USDT for 50% of it. If it is less than 20 USD, no invoice is issued, copying continues, and that profit is carried forward to the next day.',
       'Pay in USDT on the TRON network (TRC20) to the wallet shown on your invoice. Network fees are paid by you. Send only to the address shown in the app. We never ask you to pay anywhere else.',
-      'If an invoice is not paid within the due time (currently 24 hours), copying is paused for your account until it is paid. Unpaid invoices remain owed.',
+      'If an invoice is not paid before the due time (midnight GMT, that is 23:59 GMT, on the day it is issued), copying is paused for your account until it is paid. We send reminders in your notifications every hour during the last 6 hours before the due time. Unpaid invoices remain owed.',
     ],
   },
   {

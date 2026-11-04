@@ -78,7 +78,7 @@ export function canSelectModel(
 /**
  * Whether copying must be paused for this client, by the terms of THEIR plan only:
  *   - Monthly subscription: paused whenever the paid period is not running. Profit-share invoices play no part.
- *   - 50% profit share (or no plan record): paused while a profit-share invoice is unpaid past its due time (24 hours).
+ *   - 50% profit share (or no plan record): paused while a profit-share invoice is unpaid past its due time (23:59 GMT on the day it is made).
  */
 export function billingStanding(
   plan: Pick<PlanRecord, 'model' | 'subscription'> | null | undefined,

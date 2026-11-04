@@ -9,7 +9,18 @@
 
 export const DEFAULT_FEE_PCT = 50;
 /** A profit-share invoice must be paid within this many hours, or copying pauses until it is paid. */
-export const DEFAULT_INVOICE_DUE_HOURS = 24;
+/** An invoice made with less than this long left in the day is due at the end of the NEXT day instead, so nobody is given a few minutes. */
+export const MIN_PAYMENT_WINDOW_MINUTES = 60;
+
+/**
+ * When an invoice must be paid: before midnight GMT, that is 23:59 GMT on the day it is made. An invoice made in the last hour
+ * of the day (for example by "Pay my share now") is due at 23:59 GMT the next day.
+ */
+export function invoiceDueAt(now: Date): string {
+  const endToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 0);
+  const due = endToday - now.getTime() >= MIN_PAYMENT_WINDOW_MINUTES * 60_000 ? endToday : endToday + 86_400_000;
+  return new Date(due).toISOString();
+}
 
 import { round2 } from './referrals.ts';
 export { round2 };

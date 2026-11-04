@@ -86,7 +86,6 @@ assistantRouter.post('/chat', async (req: Request, res: Response) => {
         feePct: cfg.feePct,
         minProfitUsd: cfg.minProfitUsd,
         toleranceUsdt: cfg.paymentToleranceUsdt,
-        dueHours: cfg.dueHours,
         minEquityUsd: readLimit(process.env.MIN_CONNECT_EQUITY, DEFAULT_MIN_CONNECT_EQUITY),
         subscriptionPriceUsdt: cfg.subscriptionPriceUsdt,
         subscriptionDays: cfg.subscriptionDays,

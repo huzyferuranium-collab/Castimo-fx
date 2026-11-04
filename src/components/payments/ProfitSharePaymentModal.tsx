@@ -138,7 +138,7 @@ export const ProfitSharePaymentModal: React.FC<ProfitSharePaymentModalProps> = (
                 {invoice && (
                   <div className="flex items-center gap-2 text-[11px] text-amber-300">
                     <Clock className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                    <span className="font-mono">{timeLeft || 'Due within 24 hours'}</span>
+                    <span className="font-mono">{timeLeft || 'Due before midnight GMT'}</span>
                   </div>
                 )}
               </div>
@@ -206,7 +206,7 @@ export const ProfitSharePaymentModal: React.FC<ProfitSharePaymentModalProps> = (
 
               <p className="text-[11px] text-slate-400 flex items-start gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 -mt-0.5" />
-                <span>If an invoice is still unpaid after 24 hours, copying pauses until you pay it.</span>
+                <span>If an invoice is still unpaid at midnight GMT (23:59), copying pauses until you pay it.</span>
               </p>
             </>
           )}

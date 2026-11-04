@@ -10,7 +10,7 @@
 import { DocExistsError } from './firestoreAdmin.ts';
 import type { PositionsResult } from './duplikiumClient.ts';
 import type { ClientLedger, Invoice } from './profitShare.ts';
-import { invoiceId, round2 } from './profitShare.ts';
+import { invoiceDueAt, invoiceId, round2 } from './profitShare.ts';
 import type { DayTrades } from './profitShareRealized.ts';
 import {
   dayKey,
@@ -104,7 +104,6 @@ export interface SettleContext {
   equity: number;
   treasury: string;
   feePct: number;
-  dueHours: number;
   now: Date;
   /** No invoice until the new profit reaches this many USD (smaller profit is carried forward). */
   minProfitUsd?: number;
@@ -145,7 +144,7 @@ export async function settleClient(deps: RunDeps, ledger: ClientLedger, ctx: Set
       recipientAddress: ctx.treasury,
       status: 'pending',
       createdAt: nowIso,
-      dueAt: new Date(ctx.now.getTime() + ctx.dueHours * 3600 * 1000).toISOString(),
+      dueAt: invoiceDueAt(ctx.now),
       basis: 'closed_trades',
       periodTrades: trades,
       periodPnl: pnl,

@@ -33,7 +33,7 @@ class FakeStore {
 }
 
 const ledger0 = () => ({ userId: 'u1', currency: 'USD', startEquity: 1000, hwm: 1000, settledThrough: START, createdAt: START });
-const ctx = (nowIso: string) => ({ accountLogin: '5012345', equity: 1100, treasury: 'TTreasury', feePct: 50, dueHours: 24, now: new Date(nowIso) });
+const ctx = (nowIso: string) => ({ accountLogin: '5012345', equity: 1100, treasury: 'TTreasury', feePct: 50, now: new Date(nowIso) });
 
 // ---------- pure parts ----------
 
@@ -198,7 +198,7 @@ test('three periods: invoice 50% of new profit, nothing while recovering, then i
   assert.equal(o1.invoice!.flows, 0);
   assert.equal(o1.invoice!.basis, 'closed_trades');
   assert.equal(o1.invoice!.status, 'pending');
-  assert.equal(o1.invoice!.dueAt, '2026-11-09T10:00:00.000Z');
+  assert.equal(o1.invoice!.dueAt, '2026-11-08T23:59:00.000Z', 'due before midnight GMT on the day it is made');
   assert.equal(o1.invoice!.periodStart, START);
   assert.equal(o1.invoice!.id, 'inv-u1-20261108');
   assert.deepEqual([o1.ledger.pnlCum, o1.ledger.pnlHwm, o1.ledger.settledThrough, o1.ledger.lastInvoiceId], [147, 147, '2026-11-08T10:00:00.000Z', 'inv-u1-20261108']);

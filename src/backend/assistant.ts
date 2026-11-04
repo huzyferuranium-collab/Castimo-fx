@@ -22,7 +22,6 @@ export interface KnowledgeFacts {
   feePct: number;
   minProfitUsd: number;
   toleranceUsdt: number;
-  dueHours: number;
   minEquityUsd: number;
   subscriptionPriceUsdt: number;
   subscriptionDays: number;
@@ -74,7 +73,7 @@ export function buildSystemPrompt(k: KnowledgeFacts, c: ClientFacts): string {
     'FACTS ABOUT THE SERVICE:',
     `- Plans: (1) 50% Profit Share: the client pays ${k.feePct}% of the NEW net profit made by closed trades (profit minus commission and swap). No fee on losses; losses must be recovered before a new fee. Open trades are not charged until they close. (2) Monthly Plan: ${k.subscriptionPriceUsdt} USDT per ${k.subscriptionDays} days, no profit share.`,
     `- Profit share billing runs every 24 hours. An invoice is made only when the new profit since the last invoice is at least ${k.minProfitUsd} USD; under that nothing is invoiced, copying continues and the profit is carried forward. A client can also press "Pay my share now" on the 50% Profit Share tab when that profit is at least ${k.minProfitUsd} USD and no trade is open.`,
-    `- Paying: USDT on the TRON network (TRC20) only, to the address shown on the 50% Profit Share tab. Then paste the 64-character transaction ID (TXID) into "Verify payment". From Binance: Withdraw, USDT, network TRON (TRC20); the TxID is in the withdrawal history. Up to ${k.toleranceUsdt} USDT less than the invoice is accepted (exchange fees). The check needs the transaction to be confirmed, usually 1-2 minutes. An invoice unpaid after ${k.dueHours} hours pauses copying until it is paid.`,
+    `- Paying: USDT on the TRON network (TRC20) only, to the address shown on the 50% Profit Share tab. Then paste the 64-character transaction ID (TXID) into "Verify payment". From Binance: Withdraw, USDT, network TRON (TRC20); the TxID is in the withdrawal history. Up to ${k.toleranceUsdt} USDT less than the invoice is accepted (exchange fees). The check needs the transaction to be confirmed, usually 1-2 minutes. An invoice must be paid before midnight GMT (23:59 GMT) on the day it is made; unpaid after that, copying pauses until it is paid. Reminders appear in the client's notifications every hour during the last 6 hours.`,
     `- Connecting: sign up and confirm the email (the connect window can resend the confirmation email), accept the terms, choose a plan, then Connect with the MT5 account number, the TRADING password (not the investor/read-only password) and the exact broker server shown on the MT5 login screen. Only USD accounts. The account connects as soon as the broker accepts the login; the balance appears within about 5 minutes and copying starts then.`,
     `- Copying needs at least ${k.minEquityUsd} USD equity. Below it the account stays connected but nothing is copied until it reaches the minimum (it starts by itself). Trade sizes follow the client's equity.`,
     '- Disconnecting: from Profile. Trades already open stay open in the client\'s MT5; nothing is closed for them.',
@@ -261,7 +260,7 @@ export function builtInAnswer(question: string, k: KnowledgeFacts, c: ClientFact
     return 'After sending USDT on the TRON (TRC20) network, open your wallet\'s transaction details (in Binance: Wallet, Transaction History, Withdrawal) and copy the TxID: 64 letters and numbers. Paste it into "Verify payment" on the 50% Profit Share tab. Wait 1-2 minutes after sending so the network confirms it.';
   }
   if (/pay|invoice|usdt|tron|trc|share|50/.test(q)) {
-    return `You pay ${k.feePct}% of the new profit from closed trades. Every 24 hours an invoice is made when that profit is at least ${k.minProfitUsd} USD, or press "Pay my share now" when no trade is open. Send USDT on TRON (TRC20) to the address on the 50% Profit Share tab, then paste the TXID into "Verify payment". Up to ${k.toleranceUsdt} USDT less is accepted for exchange fees. Unpaid after ${k.dueHours} hours, copying pauses.`;
+    return `You pay ${k.feePct}% of the new profit from closed trades. Every 24 hours an invoice is made when that profit is at least ${k.minProfitUsd} USD, or press "Pay my share now" when no trade is open. Send USDT on TRON (TRC20) to the address on the 50% Profit Share tab, then paste the TXID into "Verify payment". Up to ${k.toleranceUsdt} USDT less is accepted for exchange fees. Pay before midnight GMT (23:59); if it is unpaid then, copying pauses until it is paid. Hourly reminders appear in notifications in the last 6 hours.`;
   }
   if (/refer|commission|withdraw|invite/.test(q)) {
     return `Share your link from the Referral Hub. Monthly Plan clients you refer earn you ${k.referralPlanPct.join('% / ')}% of their first ${k.subscriptionPriceUsdt} USDT payment (levels 1 / 2 / 3). On top of that, every client you refer earns you ${k.referralWeeklyPct.join('% / ')}% of their equity once a week, at the close of the trading week (real accounts that are connected and copying only). Save a TRON address under Withdraw and request at least ${k.withdrawMinUsdt} USDT (${k.withdrawFeePct}% fee).`;

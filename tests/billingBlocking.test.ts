@@ -78,9 +78,11 @@ test.afterEach(() => {
   useBillingDbForTests(null);
 });
 
-test('an invoice made by billing holds copying back after exactly 24 hours, and payment releases it', async () => {
+test('an invoice made by billing holds copying back after midnight GMT, and payment releases it', async () => {
   const { fake, m, db, billing } = await world({ ledgerAgeDays: 10 });
-  const t0 = Date.now();
+  const t0 = Date.parse('2026-11-09T00:20:00Z'); // just after the daily window opens
+  const led: any = db.docs.get('client_ledgers/u1');
+  db.docs.set('client_ledgers/u1', { ...led, settledThrough: new Date(t0 - 10 * DAY).toISOString(), createdAt: new Date(t0 - 10 * DAY).toISOString() });
   mock.timers.enable({ apis: ['Date'], now: t0 });
   // the client's account closed a +$200 trade during the period
   const closedAt = new Date(t0 - 5 * DAY).toISOString();
@@ -91,19 +93,19 @@ test('an invoice made by billing holds copying back after exactly 24 hours, and 
   assert.ok(inv, 'an invoice was made');
   assert.equal(inv.amountDueUsdt, 100);
   assert.equal(inv.status, 'pending');
-  assert.equal(Date.parse(inv.dueAt) - Date.parse(inv.createdAt), 24 * HOUR);
+  assert.equal(inv.dueAt, '2026-11-09T23:59:00.000Z', 'due before midnight GMT on the day it is made');
   await sleep(30);
-  assert.equal(fake.copier.get('D1'), 1, 'copying stays on while the invoice is inside its 24 hours');
+  assert.equal(fake.copier.get('D1'), 1, 'copying stays on while the invoice is before its due time');
 
-  mock.timers.setTime(t0 + 23 * HOUR + 59 * 60_000);
+  mock.timers.setTime(Date.parse('2026-11-09T23:58:00Z'));
   await billing.sweep();
   await sleep(30);
-  assert.equal(fake.copier.get('D1'), 1, 'still on at 23h59m');
+  assert.equal(fake.copier.get('D1'), 1, 'still on at 23:58 GMT');
 
-  mock.timers.setTime(t0 + 24 * HOUR + 1000);
+  mock.timers.setTime(Date.parse('2026-11-09T23:59:30Z'));
   await billing.sweep();
   await sleep(30);
-  assert.equal(fake.copier.get('D1'), -1, 'after 24 hours copying is held back (close only) at the copier service');
+  assert.equal(fake.copier.get('D1'), -1, 'after midnight GMT copying is held back (close only) at the copier service');
   assert.equal(m.getActiveClients().length, 0);
   assert.equal(m.getClientConnection('u1')!.billingBlocked, true);
 

@@ -4,6 +4,7 @@
  *
  * One server instance is assumed: money changes for one user run one at a time (see `locked`).
  */
+import { overdueText, reminderText } from './invoiceReminders.ts';
 import { randomInt } from 'node:crypto';
 import { DocExistsError, createDoc, getDoc, isFirestoreAdminConfigured, listAll, queryEquals, queryEqualsWithIds, setDoc } from './firestoreAdmin.ts';
 import { TXID_PATTERN as HASH, checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron.ts';
@@ -431,14 +432,30 @@ export async function notificationsFor(uid: string) {
   const copyNotice = copyNoticeFor((await getDoc('mt5_accounts', uid).catch(() => null)) as Doc | null);
   if (copyNotice) items.push({ id: copyNotice.id, kind: 'personal', title: copyNotice.title, message: copyNotice.message, at: copyNotice.at });
   const invoices = (await queryEquals('profit_invoices', 'userId', uid).catch(() => [])) as Doc[];
+  const nowMs = Date.now();
   for (const i of invoices) {
+    const amount = Number(i.amountDueUsdt);
+    const overdue = i.status === 'pending' && Date.parse(String(i.dueAt)) <= nowMs;
+    if (overdue) {
+      const t = overdueText(amount);
+      items.push({ id: `inv-${i.id}-overdue`, kind: 'personal', title: t.title, message: t.message, at: String(i.dueAt) });
+      continue;
+    }
     items.push({
       id: `inv-${i.id}-${i.status}`,
       kind: 'personal',
       title: 'Profit-share invoice',
-      message: i.status === 'paid' ? `Invoice of $${Number(i.amountDueUsdt).toFixed(2)} was paid.` : `Invoice of $${Number(i.amountDueUsdt).toFixed(2)} is due by ${String(i.dueAt).slice(0, 10)}.`,
+      message: i.status === 'paid' ? `Invoice of $${amount.toFixed(2)} was paid.` : `Invoice of $${amount.toFixed(2)} is due before midnight GMT on ${String(i.dueAt).slice(0, 10)} (23:59 GMT).`,
       at: String(i.status === 'paid' ? i.paidAt || i.createdAt : i.createdAt),
     });
+  }
+  // The hourly reminders, shown only while their invoice is still waiting for payment.
+  const stillOwed = new Set(invoices.filter((i) => i.status === 'pending' && Date.parse(String(i.dueAt)) > nowMs).map((i) => String(i.id)));
+  const reminders = (await queryEquals('invoice_reminders', 'userId', uid).catch(() => [])) as Doc[];
+  for (const r of reminders) {
+    if (!stillOwed.has(String(r.invoiceId))) continue;
+    const t = reminderText(Number(r.amountDueUsdt), Number(r.hoursLeft), String(r.dueAt));
+    items.push({ id: `rem-${r.invoiceId}-${r.hoursLeft}`, kind: 'personal', title: t.title, message: t.message, at: String(r.createdAt) });
   }
   items.sort((a, b) => b.at.localeCompare(a.at));
   return { items: items.slice(0, 40) };

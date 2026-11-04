@@ -35,14 +35,14 @@ const FAQ_ITEMS: FAQItem[] = [
     category: 'profit_share',
     question: 'When do I pay my profit share?',
     answer:
-      'When profit is realised, an invoice for your 50% share is created. You have 24 hours to pay it in TRC20 USDT, and copying continues while you do.',
+      'When profit is realised, an invoice for your 50% share is created. Pay it in TRC20 USDT before midnight GMT (23:59) on the day it is created, and copying continues while you do. We send reminders in your notifications every hour during the last 6 hours.',
   },
   {
     id: 'ps-24h-watcher',
     category: 'profit_share',
-    question: 'What if an invoice is not paid within 24 hours?',
+    question: 'What if an invoice is not paid before midnight GMT?',
     answer:
-      'Copying pauses: no new trades are copied, and trades that are already open still close with the master. Once your payment is confirmed, copying resumes shortly.',
+      'Copying pauses until it is paid: no new trades are copied, and trades that are already open still close with the master. Once your payment is confirmed, copying resumes shortly.',
   },
   {
     id: 'ref-three-phases',

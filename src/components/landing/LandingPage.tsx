@@ -273,7 +273,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
                 <Bullet tone="rose" short="Fee only on profit above your previous high">Fee applies only to profit above your previous high-water mark</Bullet>
                 <Bullet tone="rose" short="Losses are made up before any new fee">Losses are recovered before any new fee is charged</Bullet>
                 <Bullet tone="rose" short="Deposits and withdrawals aren't profit">Deposits and withdrawals never count as profit</Bullet>
-                <Bullet tone="rose" short="Invoices due within 24 hours, in USDT">Each invoice is payable within 24 hours in USDT (TRC20)</Bullet>
+                <Bullet tone="rose" short="Pay before midnight GMT, in USDT">Each invoice is payable before midnight GMT in USDT (TRC20), with hourly reminders</Bullet>
               </ul>
               <button
                 onClick={() => onSelectTab('client')}

@@ -95,8 +95,8 @@ export const ServicePlanPage: React.FC<Props> = ({ onChanged }) => {
           <ul className="relative text-[11.5px] sm:text-xs text-slate-600 dark:text-slate-300 space-y-1 list-disc pl-4">
             <li>No upfront fee. {view.price.feePct}% of NEW profit only, measured on your broker equity.</li>
             <li>Deposits and withdrawals never count as profit. Losses are recovered first.</li>
-            <li>If a period has new profit, an invoice is created, payable in USDT (TRC20) within {view.price.dueHours ?? 24} hours.</li>
-            <li>While an invoice is unpaid after that, copying is paused.</li>
+            <li>If a period has new profit, an invoice is created, payable in USDT (TRC20) before midnight GMT (23:59) on the day it is created.</li>
+            <li>While an invoice is unpaid after that, copying is paused. We remind you in your notifications every hour in the last 6 hours.</li>
           </ul>
         )}
 

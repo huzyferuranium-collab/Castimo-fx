@@ -18,7 +18,6 @@ import {
   type ClientLedger,
   DEFAULT_FEE_PCT,
   DEFAULT_MIN_INVOICE_PROFIT_USD,
-  DEFAULT_INVOICE_DUE_HOURS,
   type Invoice,
   isSettlementDue,
   round2,
@@ -27,6 +26,7 @@ import { type RunDeps, dailyUpdateFor, dailyWindowOpen, previewShare, previousUt
 import { settlementAllowed, upgradeLedger } from './profitShareRealized.ts';
 import { readLimit } from './brokerVerification.ts';
 import { accrueCommissions, accrueWeeklyEquityCommission, recordEvent } from './referralService.ts';
+import { reminderDue, reminderId } from './invoiceReminders.ts';
 import { commissionBaseUsdt, isWeekCommissionTime, tradingWeekKey } from './referrals.ts';
 import {
   DEFAULT_SUBSCRIPTION_PERIOD_DAYS,
@@ -118,7 +118,6 @@ export function billingConfig() {
     // Settled every 24 hours by default; SETTLEMENT_PERIOD_DAYS can lengthen it.
     periodDays: Math.max(1, readLimit(process.env.SETTLEMENT_PERIOD_DAYS, 1)),
     minProfitUsd: Math.max(0, readLimit(process.env.MIN_INVOICE_PROFIT_USD, DEFAULT_MIN_INVOICE_PROFIT_USD)),
-    dueHours: Math.max(1, readLimit(process.env.INVOICE_DUE_HOURS, DEFAULT_INVOICE_DUE_HOURS)),
     // How many USDT short of a profit-share invoice a payment may be and still pass (whole USDT).
     paymentToleranceUsdt: readLimit(process.env.PAYMENT_TOLERANCE_USDT, 4),
     treasury: treasury(),
@@ -177,6 +176,7 @@ export class BillingService {
   private manager = Mt5ConnectionManager.getInstance();
   private timer: NodeJS.Timeout | null = null;
   private firstSweepTimer: NodeJS.Timeout | null = null;
+  private reminderTimer: NodeJS.Timeout | null = null;
   private sweeping = false;
   /** Clients whose closed trades could not be read in the current sweep, with the reason (never billed on a guess). */
   private notBilled: string[] = [];
@@ -234,6 +234,37 @@ export class BillingService {
   }
 
 
+  /**
+   * The hourly reminder watcher. For every unpaid 50% Profit Share invoice that is inside its last hours before midnight GMT,
+   * writes one reminder per hour left (a fixed id, so running it again does nothing new). The client sees them in their
+   * notifications. The invoice that is not paid in time is dealt with by the sweep, which pauses copying.
+   */
+  async reminderPass(now = Date.now()): Promise<number> {
+    if (!billingEnabled()) return 0;
+    let written = 0;
+    for (const inv of await this.listAllInvoices()) {
+      const due = reminderDue(inv as any, now);
+      if (!due) continue;
+      const user = this.manager.getClientConnection(inv.userId);
+      if (user && isDemoAccount(user)) continue; // practice accounts are never charged
+      try {
+        await createDoc('invoice_reminders', reminderId(inv.id, due.hoursLeft), {
+          userId: inv.userId,
+          invoiceId: inv.id,
+          amountDueUsdt: inv.amountDueUsdt,
+          dueAt: inv.dueAt,
+          hoursLeft: due.hoursLeft,
+          createdAt: new Date(now).toISOString(),
+        });
+        written++;
+      } catch (e) {
+        if (!(e instanceof DocExistsError)) console.warn(`⚠️ [BILLING] Reminder for ${inv.id} not written:`, (e as any)?.message);
+      }
+    }
+    if (written) console.log(`⏰ [BILLING] ${written} payment reminder(s) written.`);
+    return written;
+  }
+
   /** Starts the periodic sweep. Safe to call when billing is not configured (it then does nothing). */
   start(): void {
     if (isFirestoreAdminConfigured()) {
@@ -262,6 +293,9 @@ export class BillingService {
     void this.blockingPass().catch((e) => console.warn('[BILLING] first check:', e?.message));
     this.firstSweepTimer = setTimeout(() => void this.sweep(), 60_000);
     this.timer = setInterval(() => void this.sweep(), 10 * 60_000);
+    this.reminderTimer = setInterval(() => void this.reminderPass().catch((e) => console.warn('[BILLING] reminders:', e?.message)), 60 * 60_000);
+    (this.reminderTimer as any).unref?.();
+    setTimeout(() => void this.reminderPass().catch(() => undefined), 120_000).unref?.();
     console.log('💰 [BILLING] Profit-share billing is ON.');
   }
 
@@ -269,6 +303,8 @@ export class BillingService {
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     if (this.firstSweepTimer) clearTimeout(this.firstSweepTimer);
+    if (this.reminderTimer) clearInterval(this.reminderTimer);
+    this.reminderTimer = null;
     this.timer = null;
     this.firstSweepTimer = null;
   }
@@ -435,7 +471,6 @@ export class BillingService {
       equity: Number(rec.equity),
       treasury: cfg.treasury,
       feePct: cfg.feePct,
-      dueHours: cfg.dueHours,
       now: new Date(),
       minProfitUsd: cfg.minProfitUsd,
     });
@@ -641,7 +676,7 @@ export class BillingService {
             cancelAtPeriodEnd: Boolean(plan.subscription.cancelAtPeriodEnd),
           }
         : null,
-      price: { subscriptionUsdt: cfg.subscriptionPriceUsdt, periodDays: cfg.subscriptionDays, feePct: cfg.feePct, dueHours: cfg.dueHours },
+      price: { subscriptionUsdt: cfg.subscriptionPriceUsdt, periodDays: cfg.subscriptionDays, feePct: cfg.feePct },
       treasuryAddress: billingEnabled() ? cfg.treasury : '',
       canSwitch,
       stats: { activeSubscribers, profitShareClients },
@@ -751,8 +786,7 @@ export class BillingService {
         equity: Number(rec.equity),
         treasury: cfg.treasury,
         feePct: cfg.feePct,
-        dueHours: cfg.dueHours,
-        now: new Date(),
+          now: new Date(),
         minProfitUsd: cfg.minProfitUsd,
       });
       if (out.kind === 'skipped' || !out.invoice) throw new BillingError('The invoice could not be made just now. Please try again in a minute.', 409);

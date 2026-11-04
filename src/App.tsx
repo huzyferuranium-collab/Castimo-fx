@@ -38,7 +38,7 @@ const TickerBar: React.FC = () => {
         <span>•</span>
         <span>REFERRALS: {referralRatesLabel()}</span>
         <span>•</span>
-        <span>INVOICES DUE IN 24H</span>
+        <span>INVOICES DUE BEFORE MIDNIGHT GMT</span>
       </div>
     </div>
   );

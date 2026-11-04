@@ -123,7 +123,7 @@ Until it is set, the site shows "Payment address not set yet" and refuses paymen
 ## The two plans never mix
 - **Monthly ($100 / 30 days):** the client sends USDT (TRC20) to the treasury address and pastes the TXID on the Service Plan page. Once verified, copying runs for the month and
   nothing is taken from their profit: no ledger, no invoices, no 50% screens. If the month ends unpaid, copying pauses until they pay again.
-- **50% profit share:** no upfront fee; invoices are created from real profit and are due within 24 hours. Unpaid after that, copying pauses until paid.
+- **50% profit share:** no upfront fee; invoices are created from real profit and are due before midnight GMT (23:59) on the day they are made. Unpaid after that, copying pauses until paid. An hourly watcher writes reminders to the client's notifications during the last 6 hours.
 The rule lives in `billingStanding()` (`src/backend/servicePlan.ts`, tested) and is used by the sweep, by switching copying on, and by connecting.
 
 ## Turning on real profit-share billing
@@ -138,7 +138,6 @@ It stays OFF until both of these are set on Render (Environment):
 Optional settings (defaults in brackets):
 - `FEE_PCT` [50] share of new profit.
 - `SETTLEMENT_PERIOD_DAYS` [7] how often invoices are made.
-- `INVOICE_DUE_HOURS` [24] time to pay an invoice before copying pauses (50% profit-share clients only).
 - `TRONGRID_API_KEY` free key from trongrid.io, recommended to avoid rate limits.
 
 How it works: profit is the net result (profit + commission + swap) of the trades that **closed** on the client's account, read from the copier service.

@@ -47,7 +47,7 @@ test('daysLeft and model validation', () => {
 });
 
 import { billingStanding } from '../src/backend/servicePlan.ts';
-import { DEFAULT_INVOICE_DUE_HOURS } from '../src/backend/profitShare.ts';
+import { invoiceDueAt } from '../src/backend/profitShare.ts';
 
 const overdueInv: any = { status: 'pending', dueAt: new Date(now - 1000).toISOString() };
 const freshInv: any = { status: 'pending', dueAt: new Date(now + 3600_000).toISOString() };
@@ -72,6 +72,13 @@ test('profit-share clients are paused only by an invoice unpaid past its due tim
   assert.equal(billingStanding(ps, [freshInv, overdueInv], now).blocked, true);
 });
 
-test('invoices are due within 24 hours by default', () => {
-  assert.equal(DEFAULT_INVOICE_DUE_HOURS, 24);
+test('an invoice is due before midnight GMT on the day it is made', () => {
+  assert.equal(invoiceDueAt(new Date('2026-11-09T00:20:00Z')), '2026-11-09T23:59:00.000Z');
+  assert.equal(invoiceDueAt(new Date('2026-11-09T12:00:00Z')), '2026-11-09T23:59:00.000Z');
+  assert.equal(invoiceDueAt(new Date('2026-11-09T22:59:00Z')), '2026-11-09T23:59:00.000Z', 'exactly an hour left is still today');
+});
+
+test('an invoice made in the last hour of the day is due the next day, so nobody is given a few minutes', () => {
+  assert.equal(invoiceDueAt(new Date('2026-11-09T23:00:00Z')), '2026-11-10T23:59:00.000Z');
+  assert.equal(invoiceDueAt(new Date('2026-11-09T23:59:30Z')), '2026-11-10T23:59:00.000Z');
 });
