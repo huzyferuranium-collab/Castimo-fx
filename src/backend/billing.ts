@@ -58,6 +58,12 @@ const listAll: BillingDb['listAll'] = (c) => db.listAll(c);
 const queryEquals: BillingDb['queryEquals'] = (c, f, v) => db.queryEquals(c, f, v);
 const setDoc: BillingDb['setDoc'] = (c, id, d) => db.setDoc(c, id, d);
 
+/** The earliest moment a payment can count: when the plan was chosen or the invoice was made, less 15 minutes for clock differences. 0 when unknown. */
+export function sinceMs(iso: unknown): number {
+  const t = Date.parse(String(iso ?? ''));
+  return Number.isFinite(t) ? t - 15 * 60_000 : 0;
+}
+
 /** The smallest payment accepted for an invoice: the amount due less the tolerance, and never under 1 USDT. */
 export function acceptedMinimum(amountDueUsdt: number, toleranceUsdt: number): number {
   const tol = Number.isFinite(toleranceUsdt) && toleranceUsdt > 0 ? toleranceUsdt : 0;
@@ -128,6 +134,18 @@ export function billingEnabled(): boolean {
 
 const HASH = /^[0-9a-fA-F]{64}$/;
 
+/**
+ * Whether a connected account earns its referrers the daily equity commission. A demo (practice) account never does: its
+ * equity is virtual and free to create, so paying 1% of it every day would reward fake accounts. Disconnected or errored
+ * accounts, non-USD accounts and accounts with no readable equity earn nothing either.
+ */
+export function dailyCommissionEligible(rec: { connectionState?: string; equity?: unknown; currency?: unknown; accountType?: string; server?: string }): boolean {
+  if (rec.accountType === 'demo' || /demo|trial/i.test(String(rec.server ?? ''))) return false; // the server name is checked too, in case the type was not kept
+  if (rec.connectionState === 'DISCONNECTED' || rec.connectionState === 'ERROR') return false;
+  const equity = Number(rec.equity);
+  return Number.isFinite(equity) && equity > 0 && String(rec.currency).toUpperCase() === 'USD';
+}
+
 function uniqueVerifiedClients(manager: Mt5ConnectionManager): ClientConnectionRecord[] {
   const seen = new Set<string>();
   const out: ClientConnectionRecord[] = [];
@@ -186,9 +204,8 @@ export class BillingService {
     for (const rec of uniqueVerifiedClients(this.manager)) {
       const mark = `${rec.userId}_${day}`;
       if (this.dailyEquityDone.has(mark)) continue;
-      if (rec.connectionState === 'DISCONNECTED' || rec.connectionState === 'ERROR') continue;
+      if (!dailyCommissionEligible(rec)) continue;
       const equity = Number(rec.equity);
-      if (!Number.isFinite(equity) || equity <= 0 || String(rec.currency).toUpperCase() !== 'USD') continue;
       try {
         const plan = await this.getPlan(rec.userId);
         if (plan?.model !== 'profit_share') {
@@ -454,7 +471,7 @@ export class BillingService {
     } catch {
       throw new BillingError('Could not reach the TRON network to check this payment. Please try again in a minute.', 502);
     }
-    const check = checkUsdtPayment(events, { treasury: cfg.treasury, minUsdt: cfg.subscriptionPriceUsdt });
+    const check = checkUsdtPayment(events, { treasury: cfg.treasury, minUsdt: cfg.subscriptionPriceUsdt, notBeforeMs: sinceMs(plan.subscription?.periodStart ?? plan.selectedAt) });
     if (!check.ok) throw new BillingError(check.error || 'Payment could not be verified.');
     if (!final) throw new BillingError('That payment is not fully confirmed on the network yet. Wait a few minutes and try again.', 409);
 
@@ -705,7 +722,7 @@ export class BillingService {
     // Up to PAYMENT_TOLERANCE_USDT (default 4) less than the invoice is accepted: an exchange withdrawal (Binance, say) often arrives
     // a little short after its fee. The shortfall is forgiven. Paying more is always accepted.
     const minUsdt = acceptedMinimum(invoice.amountDueUsdt, billingConfig().paymentToleranceUsdt);
-    const check = checkUsdtPayment(events, { treasury: invoice.recipientAddress || treasury(), minUsdt });
+    const check = checkUsdtPayment(events, { treasury: invoice.recipientAddress || treasury(), minUsdt, notBeforeMs: sinceMs(invoice.createdAt) });
     if (!check.ok) throw new BillingError(check.error || 'Payment could not be verified.');
     if (!final) throw new BillingError('That payment is not fully confirmed on the network yet. Wait a few minutes and try again.', 409);
 

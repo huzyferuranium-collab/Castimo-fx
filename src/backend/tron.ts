@@ -44,23 +44,34 @@ export interface PaymentCheck {
  */
 export function checkUsdtPayment(
   events: any[],
-  opts: { treasury: string; minUsdt: number; usdtContract?: string }
+  opts: { treasury: string; minUsdt: number; usdtContract?: string; notBeforeMs?: number }
 ): PaymentCheck {
   const treasuryHex = normalizeTronAddress(opts.treasury);
   const contractHex = normalizeTronAddress(opts.usdtContract || USDT_TRC20_CONTRACT);
   if (!treasuryHex || !contractHex) return { ok: false, error: 'Payment wallet is not configured correctly.' };
 
+  // A transfer made BEFORE the invoice (or plan, or withdrawal) existed cannot be a payment for it: without this, any older
+  // transfer to the wallet could be claimed against a new invoice. TronGrid always sends `block_timestamp` (ms); an event without
+  // one cannot be dated, so it is not refused on that ground.
+  const notBefore = Number(opts.notBeforeMs);
   let best = 0;
+  let tooOld = false;
   for (const ev of events || []) {
     if (!ev || ev.event_name !== 'Transfer') continue;
     if (normalizeTronAddress(ev.contract_address) !== contractHex) continue;
     const to = normalizeTronAddress(ev.result?.to ?? ev.result?.['1']);
     if (to !== treasuryHex) continue;
+    const at = Number(ev.block_timestamp);
+    if (Number.isFinite(notBefore) && notBefore > 0 && Number.isFinite(at) && at > 0 && at < notBefore) {
+      tooOld = true;
+      continue;
+    }
     const raw = ev.result?.value ?? ev.result?.['2'];
     if (typeof raw !== 'string' && typeof raw !== 'number') continue;
     const amount = Number(raw) / 1_000_000; // USDT has 6 decimals
     if (Number.isFinite(amount) && amount > best) best = amount;
   }
+  if (best <= 0 && tooOld) return { ok: false, error: 'That transfer was made before this payment was requested, so it cannot be used for it. Please send a new payment.' };
   if (best <= 0) return { ok: false, error: 'No USDT transfer to our wallet was found in that transaction.' };
   if (best + 1e-9 < opts.minUsdt) {
     return { ok: false, amountUsdt: best, error: `Payment is too small: ${best.toFixed(2)} USDT received, ${opts.minUsdt.toFixed(2)} required.` };

@@ -350,7 +350,7 @@ export function adminComplete(adminUid: string, id: string, txHashRaw: unknown) 
     } catch {
       throw new ReferralError('Could not reach the TRON network to check this payout. Try again in a minute.', 502);
     }
-    const check = checkUsdtPayment(events, { treasury: String(w.wallet), minUsdt: Number(w.net) });
+    const check = checkUsdtPayment(events, { treasury: String(w.wallet), minUsdt: Number(w.net), notBeforeMs: Date.parse(String(w.requestedAt)) - 15 * 60_000 });
     if (!check.ok) throw new ReferralError(check.error || 'That payout does not match this withdrawal.');
     if (!final) throw new ReferralError('That transaction is not fully confirmed yet. Try again in a few minutes.', 409);
 
