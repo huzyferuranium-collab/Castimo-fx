@@ -26,7 +26,7 @@ export interface KnowledgeFacts {
   subscriptionPriceUsdt: number;
   subscriptionDays: number;
   referralPlanPct: number[];
-  referralDailyPct: number[];
+  referralWeeklyPct: number[];
   withdrawMinUsdt: number;
   withdrawFeePct: number;
   supportWhatsapp: string;
