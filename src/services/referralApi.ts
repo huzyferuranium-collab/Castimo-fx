@@ -21,7 +21,7 @@ export interface ReferralSummary {
   code: string;
   link: string;
   ratesPct: number[];
-  /** Daily equity commission (Monthly Plan clients), levels 1-3, percent of the client's equity per paid day. */
+  /** Weekly equity commission (Profit Share clients), levels 1-3, percent of the client's equity per week (earned a fifth per business day). */
   weeklyRatesPct?: number[];
   /** The TRON address saved for withdrawals ('' when none). */
   wallet?: string;
