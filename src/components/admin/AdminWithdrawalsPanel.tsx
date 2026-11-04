@@ -6,8 +6,9 @@ import {
   adminGetWithdrawals,
   adminSetWithdrawalStatus,
 } from '../../services/referralApi';
+import { formatGmt } from '../../utils/format';
 
-const gmt = (iso: string) => new Date(iso).toLocaleString('en-GB', { timeZone: 'UTC', weekday: 'short', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' GMT';
+const gmt = formatGmt;
 
 /** Referral payouts. "Completed" needs the real TRON transaction, which the server checks before it agrees. */
 export const AdminWithdrawalsPanel: React.FC = () => {

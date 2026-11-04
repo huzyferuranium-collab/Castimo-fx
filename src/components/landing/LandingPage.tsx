@@ -1,4 +1,5 @@
 import React from 'react';
+import { referralRatesLabel } from '../../utils/format';
 import {
   ArrowRight,
   CheckCircle2,
@@ -113,7 +114,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
         className="hero-cta btn-ghost px-5 sm:px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
       >
         <Share2 className="w-4 h-4 text-rose-500" />
-        <span>Referral Hub (10% · 5% · 5%)</span>
+        <span>Referral Hub ({referralRatesLabel(' · ')})</span>
       </button>
     </>
   );

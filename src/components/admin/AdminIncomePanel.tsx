@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { IncomeView, adminGetIncome } from '../../services/referralApi';
+import { formatUsd } from '../../utils/format';
 
-const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const usd = formatUsd;
 const monthName = (m: string) => {
   const d = new Date(`${m}-01T00:00:00Z`);
   return Number.isNaN(d.getTime()) ? m : d.toLocaleDateString('en-GB', { timeZone: 'UTC', month: 'long', year: 'numeric' });

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import { usePolling } from '../../hooks/usePolling';
 import { tradingEngine, CASTIMO_TREASURY_ADDRESS, type PayableNowView } from '../../services/tradingEngine';
 import { authHeaders } from '../../services/apiAuth';
 import { pendingNote, pendingAccountLine, type PendingConnectionView } from '../../services/pendingConnection';
@@ -82,12 +83,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
     await loadPayable();
     setPayNowBusy(false);
   };
-  useEffect(() => {
-    if (activeSection !== 'settlement_due') return;
-    void loadPayable();
-    const t = setInterval(() => void loadPayable(), 60_000);
-    return () => clearInterval(t);
-  }, [activeSection]);
+  usePolling(loadPayable, 60_000, activeSection === 'settlement_due');
 
   // Every real client must accept the terms before using the dashboard. null = still checking.
   const [termsAccepted, setTermsAccepted] = useState<boolean | null>(null);
@@ -176,18 +172,15 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
   };
 
   useEffect(() => {
+    void tradingEngine.syncClientIp();
+  }, []);
+  // Every 4 seconds while this tab is open and visible; invoices on every 6th round (the first round included).
+  const syncRound = useRef(0);
+  usePolling(() => {
     fetchCopierStatus();
     tradingEngine.syncClientsFromBackend();
-    tradingEngine.syncInvoicesFromBackend();
-    void tradingEngine.syncClientIp();
-    let tick = 0;
-    const interval = setInterval(() => {
-      fetchCopierStatus();
-      tradingEngine.syncClientsFromBackend();
-      if (++tick % 6 === 0) tradingEngine.syncInvoicesFromBackend();
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
+    if (syncRound.current++ % 6 === 0) tradingEngine.syncInvoicesFromBackend();
+  }, 4000);
 
   useEffect(() => {
     const unsubscribe = tradingEngine.subscribe(() => {

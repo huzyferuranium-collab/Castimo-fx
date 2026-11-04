@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import { usePolling } from '../../hooks/usePolling';
 import { tradingEngine } from '../../services/tradingEngine';
 import { authHeaders } from '../../services/apiAuth';
 import { Collapsible } from '../common/Collapsible';
@@ -69,11 +70,7 @@ export const MasterAccountPanel: React.FC<MasterAccountPanelProps> = ({ onTradeB
     }
   }, []);
 
-  useEffect(() => {
-    fetchCloudStatus();
-    const interval = setInterval(fetchCloudStatus, 15000);
-    return () => clearInterval(interval);
-  }, [fetchCloudStatus]);
+  usePolling(fetchCloudStatus, 15_000);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);

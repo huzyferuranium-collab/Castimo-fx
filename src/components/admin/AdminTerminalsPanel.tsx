@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
+import { usePolling } from '../../hooks/usePolling';
 import { RefreshCw, Trash2, ShieldCheck, CheckCircle2, XCircle } from 'lucide-react';
 import { authHeaders } from '../../services/apiAuth';
 import { Collapsible } from '../common/Collapsible';
@@ -89,11 +90,7 @@ export const AdminTerminalsPanel: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 30000);
-    return () => clearInterval(t);
-  }, [load]);
+  usePolling(load, 30_000);
 
   const runCheck = async () => {
     setBusy('check');

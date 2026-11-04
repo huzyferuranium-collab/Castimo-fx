@@ -5,6 +5,7 @@ import { AdminTerminalsPanel } from '../admin/AdminTerminalsPanel';
 import React, { useState, useEffect, useRef } from 'react';
 import { tradingEngine, CASTIMO_TREASURY_ADDRESS } from '../../services/tradingEngine';
 import { authHeaders } from '../../services/apiAuth';
+import { usePolling } from '../../hooks/usePolling';
 import { Mt5Account, ProfitShareInvoice } from '../../types';
 import { getRiskRules, type RiskRules } from '../../services/riskRulesApi';
 import { LedgerAuditModal } from '../ledger/LedgerAuditModal';
@@ -112,25 +113,15 @@ export const AdminDashboard: React.FC = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    tradingEngine.syncClientsFromBackend();
     void tradingEngine.syncClientIp();
-    tradingEngine.syncInvoicesFromBackend(true);
-    const invTimer = setInterval(() => tradingEngine.syncInvoicesFromBackend(true), 30000);
-    const unsub = tradingEngine.subscribe(() => {
+    return tradingEngine.subscribe(() => {
       setSupervisedAccounts([...tradingEngine.getSupervisedAccounts()]);
       setInvoices([...tradingEngine.getProfitInvoices()]);
     });
-
-    const syncTimer = setInterval(() => {
-      tradingEngine.syncClientsFromBackend();
-    }, 4000);
-
-    return () => {
-      clearInterval(invTimer);
-      unsub();
-      clearInterval(syncTimer);
-    };
   }, []);
+  // Clients every 4 seconds and invoices every 30, only while this tab is open and visible.
+  usePolling(() => tradingEngine.syncClientsFromBackend(), 4000);
+  usePolling(() => tradingEngine.syncInvoicesFromBackend(true), 30_000);
 
   // Close actions dropdown on click outside
   useEffect(() => {

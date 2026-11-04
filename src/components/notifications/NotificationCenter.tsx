@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
+import { usePolling } from '../../hooks/usePolling';
 import { Bell, X } from 'lucide-react';
 import { NotificationItem, getNotifications } from '../../services/referralApi';
 
@@ -46,11 +47,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
     }
   }, []);
 
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 60_000);
-    return () => clearInterval(t);
-  }, [load]);
+  usePolling(load, 60_000);
 
   const unread = items.filter((i) => i.at > seen).length;
 
