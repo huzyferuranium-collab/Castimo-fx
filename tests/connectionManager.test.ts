@@ -1182,7 +1182,7 @@ test('a client is told only when trades stay unreadable: rows that cannot be rea
   const realNow2 = Date.now;
   try {
     Date.now = () => realNow2() + 300_000;
-    assert.equal((await m.getClientTrades('u1'))!.unreadable >= 2, true);
+    assert.equal(((await m.getClientTrades('u1'))!.unreadable ?? 0) >= 2, true);
   } finally {
     Date.now = realNow2;
   }

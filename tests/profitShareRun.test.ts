@@ -10,6 +10,8 @@ import {
 
 const START = '2026-11-01T10:00:00.000Z';
 
+type TestLedger = { userId: string; settledThrough?: string; pnlCum?: number; pnlHwm?: number; settleAfter?: string };
+
 function pos(id: string, profit: number | null, closeTime: string | null, commission: number | null = null, swap: number | null = null): any {
   return { id, symbol: 'EURUSD', side: 'BUY', volume: 0.1, openPrice: 1, closePrice: 1, stopLoss: null, takeProfit: null, profit, commission, swap, openTime: null, closeTime, rawOpenTime: null };
 }
@@ -302,7 +304,7 @@ test('daily update: a quiet day still gets an update; days before the account wa
 
 test('a ledger from before closed-trade billing starts at 0 and waits 2 days for its first invoice; new ledgers are untouched', () => {
   const now = Date.parse('2026-11-10T10:00:00.000Z');
-  const old = { userId: 'u1', settledThrough: START };
+  const old: TestLedger = { userId: 'u1', settledThrough: START };
   const up = upgradeLedger(old, now);
   assert.equal(up.changed, true);
   assert.deepEqual([up.ledger.pnlCum, up.ledger.pnlHwm, up.ledger.settleAfter], [0, 0, '2026-11-12T10:00:00.000Z']);
@@ -310,7 +312,7 @@ test('a ledger from before closed-trade billing starts at 0 and waits 2 days for
   assert.equal(settlementAllowed(up.ledger, Date.parse('2026-11-12T09:59:59.000Z')), false);
   assert.equal(settlementAllowed(up.ledger, Date.parse('2026-11-12T10:00:00.000Z')), true);
 
-  const fresh = { userId: 'u2', pnlCum: 0, pnlHwm: 0 };
+  const fresh: TestLedger = { userId: 'u2', pnlCum: 0, pnlHwm: 0 };
   const same = upgradeLedger(fresh, now);
   assert.equal(same.changed, false);
   assert.equal(same.ledger, fresh);
