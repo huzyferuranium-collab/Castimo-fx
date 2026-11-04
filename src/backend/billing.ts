@@ -208,7 +208,7 @@ export class BillingService {
 
   /**
    * The weekly equity commission, earned a fifth per day: on every business day (Mon-Fri, UTC), for as long as it stays connected and copying, every real client on either plan
-   * earns their three referrers 1% / 0.5% / 0.5% of the client's equity (as the copier service reports it at that moment). Runs every 10 minutes and credits
+   * earns their three referrers 3% / 2% / 1% a week of the client's equity, a fifth per day (as the copier service reports it at that moment). Runs every 10 minutes and credits
    * each client once a day (the credits have fixed ids). A disconnected account earns nothing that day.
    */
   async dailyEquityPass(now = Date.now()): Promise<void> {
