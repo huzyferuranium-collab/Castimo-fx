@@ -354,6 +354,12 @@ export class BillingService {
         const paid = Number(plan?.subscription?.paidUsdt);
         if (plan?.model !== 'subscription' || !Number.isFinite(paid) || paid <= 0) continue;
         if (!(await this.connectedLongEnoughFor(rec.userId, now))) continue;
+        // A subscriber whose first payment was credited before this pass existed (under an older id) must not be credited twice.
+        const earlier = (await queryEquals('referral_commissions', 'sourceUid', rec.userId).catch(() => [])) as any[];
+        if (earlier.some((c) => c?.sourceType === 'subscription')) {
+          this.subscriptionCommissionDone.add(rec.userId);
+          continue;
+        }
         await accrueCommissions(rec.userId, commissionBaseUsdt(cfg.subscriptionPriceUsdt, paid), 'subscription', `sub-first-${rec.userId}`);
         this.subscriptionCommissionDone.add(rec.userId);
       } catch (e: any) {
