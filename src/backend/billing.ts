@@ -26,7 +26,8 @@ import { type RunDeps, dailyUpdateFor, dailyWindowOpen, previewShare, previousUt
 import { settlementAllowed, upgradeLedger } from './profitShareRealized.ts';
 import { readLimit } from './brokerVerification.ts';
 import { accrueCommissions, accrueWeeklyEquityCommission, recordEvent } from './referralService.ts';
-import { reminderDue, reminderId } from './invoiceReminders.ts';
+import { emailWanted, overdueEmail, reminderDue, reminderEmail, reminderId } from './invoiceReminders.ts';
+import { type ReminderMailer, resendReminderMailer } from './reminderEmail.ts';
 import { commissionBaseUsdt, isWeekCommissionTime, tradingWeekKey } from './referrals.ts';
 import {
   DEFAULT_SUBSCRIPTION_PERIOD_DAYS,
@@ -177,6 +178,8 @@ export class BillingService {
   private timer: NodeJS.Timeout | null = null;
   private firstSweepTimer: NodeJS.Timeout | null = null;
   private reminderTimer: NodeJS.Timeout | null = null;
+  /** Sends the reminder emails. Tests swap in a pretend one. */
+  mailer: ReminderMailer = resendReminderMailer;
   private sweeping = false;
   /** Clients whose closed trades could not be read in the current sweep, with the reason (never billed on a guess). */
   private notBilled: string[] = [];
@@ -259,10 +262,32 @@ export class BillingService {
         written++;
       } catch (e) {
         if (!(e instanceof DocExistsError)) console.warn(`⚠️ [BILLING] Reminder for ${inv.id} not written:`, (e as any)?.message);
+        continue; // already written (and its email already tried) in an earlier round
       }
+      // A few of the reminders (6, 3 and 1 hours before) also go by email, once each.
+      if (emailWanted(due.hoursLeft)) await this.sendReminderMail(inv.userId, reminderEmail(Number(inv.amountDueUsdt), due.hoursLeft, String(inv.dueAt)));
+    }
+    // One email when an invoice has just passed its due time and copying is paused (only for invoices that went overdue in the last day).
+    for (const inv of await this.listAllInvoices()) {
+      const dueMs = Date.parse(String(inv.dueAt));
+      if (inv.status !== 'pending' || !Number.isFinite(dueMs) || dueMs > now || now - dueMs > 24 * 3_600_000) continue;
+      const user = this.manager.getClientConnection(inv.userId);
+      if (user && isDemoAccount(user)) continue;
+      try {
+        await createDoc('invoice_reminders', `${inv.id}-overdue`, { userId: inv.userId, invoiceId: inv.id, amountDueUsdt: inv.amountDueUsdt, dueAt: inv.dueAt, overdue: true, createdAt: new Date(now).toISOString() });
+      } catch (e) {
+        if (!(e instanceof DocExistsError)) console.warn(`⚠️ [BILLING] Overdue notice for ${inv.id} not written:`, (e as any)?.message);
+        continue;
+      }
+      await this.sendReminderMail(inv.userId, overdueEmail(Number(inv.amountDueUsdt)));
     }
     if (written) console.log(`⏰ [BILLING] ${written} payment reminder(s) written.`);
     return written;
+  }
+
+  private async sendReminderMail(userId: string, mail: Parameters<ReminderMailer['send']>[1]): Promise<void> {
+    const r = await this.mailer.send(userId, mail).catch(() => 'failed' as const);
+    if (r === 'failed') console.warn(`⚠️ [BILLING] A reminder email for ${userId.slice(0, 8)}… could not be sent.`);
   }
 
   /** Starts the periodic sweep. Safe to call when billing is not configured (it then does nothing). */

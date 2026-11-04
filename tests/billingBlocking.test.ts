@@ -203,3 +203,38 @@ test('the first check on start-up (before the first full sweep) already holds ba
   assert.equal(fake.copier.get('D1'), -1);
   billing.stop();
 });
+
+test('the hourly watcher writes one reminder per hour, emails only at 6, 3 and 1 hours and once when overdue', async () => {
+  const { db, billing } = await world();
+  const sent: Array<{ uid: string; subject: string }> = [];
+  billing.mailer = { send: async (uid, mail) => { sent.push({ uid, subject: mail.subject }); return 'sent'; } };
+  db.docs.set('profit_invoices/inv-r', { id: 'inv-r', userId: 'u1', status: 'pending', amountDueUsdt: 36.5, dueAt: '2026-11-09T23:59:00.000Z', createdAt: '2026-11-09T00:20:00.000Z' });
+  const reminders = () => [...db.docs.keys()].filter((k) => k.startsWith('invoice_reminders/')).sort();
+
+  assert.equal(await billing.reminderPass(Date.parse('2026-11-09T12:00:00Z')), 0, 'too early: nothing');
+  assert.equal(reminders().length, 0);
+
+  assert.equal(await billing.reminderPass(Date.parse('2026-11-09T21:10:00Z')), 1, '3 hours left');
+  assert.equal(await billing.reminderPass(Date.parse('2026-11-09T21:40:00Z')), 0, 'the same hour again writes nothing new');
+  assert.equal(sent.length, 1, 'and sends no second email');
+  assert.match(sent[0].subject, /23:59 GMT/);
+
+  await billing.reminderPass(Date.parse('2026-11-09T22:10:00Z')); // 2 hours left: written, not emailed
+  assert.equal(sent.length, 1);
+  await billing.reminderPass(Date.parse('2026-11-09T23:10:00Z')); // 1 hour left: emailed
+  assert.equal(sent.length, 2);
+  assert.match(sent[1].subject, /Last hour/);
+  assert.deepEqual(reminders(), ['invoice_reminders/inv-r-h1', 'invoice_reminders/inv-r-h2', 'invoice_reminders/inv-r-h3']);
+
+  await billing.reminderPass(Date.parse('2026-11-10T00:30:00Z')); // overdue
+  assert.equal(sent.length, 3);
+  assert.match(sent[2].subject, /Copying paused/);
+  await billing.reminderPass(Date.parse('2026-11-10T01:30:00Z'));
+  assert.equal(sent.length, 3, 'the overdue email is sent once');
+
+  // a paid invoice gets nothing, and a failing mailer never breaks the watcher
+  db.docs.set('profit_invoices/inv-p', { id: 'inv-p', userId: 'u1', status: 'paid', amountDueUsdt: 10, dueAt: '2026-11-11T23:59:00.000Z', createdAt: '2026-11-11T00:20:00.000Z' });
+  db.docs.set('profit_invoices/inv-f', { id: 'inv-f', userId: 'u1', status: 'pending', amountDueUsdt: 12, dueAt: '2026-11-11T23:59:00.000Z', createdAt: '2026-11-11T00:20:00.000Z' });
+  billing.mailer = { send: async () => { throw new Error('mail down'); } };
+  assert.equal(await billing.reminderPass(Date.parse('2026-11-11T18:30:00Z')), 1, 'only the unpaid one, and the failing mailer is survived');
+});

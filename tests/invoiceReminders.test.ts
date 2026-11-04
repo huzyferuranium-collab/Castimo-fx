@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hoursLeft, overdueText, REMINDER_WINDOW_HOURS, reminderDue, reminderId, reminderText } from '../src/backend/invoiceReminders.ts';
+import { emailWanted, hoursLeft, overdueEmail, overdueText, reminderEmail, REMINDER_WINDOW_HOURS, reminderDue, reminderId, reminderText } from '../src/backend/invoiceReminders.ts';
 
 const due = '2026-11-09T23:59:00.000Z';
 const at = (iso: string) => Date.parse(iso);
@@ -42,4 +42,23 @@ test('the reminder and the overdue notice say what is owed, by when, and what ha
   const o = overdueText(36.5);
   assert.match(o.message, /\$36\.50/);
   assert.match(o.message, /copying is paused/);
+});
+
+test('only 6, 3 and 1 hours before the due time are also sent by email', () => {
+  assert.deepEqual([6, 5, 4, 3, 2, 1].filter(emailWanted), [6, 3, 1]);
+});
+
+test('the reminder emails are friendly, name the amount and the deadline, and carry the risk line', () => {
+  const m = reminderEmail(36.5, 3, due);
+  assert.match(m.subject, /23:59 GMT/);
+  for (const part of [m.text, m.html]) {
+    assert.match(part, /\$36\.50/);
+    assert.match(part, /copying pauses/);
+  }
+  assert.match(m.text, /Trading involves risk/);
+  assert.match(reminderEmail(36.5, 1, due).subject, /Last hour/);
+  const o = overdueEmail(36.5);
+  assert.match(o.subject, /Copying paused/);
+  assert.match(o.text, /\$36\.50/);
+  assert.match(o.html, /copying is paused/);
 });

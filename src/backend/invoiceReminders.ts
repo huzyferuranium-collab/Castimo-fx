@@ -45,3 +45,44 @@ export function overdueText(amountUsdt: number): { title: string; message: strin
     message: `Your 50% share of $${amountUsdt.toFixed(2)} was not received before midnight GMT, so copying is paused. It resumes as soon as the payment is confirmed. Open the 50% Profit Share tab to pay.`,
   };
 }
+
+/** The reminders that are also sent by email (a few, not one every hour, so the inbox is not flooded): 6, 3 and 1 hours before the due time. */
+export const EMAIL_REMINDER_HOURS: readonly number[] = [6, 3, 1];
+
+export function emailWanted(hours: number): boolean {
+  return EMAIL_REMINDER_HOURS.includes(hours);
+}
+
+export interface ReminderMail {
+  subject: string;
+  text: string;
+  html: string;
+}
+
+const SITE = 'https://castimofx.com';
+const wrap = (heading: string, body: string) =>
+  `<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:auto;color:#0f172a"><h2 style="margin:0 0 12px">${heading}</h2>${body}` +
+  `<p style="margin:20px 0"><a href="${SITE}" style="background:#e11d48;color:#fff;text-decoration:none;padding:10px 18px;border-radius:10px;font-weight:700">Open CASTIMOFX</a></p>` +
+  `<p style="font-size:12px;color:#64748b">Trading involves risk. You are receiving this because you use the 50% Profit Share plan on CASTIMOFX.</p></div>`;
+
+/** The email for a reminder (6, 3 or 1 hours before the due time). */
+export function reminderEmail(amountUsdt: number, hours: number, dueAtIso: string): ReminderMail {
+  const left = `${hours} hour${hours === 1 ? '' : 's'}`;
+  const due = gmtTime(dueAtIso);
+  const amount = `$${amountUsdt.toFixed(2)}`;
+  return {
+    subject: hours <= 1 ? `Last hour: your CASTIMOFX payment is due by ${due}` : `Reminder: your CASTIMOFX payment is due by ${due} tonight`,
+    text: `Hello,\n\nA friendly reminder: your 50% Profit Share payment of ${amount} is due by ${due} tonight, about ${left} from now.\nIf it is not paid by then, copying pauses until it is paid.\n\nOpen the 50% Profit Share tab at ${SITE} to pay.\n\nTrading involves risk.`,
+    html: wrap('Your payment is due tonight', `<p>A friendly reminder: your 50% Profit Share payment of <b>${amount}</b> is due by <b>${due}</b> tonight, about ${left} from now.</p><p>If it is not paid by then, copying pauses until it is paid.</p><p>Open the <b>50% Profit Share</b> tab to pay.</p>`),
+  };
+}
+
+/** The email sent once when an invoice has not been paid in time and copying has paused. */
+export function overdueEmail(amountUsdt: number): ReminderMail {
+  const amount = `$${amountUsdt.toFixed(2)}`;
+  return {
+    subject: 'Copying paused: your CASTIMOFX payment was not received',
+    text: `Hello,\n\nYour 50% Profit Share payment of ${amount} was not received before midnight GMT, so copying is paused.\nIt resumes as soon as the payment is confirmed.\n\nOpen the 50% Profit Share tab at ${SITE} to pay.\n\nTrading involves risk.`,
+    html: wrap('Copying is paused', `<p>Your 50% Profit Share payment of <b>${amount}</b> was not received before midnight GMT, so copying is paused.</p><p>It resumes as soon as the payment is confirmed.</p><p>Open the <b>50% Profit Share</b> tab to pay.</p>`),
+  };
+}

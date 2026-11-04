@@ -123,7 +123,7 @@ Until it is set, the site shows "Payment address not set yet" and refuses paymen
 ## The two plans never mix
 - **Monthly ($100 / 30 days):** the client sends USDT (TRC20) to the treasury address and pastes the TXID on the Service Plan page. Once verified, copying runs for the month and
   nothing is taken from their profit: no ledger, no invoices, no 50% screens. If the month ends unpaid, copying pauses until they pay again.
-- **50% profit share:** no upfront fee; invoices are created from real profit and are due before midnight GMT (23:59) on the day they are made. Unpaid after that, copying pauses until paid. An hourly watcher writes reminders to the client's notifications during the last 6 hours.
+- **50% profit share:** no upfront fee; invoices are created from real profit and are due before midnight GMT (23:59) on the day they are made. Unpaid after that, copying pauses until paid. An hourly watcher writes reminders to the client's notifications during the last 6 hours. Reminders at 6, 3 and 1 hours before the due time, and one when copying pauses, are also emailed to the client's confirmed address (needs `RESEND_API_KEY` and `EMAIL_FROM`; an unconfirmed address gets none).
 The rule lives in `billingStanding()` (`src/backend/servicePlan.ts`, tested) and is used by the sweep, by switching copying on, and by connecting.
 
 ## Turning on real profit-share billing
