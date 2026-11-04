@@ -1294,7 +1294,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
         isOpen={showSettlementModal}
         onClose={() => setShowSettlementModal(false)}
         settlements={tradingEngine.getSettlements()}
-        currentHwm={account.equity || 0.0}
+        currentEquity={account.equity || 0.0}
       />
 
       <LedgerAuditModal

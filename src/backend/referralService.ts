@@ -6,7 +6,7 @@
  */
 import { randomInt } from 'node:crypto';
 import { DocExistsError, createDoc, getDoc, isFirestoreAdminConfigured, listAll, queryEquals, queryEqualsWithIds, setDoc } from './firestoreAdmin.ts';
-import { checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron.ts';
+import { TXID_PATTERN as HASH, checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron.ts';
 import {
   REFERRAL_RATES_PCT,
   DAILY_EQUITY_RATES_PCT,
@@ -37,7 +37,6 @@ export class ReferralError extends Error {
 }
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const HASH = /^[0-9a-fA-F]{64}$/;
 const BASE_URL = (process.env.PUBLIC_SITE_URL || 'https://castimofx.com').replace(/\/+$/, '');
 
 const queues = new Map<string, Promise<unknown>>();

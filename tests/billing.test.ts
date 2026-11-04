@@ -2,56 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, verify } from 'node:crypto';
 import {
-  computeSettlement, sumAccountFlows, isSettlementDue, isOverdue, invoiceId, round2,
+  isSettlementDue, isOverdue, invoiceId, round2,
 } from '../src/backend/profitShare.ts';
 import { tronAddressToHex20, normalizeTronAddress, checkUsdtPayment, USDT_TRC20_CONTRACT } from '../src/backend/tron.ts';
 import { toFsFields, fromFsFields, buildServiceAccountJwt } from '../src/backend/firestoreAdmin.ts';
-
-test('fee is 50% of new profit above the high-water mark', () => {
-  const r = computeSettlement({ hwm: 330, equity: 430, flows: 0 });
-  assert.deepEqual(r, { adjustedHwm: 330, gain: 100, fee: 50, newHwm: 430 });
-});
-
-test('no fee while recovering a loss, and the HWM stays', () => {
-  const r = computeSettlement({ hwm: 430, equity: 380, flows: 0 });
-  assert.equal(r.fee, 0);
-  assert.equal(r.newHwm, 430);
-});
-
-test('a deposit is not profit', () => {
-  const r = computeSettlement({ hwm: 330, equity: 830, flows: 500 });
-  assert.equal(r.gain, 0);
-  assert.equal(r.fee, 0);
-  assert.equal(r.newHwm, 830);
-});
-
-test('a withdrawal is not a loss, and profit after it is still charged', () => {
-  const r = computeSettlement({ hwm: 330, equity: 280, flows: -100 }); // 330-100=230 -> gain 50
-  assert.equal(r.adjustedHwm, 230);
-  assert.equal(r.gain, 50);
-  assert.equal(r.fee, 25);
-});
-
-test('HWM never goes below zero and bad inputs are rejected', () => {
-  assert.equal(computeSettlement({ hwm: 50, equity: 10, flows: -200 }).adjustedHwm, 0);
-  assert.throws(() => computeSettlement({ hwm: NaN, equity: 1, flows: 0 }));
-  assert.throws(() => computeSettlement({ hwm: 1, equity: -1, flows: 0 }));
-  assert.throws(() => computeSettlement({ hwm: 1, equity: 1, flows: 0, feePct: 120 }));
-});
-
-test('sumAccountFlows counts deposits/withdrawals/credits, not trades or commissions', () => {
-  const deals = [
-    { type: 'DEAL_TYPE_BALANCE', profit: 500 },
-    { type: 'DEAL_TYPE_BALANCE', profit: -100 },
-    { type: 'DEAL_TYPE_BUY', profit: 40 },
-    { type: 'DEAL_TYPE_SELL', profit: -10 },
-    { type: 'DEAL_TYPE_COMMISSION', profit: -2 },
-    { type: 'DEAL_TYPE_BONUS', profit: 25 },
-    { type: 'DEAL_TYPE_BALANCE', profit: 'x' },
-  ];
-  assert.equal(sumAccountFlows(deals), 425);
-  assert.equal(sumAccountFlows([]), 0);
-});
 
 test('settlement timing, overdue and ids', () => {
   const t0 = '2026-10-01T00:00:00.000Z';

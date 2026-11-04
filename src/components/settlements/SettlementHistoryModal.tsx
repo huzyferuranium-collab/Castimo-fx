@@ -6,14 +6,17 @@ interface SettlementHistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
   settlements: ProfitShareSettlement[];
-  currentHwm: number;
+  /** The equity shown at the top. It is the account's equity, not a high-water mark. */
+  currentEquity: number;
+  equityLabel?: string;
 }
 
 export const SettlementHistoryModal: React.FC<SettlementHistoryModalProps> = ({
   isOpen,
   onClose,
   settlements,
-  currentHwm,
+  currentEquity,
+  equityLabel = 'Equity right now',
 }) => {
   if (!isOpen) return null;
 
@@ -43,10 +46,10 @@ export const SettlementHistoryModal: React.FC<SettlementHistoryModalProps> = ({
           <div className="grid grid-cols-3 gap-3 p-4 rounded-xl bg-slate-950 border border-slate-800">
             <div>
               <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                Current High-Water Mark
+                {equityLabel}
               </span>
               <div className="text-xl font-bold font-mono text-emerald-400 mt-0.5">
-                ${currentHwm.toFixed(2)}
+                ${currentEquity.toFixed(2)}
               </div>
             </div>
             <div>

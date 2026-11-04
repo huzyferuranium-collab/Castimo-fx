@@ -143,10 +143,27 @@ export const AdminDashboard: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleTriggerWatcherSweep = () => {
-    const res = tradingEngine.trigger24hWatcherSweep();
-    setActionSuccess(res.message);
-    setTimeout(() => setActionSuccess(null), 4000);
+  const [sweeping, setSweeping] = useState(false);
+  const handleTriggerWatcherSweep = async () => {
+    if (sweeping) return;
+    setSweeping(true);
+    let message = 'The billing run could not be started. Please try again.';
+    try {
+      const res = await fetch('/api/trade/admin/run-billing-sweep', { method: 'POST', headers: await authHeaders() });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok && d.success) {
+        if (!d.started) message = d.reason || 'The billing run did not start.';
+        else {
+          const skipped = Array.isArray(d.notBilled) ? d.notBilled.length : 0;
+          message = skipped > 0 ? `Billing run finished. ${skipped} client(s) were not billed because their closed trades could not be read safely.` : 'Billing run finished. Every client was checked.';
+        }
+      } else if (d.error) message = d.error;
+    } catch {
+      // keep the message above
+    }
+    setSweeping(false);
+    setActionSuccess(message);
+    setTimeout(() => setActionSuccess(null), 6000);
   };
 
 
@@ -688,10 +705,11 @@ export const AdminDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={handleTriggerWatcherSweep}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                  disabled={sweeping}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-60"
                 >
-                  <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Run sweep</span>
+                  <RefreshCw className={`w-3.5 h-3.5 text-slate-400 ${sweeping ? 'animate-spin' : ''}`} />
+                  <span>{sweeping ? 'Running…' : 'Run sweep'}</span>
                 </button>
               </div>
               <Collapsible title="How billing and pausing work" openLabel="Details" closeLabel="Hide">
@@ -772,7 +790,8 @@ export const AdminDashboard: React.FC = () => {
         isOpen={showSettlementModal}
         onClose={() => setShowSettlementModal(false)}
         settlements={tradingEngine.getSettlements()}
-        currentHwm={totalSupervisedEquity}
+        currentEquity={totalSupervisedEquity}
+        equityLabel="Total client equity"
       />
     </div>
   );

@@ -32,6 +32,9 @@ export function normalizeTronAddress(a: unknown): string | null {
   return null;
 }
 
+/** A TRON transaction id: 64 hex characters. */
+export const TXID_PATTERN = /^[0-9a-fA-F]{64}$/;
+
 export interface PaymentCheck {
   ok: boolean;
   amountUsdt?: number;

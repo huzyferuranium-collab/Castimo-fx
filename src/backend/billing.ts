@@ -40,7 +40,7 @@ import {
   nextPeriod,
   subscriptionActive,
 } from './servicePlan.ts';
-import { checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron.ts';
+import { TXID_PATTERN as HASH, checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron.ts';
 import * as firestore from './firestoreAdmin.ts';
 
 const { DocExistsError } = firestore;
@@ -132,7 +132,6 @@ export function billingEnabled(): boolean {
   return isFirestoreAdminConfigured() && tronAddressToHex20(treasury()) !== null;
 }
 
-const HASH = /^[0-9a-fA-F]{64}$/;
 
 /**
  * Whether a connected account earns its referrers the daily equity commission. A demo (practice) account never does: its
@@ -338,8 +337,21 @@ export class BillingService {
         );
       }
     } finally {
+      this.lastSweepAt = new Date().toISOString();
+      this.lastNotBilled = [...this.notBilled];
       this.sweeping = false;
     }
+  }
+
+  private lastSweepAt: string | null = null;
+  private lastNotBilled: string[] = [];
+
+  /** Runs a billing sweep now (the administrator's "Run sweep" button) and says what happened. */
+  async runNow(): Promise<{ started: boolean; reason?: string; at: string | null; notBilled: string[] }> {
+    if (!billingEnabled()) return { started: false, reason: 'Billing is not set up on the server yet.', at: this.lastSweepAt, notBilled: this.lastNotBilled };
+    if (this.sweeping) return { started: false, reason: 'A billing run is already going. Try again in a minute.', at: this.lastSweepAt, notBilled: this.lastNotBilled };
+    await this.sweep();
+    return { started: true, at: this.lastSweepAt, notBilled: this.lastNotBilled };
   }
 
   /**

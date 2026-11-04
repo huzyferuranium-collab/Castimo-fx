@@ -464,10 +464,6 @@ class TradingEngine {
     };
   }
 
-  public trigger24hWatcherSweep(): { checked: number; disconnectedCount: number; message: string } {
-    return { checked: 0, disconnectedCount: 0, message: 'Overdue invoices are handled automatically by the server.' };
-  }
-
   public reconnectAccount(accountNumber: string): void {
     if (this.mt5Account.accountNumber === accountNumber) {
       this.mt5Account.status = 'copying';

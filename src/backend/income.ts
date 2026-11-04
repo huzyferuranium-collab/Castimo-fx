@@ -11,6 +11,8 @@
  * Months are UTC calendar months ("YYYY-MM").
  */
 
+import { round2 } from './referrals.ts';
+
 export type Doc = Record<string, unknown>;
 
 export interface IncomeStream {
@@ -41,7 +43,6 @@ export interface IncomeReport {
   months: IncomeMonth[];
 }
 
-export const round2 = (n: number): number => Math.round((n + Number.EPSILON) * 100) / 100;
 
 const money = (v: unknown): number => {
   const n = Number(v);

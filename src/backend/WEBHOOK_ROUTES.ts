@@ -574,6 +574,16 @@ tradeRouter.get('/admin/income', requireAdmin, async (_req: Request, res: Respon
   }
 });
 
+/** The administrator's "Run sweep": runs the billing pass now (payment standing, daily updates, settlements). */
+tradeRouter.post('/admin/run-billing-sweep', requireAdmin, async (_req: Request, res: Response) => {
+  try {
+    return res.status(200).json({ success: true, ...(await BillingService.getInstance().runNow()) });
+  } catch (e: any) {
+    console.warn('[BILLING] manual sweep failed:', e?.message);
+    return res.status(500).json({ success: false, error: 'The billing run could not finish. See the server log.' });
+  }
+});
+
 tradeRouter.post('/admin/confirm-invoice', requireAdmin, async (req: Request, res: Response) => {
   try {
     const admin = getAuthUser(req);
