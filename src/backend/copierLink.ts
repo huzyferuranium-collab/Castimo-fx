@@ -110,11 +110,19 @@ export interface ReadTiming {
   readyInMs?: number;
   /** The quick gap used while a new client is waiting (milliseconds). */
   quickMs?: number;
+  /**
+   * A client is connected but its first balance has not been reported yet (copying is held until it is), or a new connection is
+   * still waiting in the background after the quick and relaxed phases. Reads then go at the sustainable pace (at least every
+   * WATCH_GAP_MS) instead of the idle one, so copying starts, or the connection finishes, soon after Duplikium has the answer.
+   */
+  watching?: boolean;
 }
 
 /** How long a new client's connection is looked after at the quick pace, and then at a relaxed one, before the normal pace again. */
 export const QUICK_FOR_MS = 60_000;
 export const RELAXED_FOR_MS = 180_000;
+/** The shortest gap between reads while a client is being watched (see `ReadTiming.watching`). */
+export const WATCH_GAP_MS = 15_000;
 
 /**
  * When to read the whole account list next (milliseconds).
@@ -122,6 +130,8 @@ export const RELAXED_FOR_MS = 180_000;
  *  - The gap is counted from the LAST read by anyone, so reads made while connecting a client replace the periodic one.
  *  - While a new client's connection waits for the broker the gap is short (quick, then relaxed), so it is finished within seconds of
  *    being ready; the limits themselves keep this inside the service's allowance.
+ *  - While a client is being watched (connected, first balance not reported yet; or still connecting after the relaxed phase) the gap
+ *    is the sustainable spacing, never under WATCH_GAP_MS: as fast as the service's limits allow on average, and no faster.
  *  - After a request-limit answer nothing is read until the service's wait is over.
  */
 export function nextReadDelayMs(t: ReadTiming): number {
@@ -131,7 +141,7 @@ export function nextReadDelayMs(t: ReadTiming): number {
   const waiting = t.waitingForMs !== null && t.waitingForMs < RELAXED_FOR_MS;
   const gapWhenBusy = t.waitingForMs !== null && t.waitingForMs < QUICK_FOR_MS ? quick : Math.max(quick, 15_000);
   if (t.waitLeftMs !== null && t.waitLeftMs > 0) return Math.max(t.waitLeftMs, waiting ? gapWhenBusy : spacing, ready);
-  const gap = waiting ? gapWhenBusy : Math.max(t.baseSeconds * 1000, 2 * spacing);
+  const gap = waiting ? gapWhenBusy : t.watching ? Math.max(WATCH_GAP_MS, spacing) : Math.max(t.baseSeconds * 1000, 2 * spacing);
   const since = t.sinceLastReadMs === null ? 0 : Math.max(0, t.sinceLastReadMs);
   return Math.max(1000, gap - since, ready);
 }

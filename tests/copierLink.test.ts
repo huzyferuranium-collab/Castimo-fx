@@ -111,6 +111,15 @@ test('reads of the list: counted from the last read by anyone, quick while a new
   assert.equal(nextReadDelayMs({ ...base, waitingForMs: QUICK_FOR_MS + 1 }), 15_000);
   assert.equal(nextReadDelayMs({ ...base, waitingForMs: RELAXED_FOR_MS + 1 }), 66_000);
   assert.equal(nextReadDelayMs({ ...base, waitingForMs: 10_000, sinceLastReadMs: 2000 }), 3000, 'counted from the last read');
+  // a client being watched (connected, balance not reported yet; or still connecting after the relaxed phase): the sustainable pace
+  assert.equal(nextReadDelayMs({ ...base, watching: true }), 33_000, 'watching: the sustainable spacing, not twice it');
+  assert.equal(nextReadDelayMs({ ...base, spacingMs: 2400, watching: true }), 15_000, 'watching: never under 15 seconds');
+  assert.equal(nextReadDelayMs({ ...base, spacingMs: 2400 }), 60_000, 'not watching: the normal minute');
+  assert.equal(nextReadDelayMs({ ...base, spacingMs: 120_000, watching: true }), 120_000, 'watching with one account linked: still inside the limits');
+  assert.equal(nextReadDelayMs({ ...base, waitingForMs: 10_000, watching: true }), 5000, 'the quick phase still wins');
+  assert.equal(nextReadDelayMs({ ...base, waitingForMs: RELAXED_FOR_MS + 1, watching: true }), 33_000, 'after the relaxed phase: watched');
+  assert.equal(nextReadDelayMs({ ...base, watching: true, sinceLastReadMs: 20_000 }), 13_000, 'counted from the last read');
+  assert.equal(nextReadDelayMs({ ...base, watching: true, readyInMs: 50_000 }), 50_000, 'never before the limits allow');
   // never before the limits let a read through
   assert.equal(nextReadDelayMs({ ...base, waitingForMs: 10_000, readyInMs: 20_000 }), 20_000);
   // after a request-limit answer nothing is read until the service's wait is over
