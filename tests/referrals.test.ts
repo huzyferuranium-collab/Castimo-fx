@@ -96,14 +96,14 @@ test('names are masked', () => {
   assert.equal(maskName(''), 'A client');
 });
 
-test('equity commission: 1% / 0.5% / 0.5% of the client equity per WEEK, earned a fifth per business day, three levels', async () => {
+test('equity commission: 3% / 2% / 1% of the client equity per WEEK, earned a fifth per business day, three levels', async () => {
   const { dailyEquityLines } = await import('../src/backend/referrals.ts');
   const lines = dailyEquityLines(['A', 'B', 'C'], 1000);
-  assert.deepEqual(lines.map((l) => [l.beneficiaryUid, l.level, l.ratePct, l.amountUsdt]), [['A', 1, 1, 2], ['B', 2, 0.5, 1], ['C', 3, 0.5, 1]]);
-  assert.equal(dailyEquityLines(['A'], 394.01)[0].amountUsdt, 0.79);
+  assert.deepEqual(lines.map((l) => [l.beneficiaryUid, l.level, l.ratePct, l.amountUsdt]), [['A', 1, 3, 6], ['B', 2, 2, 4], ['C', 3, 1, 2]]);
+  assert.equal(dailyEquityLines(['A'], 394.01)[0].amountUsdt, 2.36);
   const { WEEKLY_EQUITY_RATES_PCT, DAILY_EQUITY_RATES_PCT } = await import('../src/backend/referrals.ts');
-  assert.deepEqual([...WEEKLY_EQUITY_RATES_PCT], [1, 0.5, 0.5]);
-  assert.equal(Math.round(DAILY_EQUITY_RATES_PCT.reduce((a, b) => a + b, 0) * 5 * 1e6) / 1e6, 2, 'five business days add up to the full weekly rates');
+  assert.deepEqual([...WEEKLY_EQUITY_RATES_PCT], [3, 2, 1]);
+  assert.equal(Math.round(DAILY_EQUITY_RATES_PCT.reduce((a, b) => a + b, 0) * 5 * 1e6) / 1e6, 6, 'five business days add up to the full weekly rates');
   assert.deepEqual(dailyEquityLines([], 1000), []);
   assert.deepEqual(dailyEquityLines(['A'], 0), []);
 });

@@ -2,8 +2,8 @@
  * Referral and withdrawal rules (pure functions, no I/O, unit-tested).
  *
  *  - Three levels. Level 1 earns 10%, level 2 earns 5%, level 3 earns 5% of what the referred client
- *    pays for the $100 Monthly Plan, ONCE per client (the first verified payment; renewals earn nothing). Profit Share clients
- *    earn their referrers the weekly equity commission instead (see WEEKLY_EQUITY_RATES_PCT).
+ *    pays for the $100 Monthly Plan, ONCE per client (the first verified payment; renewals earn nothing). On top of that, EVERY real connected
+ *    client, on either plan, earns the three referrers the weekly equity commission (see WEEKLY_EQUITY_RATES_PCT).
  *  - A withdrawal request must be at least $50 (gross). A 10% processing fee is taken from it.
  *  - Requests made before Thursday 23:59 GMT join that week's cycle. Later ones join the next week's.
  *    GMT/UTC is the only clock used, and the server's time is the only time that counts.
@@ -12,13 +12,13 @@
 export const REFERRAL_RATES_PCT = [10, 5, 5] as const;
 
 /**
- * Equity commission (50% Profit Share clients). The three referrers above a connected client earn these percentages of that
+ * Equity commission (every real connected client, on either plan). The three referrers above a connected client earn these percentages of that
  * client's equity EVERY WEEK, as the copier service reports it. It is earned in five equal parts, one on each business day
  * (Monday to Friday, UTC) the account is connected, so a week is paid on the client's average equity and a day without a
  * connection earns nothing. There is no monthly limit. Weekends are never paid. The whole week is withdrawable in that
  * week's round (see the withdrawal rules).
  */
-export const WEEKLY_EQUITY_RATES_PCT = [1, 0.5, 0.5] as const;
+export const WEEKLY_EQUITY_RATES_PCT = [3, 2, 1] as const;
 export const BUSINESS_DAYS_PER_WEEK = 5;
 /** What one business day earns: a fifth of the weekly rate. */
 export const DAILY_EQUITY_RATES_PCT = WEEKLY_EQUITY_RATES_PCT.map((r) => r / BUSINESS_DAYS_PER_WEEK);

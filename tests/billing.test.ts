@@ -107,6 +107,9 @@ test('the daily referral commission is never paid on a demo account, or on one t
   assert.equal(dailyCommissionEligible({ ...ok, connectionState: 'ERROR' }), false);
   assert.equal(dailyCommissionEligible({ ...ok, currency: 'EUR' }), false);
   assert.equal(dailyCommissionEligible({ ...ok, equity: 0 }), false);
+  assert.equal(dailyCommissionEligible({ ...ok, billingBlocked: true }), false, 'copying held for an unpaid invoice or an expired plan');
+  assert.equal(dailyCommissionEligible({ ...ok, lowFunds: true }), false, 'below the copying minimum');
+  assert.equal(dailyCommissionEligible({ ...ok, figuresPending: true }), false);
   assert.equal(dailyCommissionEligible({ ...ok, equity: 'abc' }), false);
   assert.equal(dailyCommissionEligible({ ...ok, accountType: undefined }), true, 'unknown type: judged on the other rules');
 });

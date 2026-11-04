@@ -152,8 +152,10 @@ export function connectedLongEnough(connectedAtIso: unknown, nowMs: number, hour
  * equity is virtual and free to create, so paying 1% of it every day would reward fake accounts. Disconnected or errored
  * accounts, non-USD accounts and accounts with no readable equity earn nothing either.
  */
-export function dailyCommissionEligible(rec: { connectionState?: string; equity?: unknown; currency?: unknown; accountType?: string; server?: string }): boolean {
+export function dailyCommissionEligible(rec: { connectionState?: string; equity?: unknown; currency?: unknown; accountType?: string; server?: string; billingBlocked?: boolean; lowFunds?: boolean; figuresPending?: boolean }): boolean {
   if (isDemoAccount(rec)) return false;
+  // Only an account that is really copying earns: not one held for payment, below the copying minimum, or still waiting for its figures.
+  if (rec.billingBlocked || rec.lowFunds || rec.figuresPending) return false;
   if (rec.connectionState === 'DISCONNECTED' || rec.connectionState === 'ERROR') return false;
   const equity = Number(rec.equity);
   return Number.isFinite(equity) && equity > 0 && String(rec.currency).toUpperCase() === 'USD';
@@ -205,7 +207,7 @@ export class BillingService {
   private dailyEquityDone = new Set<string>();
 
   /**
-   * The weekly equity commission, earned a fifth per day: on every business day (Mon-Fri, UTC), for as long as it stays connected, every 50% Profit Share client
+   * The weekly equity commission, earned a fifth per day: on every business day (Mon-Fri, UTC), for as long as it stays connected and copying, every real client on either plan
    * earns their three referrers 1% / 0.5% / 0.5% of the client's equity (as the copier service reports it at that moment). Runs every 10 minutes and credits
    * each client once a day (the credits have fixed ids). A disconnected account earns nothing that day.
    */
@@ -221,11 +223,6 @@ export class BillingService {
       const equity = Number(rec.equity);
       try {
         if (!(await this.connectedLongEnoughFor(rec.userId, now))) continue; // not paid before 24 hours of being connected; asked again next round
-        const plan = await this.getPlan(rec.userId);
-        if (plan?.model !== 'profit_share') {
-          this.dailyEquityDone.add(mark); // Monthly Plan clients earn their referrers the one-time plan commission instead
-          continue;
-        }
         credited += await accrueDailyEquityCommission(rec.userId, equity, day);
         this.dailyEquityDone.add(mark);
       } catch (e: any) {
