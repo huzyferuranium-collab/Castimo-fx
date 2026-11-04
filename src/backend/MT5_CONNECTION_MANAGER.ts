@@ -197,6 +197,9 @@ export interface CheckStep {
 
 const DEFAULT_MASTER_LOGIN = '261089492';
 const eq = (a?: string, b?: string) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+/** How long a newly connected client's first balance report is watched for at the sustainable pace (see watchingClients). */
+const FIGURES_WATCH_MS = 12 * 60_000;
+
 const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const mask = (id: string) => (id.length > 6 ? `${id.slice(0, 3)}…${id.slice(-3)}` : '***');
 
@@ -332,6 +335,24 @@ export class Mt5ConnectionManager {
     return youngest;
   }
 
+  /**
+   * True while a client should be looked after at the sustainable pace rather than the idle one: a newly connected client whose
+   * balance has not been reported yet (copying is held until it is; Duplikium reports it within about 5 minutes, so this stops
+   * after FIGURES_WATCH_MS), or a new connection still waiting in the background.
+   */
+  private watchingClients(): boolean {
+    for (const p of this.pending.values()) {
+      if (!p.failure && !p.verifiedBefore && !this.connecting.has(p.userId)) return true;
+    }
+    const now = Date.now();
+    for (const rec of this.clientPool.values()) {
+      if (!rec.figuresPending) continue;
+      const since = Date.parse(rec.verificationTimestamp);
+      if (Number.isFinite(since) && now - since < FIGURES_WATCH_MS) return true;
+    }
+    return false;
+  }
+
   private connectProbeMs(): number {
     return readLimit(process.env.CONNECT_PROBE_MS, 5000) || 5000;
   }
@@ -352,6 +373,7 @@ export class Mt5ConnectionManager {
       waitingForMs: this.waitingForMs(),
       readyInMs: this.api?.accountsReadyInMs?.() ?? 0,
       quickMs: this.connectProbeMs(),
+      watching: this.watchingClients(),
     });
     this.refreshTimer = setTimeout(() => {
       void this.readOnce().finally(() => {
