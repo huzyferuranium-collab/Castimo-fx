@@ -106,7 +106,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
         className="hero-cta btn-gold px-5 sm:px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
       >
         <TrendingUp className="w-4 h-4" />
-        <span>Access Client Terminal</span>
+        <span>Open My Trading</span>
         <ArrowRight className="w-4 h-4" />
       </button>
       <button
@@ -385,7 +385,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSelectTab }) => {
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <button onClick={() => onSelectTab('client')} className="btn-gold px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer">
                   <TrendingUp className="w-4 h-4" />
-                  <span>Client Terminal</span>
+                  <span>My Trading</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
                 <button onClick={() => onSelectTab('referrals')} className="btn-ghost px-7 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 cursor-pointer">

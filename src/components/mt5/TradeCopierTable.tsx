@@ -26,6 +26,11 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades, acco
 
   const openOnes = trades.filter((t) => t.status === 'OPEN');
   const floatingKnown = openOnes.every((t) => t.pnlKnown !== false);
+  // Columns with nothing to show for any listed trade are left out, so the table never looks half empty.
+  const showLimits = filteredTrades.some((t) => t.sl > 0 || t.tp > 0);
+  const showCosts = filteredTrades.some((t) => hasCosts(t));
+  const showNow = filteredTrades.some((t) => t.currentPrice > 0);
+  const columnCount = 5 + (showLimits ? 1 : 0) + (showCosts ? 1 : 0);
   const fromAccount = !floatingKnown && accountFloating !== null;
   const totalFloatingPnl = fromAccount ? (accountFloating as number) : openOnes.reduce((acc, curr) => acc + curr.pnl, 0);
   const floatingShown = floatingKnown || fromAccount;
@@ -41,10 +46,10 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades, acco
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-bold text-sm sm:text-base text-white">
-                MT5 Copied Trades
+                Copied Trades
               </h3>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700">
-                Bridge Mirror
+                Copy trading
               </span>
             </div>
             <p className="text-[11px] text-slate-400 mt-0.5">
@@ -175,17 +180,20 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades, acco
                 {/* Price & Risk Info */}
                 <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-xs font-mono">
                   <div>
-                    <span className="text-[10px] text-slate-500 block">Entry / Current:</span>
+                    <span className="text-[10px] text-slate-500 block">{showNow ? 'Entry / Current:' : 'Entry price:'}</span>
                     <span className="text-slate-200">
-                      {price(trade.openPrice, trade.symbol.includes('JPY') ? 3 : 5)} → {price(trade.currentPrice, trade.symbol.includes('JPY') ? 3 : 5)}
+                      {price(trade.openPrice, trade.symbol.includes('JPY') ? 3 : 5)}
+                      {showNow ? ` → ${price(trade.currentPrice, trade.symbol.includes('JPY') ? 3 : 5)}` : ''}
                     </span>
                   </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-slate-500 block">SL / TP:</span>
-                    <span className="text-slate-300">
-                      {price(trade.sl, trade.symbol.includes('JPY') ? 3 : 4)} / {price(trade.tp, trade.symbol.includes('JPY') ? 3 : 4)}
-                    </span>
-                  </div>
+                  {showLimits && (
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-500 block">SL / TP:</span>
+                      <span className="text-slate-300">
+                        {price(trade.sl, trade.symbol.includes('JPY') ? 3 : 4)} / {price(trade.tp, trade.symbol.includes('JPY') ? 3 : 4)}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
@@ -208,20 +216,20 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades, acco
         <table className="w-full text-left text-xs text-slate-300">
           <thead className="bg-slate-950/60 border-b border-slate-800 text-[10px] font-semibold uppercase text-slate-400 tracking-wider">
             <tr>
-              <th className="py-3 px-4">Symbol / Signal</th>
+              <th className="py-3 px-4">Symbol</th>
               <th className="py-3 px-4">Direction</th>
               <th className="py-3 px-4">Volume (Lots)</th>
               <th className="py-3 px-4">Entry / Current</th>
-              <th className="py-3 px-4">SL / TP</th>
-              <th className="py-3 px-4">Commission & Swap</th>
+              {showLimits && <th className="py-3 px-4">SL / TP</th>}
+              {showCosts && <th className="py-3 px-4">Commission & Swap</th>}
               <th className="py-3 px-4 text-right">Profit / Loss</th>
-              <th className="py-3 px-4 text-right">Idempotency Key</th>
+              <th className="py-3 px-4 text-right">Trade ID</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
             {filteredTrades.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-slate-500 text-xs">
+                <td colSpan={columnCount} className="py-8 text-center text-slate-500 text-xs">
                   No copied positions match the current filter.
                 </td>
               </tr>
@@ -267,26 +275,32 @@ export const TradeCopierTable: React.FC<TradeCopierTableProps> = ({ trades, acco
 
                     <td className="py-3.5 px-4 font-mono text-[11px]">
                       <div className="text-slate-200">{price(trade.openPrice, trade.symbol.includes('JPY') ? 3 : 5)}</div>
-                      <div className="text-slate-400 text-[10px]">
-                        now: {price(trade.currentPrice, trade.symbol.includes('JPY') ? 3 : 5)}
-                      </div>
-                    </td>
-
-                    <td className="py-3.5 px-4 font-mono text-[10px] text-slate-400">
-                      <div>SL: {price(trade.sl, trade.symbol.includes('JPY') ? 3 : 5)}</div>
-                      <div>TP: {price(trade.tp, trade.symbol.includes('JPY') ? 3 : 5)}</div>
-                    </td>
-
-                    <td className="py-3.5 px-4 font-mono text-[10px] text-slate-400">
-                      {hasCosts(trade) ? (
-                        <>
-                          <div>Comm: -${trade.commission.toFixed(2)}</div>
-                          <div>Swap: ${trade.swap.toFixed(2)}</div>
-                        </>
-                      ) : (
-                        <div>{'\u2014'}</div>
+                      {showNow && (
+                        <div className="text-slate-400 text-[10px]">
+                          now: {price(trade.currentPrice, trade.symbol.includes('JPY') ? 3 : 5)}
+                        </div>
                       )}
                     </td>
+
+                    {showLimits && (
+                      <td className="py-3.5 px-4 font-mono text-[10px] text-slate-400">
+                        <div>SL: {price(trade.sl, trade.symbol.includes('JPY') ? 3 : 5)}</div>
+                        <div>TP: {price(trade.tp, trade.symbol.includes('JPY') ? 3 : 5)}</div>
+                      </td>
+                    )}
+
+                    {showCosts && (
+                      <td className="py-3.5 px-4 font-mono text-[10px] text-slate-400">
+                        {hasCosts(trade) ? (
+                          <>
+                            <div>Comm: -${trade.commission.toFixed(2)}</div>
+                            <div>Swap: ${trade.swap.toFixed(2)}</div>
+                          </>
+                        ) : (
+                          <div>{'\u2014'}</div>
+                        )}
+                      </td>
+                    )}
 
                     <td className="py-3.5 px-4 text-right">
                       <div

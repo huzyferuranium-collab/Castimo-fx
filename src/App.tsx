@@ -129,7 +129,7 @@ const MainContent: React.FC = () => {
               }`}
             >
               <TrendingUp className="w-3.5 h-3.5" />
-              <span>Client Terminal</span>
+              <span>My Trading</span>
             </button>
             <button
               onClick={() => handleSelectTab('referrals')}
@@ -174,7 +174,7 @@ const MainContent: React.FC = () => {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-24">
         {!userProfile ? (
           /* Unauthenticated Landing / Onboarding View */
           <div className="relative py-4 animate-in fade-in duration-300">
