@@ -4,7 +4,7 @@ import { clientIpFrom } from './clientIp';
 import { BillingService, billingConfig } from './billing';
 import { Mt5ConnectionManager } from './MT5_CONNECTION_MANAGER';
 import { DEFAULT_MIN_CONNECT_EQUITY, readLimit } from './brokerVerification';
-import { DAILY_EQUITY_RATES_PCT, REFERRAL_RATES_PCT, WITHDRAW_FEE_PCT, WITHDRAW_MIN_USDT } from './referrals';
+import { WEEKLY_EQUITY_RATES_PCT, REFERRAL_RATES_PCT, WITHDRAW_FEE_PCT, WITHDRAW_MIN_USDT } from './referrals';
 import {
   AssistantError,
   type ClientFacts,
@@ -91,7 +91,7 @@ assistantRouter.post('/chat', async (req: Request, res: Response) => {
         subscriptionPriceUsdt: cfg.subscriptionPriceUsdt,
         subscriptionDays: cfg.subscriptionDays,
         referralPlanPct: [...REFERRAL_RATES_PCT],
-        referralDailyPct: [...DAILY_EQUITY_RATES_PCT],
+        referralWeeklyPct: [...WEEKLY_EQUITY_RATES_PCT],
         withdrawMinUsdt: WITHDRAW_MIN_USDT,
         withdrawFeePct: WITHDRAW_FEE_PCT,
         supportWhatsapp: (process.env.SUPPORT_WHATSAPP || '').trim(),

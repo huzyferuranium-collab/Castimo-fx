@@ -3,7 +3,7 @@
  *
  *  - Three levels. Level 1 earns 10%, level 2 earns 5%, level 3 earns 5% of what the referred client
  *    pays for the $100 Monthly Plan, ONCE per client (the first verified payment; renewals earn nothing). Profit Share clients
- *    earn their referrers the daily equity commission instead (see DAILY_EQUITY_RATES_PCT).
+ *    earn their referrers the weekly equity commission instead (see WEEKLY_EQUITY_RATES_PCT).
  *  - A withdrawal request must be at least $50 (gross). A 10% processing fee is taken from it.
  *  - Requests made before Thursday 23:59 GMT join that week's cycle. Later ones join the next week's.
  *    GMT/UTC is the only clock used, and the server's time is the only time that counts.
@@ -12,11 +12,16 @@
 export const REFERRAL_RATES_PCT = [10, 5, 5] as const;
 
 /**
- * Daily equity commission (50% Profit Share clients): on every business day (Monday to Friday, UTC), the three referrers
- * above a connected client earn these percentages of that client's equity, as the copier service reports it. There is no
- * monthly limit: it carries on every business day for as long as the account stays connected. Weekends are never paid.
+ * Equity commission (50% Profit Share clients). The three referrers above a connected client earn these percentages of that
+ * client's equity EVERY WEEK, as the copier service reports it. It is earned in five equal parts, one on each business day
+ * (Monday to Friday, UTC) the account is connected, so a week is paid on the client's average equity and a day without a
+ * connection earns nothing. There is no monthly limit. Weekends are never paid. The whole week is withdrawable in that
+ * week's round (see the withdrawal rules).
  */
-export const DAILY_EQUITY_RATES_PCT = [1, 0.5, 0.5] as const;
+export const WEEKLY_EQUITY_RATES_PCT = [1, 0.5, 0.5] as const;
+export const BUSINESS_DAYS_PER_WEEK = 5;
+/** What one business day earns: a fifth of the weekly rate. */
+export const DAILY_EQUITY_RATES_PCT = WEEKLY_EQUITY_RATES_PCT.map((r) => r / BUSINESS_DAYS_PER_WEEK);
 
 /** 1 for the first Monday-to-Friday of the month (UTC), 2 for the second, ...; 0 on a Saturday or Sunday. */
 export function workingDayOfMonth(nowMs: number): number {
@@ -31,19 +36,19 @@ export function workingDayOfMonth(nowMs: number): number {
   return n;
 }
 
-/** True on a day that pays the daily equity commission: any business day (Monday to Friday, UTC). */
+/** True on a day that earns a share of the weekly equity commission: any business day (Monday to Friday, UTC). */
 export function isDailyCommissionDay(nowMs: number): boolean {
   return workingDayOfMonth(nowMs) >= 1;
 }
 
-/** The daily equity commission for one client's equity: `chain[0]` is the direct referrer. */
+/** One business day's share (a fifth of the weekly rate) of the equity commission for one client's equity: `chain[0]` is the direct referrer. */
 export function dailyEquityLines(chain: string[], equityUsd: number): CommissionLine[] {
   const out: CommissionLine[] = [];
   if (!Number.isFinite(equityUsd) || equityUsd <= 0) return out;
   for (let i = 0; i < Math.min(chain.length, DAILY_EQUITY_RATES_PCT.length); i++) {
     const amount = round2((equityUsd * DAILY_EQUITY_RATES_PCT[i]) / 100);
     if (amount <= 0 || !chain[i]) continue;
-    out.push({ beneficiaryUid: chain[i], level: (i + 1) as 1 | 2 | 3, ratePct: DAILY_EQUITY_RATES_PCT[i], amountUsdt: amount });
+    out.push({ beneficiaryUid: chain[i], level: (i + 1) as 1 | 2 | 3, ratePct: WEEKLY_EQUITY_RATES_PCT[i], amountUsdt: amount });
   }
   return out;
 }

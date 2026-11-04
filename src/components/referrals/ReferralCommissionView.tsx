@@ -55,7 +55,7 @@ export const ReferralCommissionView: React.FC = () => {
   const net = valid ? Math.round((n - fee) * 100) / 100 : 0;
   const open = s.withdrawals.find((w) => w.status === 'pending' || w.status === 'processing');
 
-  const daily = s.dailyRatesPct ?? [1, 0.5, 0.5];
+  const weekly = s.weeklyRatesPct ?? [1, 0.5, 0.5];
   const rateText = (r: number[]) => `${r[0]}% · ${r[1]}% · ${r[2]}%`;
   const saved = s.wallet || '';
 
@@ -89,7 +89,7 @@ export const ReferralCommissionView: React.FC = () => {
         tone="ruby"
         art="network"
         title="Referral Hub"
-        subtitle={`${rateText(s.ratesPct)} once on the $100 Monthly Plan · ${rateText(daily)} daily on 50% Profit Share clients.`}
+        subtitle={`${rateText(s.ratesPct)} once on the $100 Monthly Plan · ${rateText(weekly)} every week on 50% Profit Share clients.`}
       />
       <div className="flex gap-2">
         {(['overview', 'withdraw'] as const).map((t) => (
@@ -126,17 +126,17 @@ export const ReferralCommissionView: React.FC = () => {
               <span className="text-[11px] text-slate-500">of the first $100 Monthly Plan payment, paid once · levels 1 · 2 · 3</span>
             </div>
             <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-              <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Daily commission · 50% Profit Share</span>
-              <div className="text-lg font-black font-mono text-amber-500 mt-0.5">{rateText(daily)}</div>
-              <span className="text-[11px] text-slate-500">of the client's equity, every business day (Mon–Fri)</span>
+              <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Weekly commission · 50% Profit Share</span>
+              <div className="text-lg font-black font-mono text-amber-500 mt-0.5">{rateText(weekly)}</div>
+              <span className="text-[11px] text-slate-500">of the client's average equity, every week</span>
             </div>
           </div>
 
-          <Collapsible title="How commissions work" summary="Levels, the daily commission, and how you get paid" openLabel="Show" closeLabel="Hide">
+          <Collapsible title="How commissions work" summary="Levels, the weekly commission, and how you get paid" openLabel="Show" closeLabel="Hide">
             <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
               <p><b>Levels.</b> Level 1 is someone who joined with your link. Level 2 joined with their link, and level 3 with the next one down.</p>
               <p><b>Monthly Plan commission ({rateText(s.ratesPct)}), paid once.</b> When a client you referred pays the $100 Monthly Plan for the first time, you earn ${(100 * s.ratesPct[0] / 100).toFixed(0)} (level 1), ${(100 * s.ratesPct[1] / 100).toFixed(0)} (level 2) or ${(100 * s.ratesPct[2] / 100).toFixed(0)} (level 3). Renewals in later months earn nothing. Nothing is earned until the payment is verified.</p>
-              <p><b>Daily commission ({rateText(daily)}).</b> Every 24 hours, for each 50% Profit Share client you referred whose MT5 account stays connected, you earn that percentage of their equity as shown by the copier. It is paid every business day (Monday to Friday, never at weekends) for as long as the account stays connected. A disconnected account earns nothing that day. Example: a level 1 client with $1,000 equity earns you ${(1000 * daily[0] / 100).toFixed(2)} a day.</p>
+              <p><b>Weekly commission ({rateText(weekly)}).</b> For each 50% Profit Share client you referred with a real MT5 account, you earn that percentage of their equity every week, as shown by the copier. It builds up in five equal parts, one on each business day (Monday to Friday) the account is connected, so it follows their average equity, and a day without a connection earns nothing. It starts once the account has been connected for 24 hours. Practice (demo) accounts earn nothing. Example: a level 1 client with $1,000 equity earns you ${(1000 * weekly[0] / 100).toFixed(2)} a week (${(1000 * weekly[0] / 500).toFixed(2)} a business day).</p>
               <p><b>Getting paid.</b> Commissions build up as your balance here. Save your TRON (TRC20) address under Withdraw and request a withdrawal (minimum ${s.rules.minUsdt}, {s.rules.feePct}% processing fee). The admin checks it and sends the USDT to your address.</p>
             </div>
           </Collapsible>
@@ -174,7 +174,7 @@ export const ReferralCommissionView: React.FC = () => {
                       {c.basePaidUsdt != null && (
                         <span className="block text-[10px] text-slate-500">
                           of ${Number(c.basePaidUsdt).toFixed(2)}
-                          {c.sourceType === 'subscription' ? ' · Monthly Plan' : c.sourceType === 'profit_invoice' ? ' · Profit Share fee' : c.sourceType === 'daily_equity' ? ' equity · daily commission' : ''}
+                          {c.sourceType === 'subscription' ? ' · Monthly Plan' : c.sourceType === 'profit_invoice' ? ' · Profit Share fee' : c.sourceType === 'daily_equity' ? ' equity · weekly commission' : ''}
                         </span>
                       )}
                     </span>

@@ -9,7 +9,7 @@ import { DocExistsError, createDoc, getDoc, isFirestoreAdminConfigured, listAll,
 import { TXID_PATTERN as HASH, checkUsdtPayment, fetchTxEvents, isTxFinalAndSuccessful, tronAddressToHex20 } from './tron.ts';
 import {
   REFERRAL_RATES_PCT,
-  DAILY_EQUITY_RATES_PCT,
+  WEEKLY_EQUITY_RATES_PCT,
   dailyEquityLines,
   WITHDRAW_FEE_PCT,
   WITHDRAW_MIN_USDT,
@@ -222,7 +222,7 @@ export async function summary(uid: string) {
     code,
     link: `${BASE_URL}/?ref=${code}`,
     ratesPct: [...REFERRAL_RATES_PCT],
-    dailyRatesPct: [...DAILY_EQUITY_RATES_PCT],
+    weeklyRatesPct: [...WEEKLY_EQUITY_RATES_PCT],
     wallet: await savedWallet(uid),
     counts: { level1: levels[0].length, level2: levels[1].length, level3: levels[2].length },
     earnedUsdt: bal.earned,
@@ -408,7 +408,7 @@ export async function notificationsFor(uid: string) {
       kind: 'personal',
       title: 'Referral commission',
       message: c.sourceType === 'daily_equity'
-        ? `Daily commission: $${Number(c.amountUsdt).toFixed(2)} (level ${c.level}, ${c.ratePct}% of a client's equity).`
+        ? `Equity commission: $${Number(c.amountUsdt).toFixed(2)} for today (level ${c.level}, one fifth of the ${c.ratePct}% weekly rate on a client's equity).`
         : `You earned $${Number(c.amountUsdt).toFixed(2)} (level ${c.level}, ${c.ratePct}%).`,
       at: String(c.createdAt),
     });

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildSystemPrompt, cleanHistory, askGemini, allowMessage, describeClient, supportLine } from '../src/backend/assistant.ts';
 
-const K = { feePct: 50, minProfitUsd: 20, toleranceUsdt: 4, dueHours: 24, minEquityUsd: 100, subscriptionPriceUsdt: 100, subscriptionDays: 30, referralPlanPct: [10, 5, 5], referralDailyPct: [1, 0.5, 0.5], withdrawMinUsdt: 50, withdrawFeePct: 10, supportWhatsapp: '+254700000000', supportEmail: '' };
+const K = { feePct: 50, minProfitUsd: 20, toleranceUsdt: 4, dueHours: 24, minEquityUsd: 100, subscriptionPriceUsdt: 100, subscriptionDays: 30, referralPlanPct: [10, 5, 5], referralWeeklyPct: [1, 0.5, 0.5], withdrawMinUsdt: 50, withdrawFeePct: 10, supportWhatsapp: '+254700000000', supportEmail: '' };
 
 test('the instructions carry the live rules and the safety rules', () => {
   const p = buildSystemPrompt(K, { signedIn: false });

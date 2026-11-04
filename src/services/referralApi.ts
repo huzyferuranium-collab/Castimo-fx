@@ -22,7 +22,7 @@ export interface ReferralSummary {
   link: string;
   ratesPct: number[];
   /** Daily equity commission (Monthly Plan clients), levels 1-3, percent of the client's equity per paid day. */
-  dailyRatesPct?: number[];
+  weeklyRatesPct?: number[];
   /** The TRON address saved for withdrawals ('' when none). */
   wallet?: string;
   counts: { level1: number; level2: number; level3: number };

@@ -205,7 +205,7 @@ export class BillingService {
   private dailyEquityDone = new Set<string>();
 
   /**
-   * The daily equity commission: on every business day (Mon-Fri, UTC), for as long as it stays connected, every 50% Profit Share client
+   * The weekly equity commission, earned a fifth per day: on every business day (Mon-Fri, UTC), for as long as it stays connected, every 50% Profit Share client
    * earns their three referrers 1% / 0.5% / 0.5% of the client's equity (as the copier service reports it at that moment). Runs every 10 minutes and credits
    * each client once a day (the credits have fixed ids). A disconnected account earns nothing that day.
    */
@@ -229,7 +229,7 @@ export class BillingService {
         credited += await accrueDailyEquityCommission(rec.userId, equity, day);
         this.dailyEquityDone.add(mark);
       } catch (e: any) {
-        console.warn(`⚠️ [REFERRALS] Daily commission for ${rec.userId} not credited yet:`, e?.message);
+        console.warn(`⚠️ [REFERRALS] Equity commission for ${rec.userId} not credited yet:`, e?.message);
       }
     }
     if (credited) console.log(`💸 [REFERRALS] Daily equity commission ${day}: ${credited} credit(s).`);
