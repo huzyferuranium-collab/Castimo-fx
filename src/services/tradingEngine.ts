@@ -301,26 +301,12 @@ class TradingEngine {
     // A connected account is never blocked or disconnected because its equity falls.
 
     if (openTrades.length >= this.riskSettings.maxOpenPositions) {
-      if (status !== 'blocked') {
-        status = 'warning';
-        reason = `Max open positions reached (${openTrades.length}/${this.riskSettings.maxOpenPositions}).`;
-      }
+      status = 'warning';
+      reason = `Max open positions reached (${openTrades.length}/${this.riskSettings.maxOpenPositions}).`;
     }
 
     this.mt5Account.riskStatus = status;
     this.mt5Account.blockedReason = reason;
-
-    if (status === 'blocked' && this.mt5Account.status === 'copying') {
-      this.mt5Account.status = 'blocked';
-      this.logAudit(
-        this.mt5Account.userId,
-        'SYSTEM_RISK_ENGINE',
-        'TRADE_COPYING_BLOCKED',
-        'RISK',
-        reason || 'Equity fell below $200 safety floor.',
-        'FAILED'
-      );
-    }
 
     return { riskStatus: status, blockedReason: reason };
   }
