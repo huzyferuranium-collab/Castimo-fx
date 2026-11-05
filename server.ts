@@ -87,6 +87,12 @@ async function startServer() {
     res.type('application/json').set('Cache-Control', 'public, max-age=300').send(JSON.stringify(links));
   });
 
+  // Any /api address that no route above answered is a mistake: say so with a 404, instead of letting the website
+  // fallback below answer it with the home page (status 200).
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ error: 'Not found' });
+  });
+
   if (isProduction) {
     const missing = ['DUPLIKIUM_API_USER', 'DUPLIKIUM_API_TOKEN', 'DUPLIKIUM_MASTER_ID', 'DUPLIKIUM_TEMPLATE_ID'].filter((k) => !(process.env[k] || '').trim());
     if (missing.length) {
