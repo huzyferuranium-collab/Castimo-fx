@@ -137,7 +137,8 @@ It stays OFF until both of these are set on Render (Environment):
 
 Optional settings (defaults in brackets):
 - `FEE_PCT` [50] share of new profit.
-- `SETTLEMENT_PERIOD_DAYS` [7] how often invoices are made.
+- `SETTLEMENT_PERIOD_DAYS` [1] how often, in days, profit is settled and invoices can be made (every 24 hours by default).
+- `MIN_INVOICE_PROFIT_USD` [20] new profit needed before an invoice is made; smaller profit is carried forward and copying is not paused for it.
 - `TRONGRID_API_KEY` free key from trongrid.io, recommended to avoid rate limits.
 
 How it works: profit is the net result (profit + commission + swap) of the trades that **closed** on the client's account, read from the copier service.
@@ -145,8 +146,9 @@ Because a closed trade is never affected by money moving in or out of the accoun
 service does not need to report them.
 - The first time a client's broker account is verified, a ledger starts. Only trades that closed after that moment are ever counted.
 - Every closed trade is stored once (Firestore `ps_days`), so repeating a check can never count it twice.
-- At each period end (`SETTLEMENT_PERIOD_DAYS`, 7 by default) the cumulative closed-trade result is compared with its high-water mark. 50% of the part above the mark
-  becomes an invoice. After a loss, profit must first climb back above the mark. A fee under $1 rolls into the next period. Open (floating) trades are not charged until they close.
+- At each period end (`SETTLEMENT_PERIOD_DAYS`, every 24 hours by default) the cumulative closed-trade result is compared with its high-water mark. 50% of the part above the mark
+  becomes an invoice once that new profit reaches `MIN_INVOICE_PROFIT_USD` ($20 by default); below that, or when the fee would be under $1, it rolls into the next period.
+  After a loss, profit must first climb back above the mark. Open (floating) trades are not charged until they close.
 - If any closed trade has no readable profit or close time, that client is NOT billed or updated until it can be read (the Render log says which client and why). Nothing is guessed.
 - Clients that were connected before this was switched on are billed on trades closed since they connected, but their first invoice waits 2 days after this version first runs, so you can compare the first daily updates with Duplikium before anything is invoiced.
 - **Daily update:** from 00:15 GMT each day, every profit-share client gets a "Profit Share update" in their notifications (Firestore `ps_daily`): what closed the day before,
