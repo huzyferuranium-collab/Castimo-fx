@@ -284,3 +284,23 @@ test('the sweep and "Pay my share now" at the same moment make one invoice, and 
   assert.equal(ledger.pendingInvoice, undefined);
   assert.equal(results[0].status, 'fulfilled', 'pay-now made the invoice; the sweep then found nothing new to settle');
 });
+
+test('the next sweep finishes an interrupted invoice right away, with time left to pay it', async () => {
+  const { fake, db, billing } = await world();
+  const t0 = Date.parse('2026-11-09T03:00:00Z');
+  mock.timers.enable({ apis: ['Date'], now: t0 });
+  const led: any = db.docs.get('client_ledgers/u1');
+  // The last settlement (yesterday 22:00) saved the ledger but stopped before saving its invoice, which was due 23:59 yesterday.
+  const pending = { id: 'inv-u1-20261108-220000', userId: 'u1', accountLogin: '5551234', currency: 'USD', amountDueUsdt: 40, status: 'pending', createdAt: '2026-11-08T22:00:00.000Z', dueAt: '2026-11-08T23:59:00.000Z', periodPnl: 80, periodTrades: 1 };
+  db.docs.set('client_ledgers/u1', { ...led, pnlCum: 80, pnlHwm: 80, settledThrough: '2026-11-08T22:00:00.000Z', createdAt: '2026-11-01T00:00:00.000Z', pendingInvoice: pending });
+
+  await billing.sweep(); // the next period is not due until 22:00 today
+  const [inv] = db.invoices('u1');
+  assert.ok(inv, 'the invoice exists after the very next sweep');
+  assert.equal(inv.amountDueUsdt, 40);
+  assert.equal(inv.dueAt, '2026-11-09T23:59:00.000Z', 'a fresh due time, not the one that passed while it was missing');
+  assert.equal(db.docs.get('client_ledgers/u1').pendingInvoice, undefined);
+  await billing.sweep();
+  await sleep(30);
+  assert.equal(fake.copier.get('D1'), 1, 'the client is not held back for an invoice they could not see');
+});

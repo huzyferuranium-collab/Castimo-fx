@@ -416,3 +416,18 @@ test('a settlement interrupted between its two saves is finished by the next run
   assert.equal(later.invoice, null);
   assert.equal(invoicesIn(store).length, 1);
 });
+
+test('an interrupted invoice finished late gets a fresh due time; one finished in time keeps its own', async () => {
+  const { finishPendingInvoice } = await import('../src/backend/profitShareRun.ts');
+  const inv = (dueAt: string): any => ({ id: 'inv-u1-20261108-100000', userId: 'u1', amountDueUsdt: 40, status: 'pending', dueAt, createdAt: '2026-11-08T10:00:00.000Z' });
+
+  const late = new FakeStore();
+  const a = await finishPendingInvoice(late, { ...ledger0(), pendingInvoice: inv('2026-11-08T23:59:00.000Z') } as any, new Date('2026-11-09T03:00:00.000Z'));
+  assert.equal(a.invoice!.dueAt, '2026-11-09T23:59:00.000Z', 'past its recorded due time: due at the end of today instead');
+  assert.equal(late.docs.get('profit_invoices/inv-u1-20261108-100000').dueAt, '2026-11-09T23:59:00.000Z');
+
+  const onTime = new FakeStore();
+  const b = await finishPendingInvoice(onTime, { ...ledger0(), pendingInvoice: inv('2026-11-08T23:59:00.000Z') } as any, new Date('2026-11-08T10:05:00.000Z'));
+  assert.equal(b.invoice!.dueAt, '2026-11-08T23:59:00.000Z');
+  assert.equal(onTime.docs.get('client_ledgers/u1').pendingInvoice, undefined);
+});

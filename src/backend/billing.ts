@@ -454,7 +454,10 @@ export class BillingService {
         if (isDemoAccount(rec)) continue; // practice accounts are never invoiced
         try {
           await this.withUserLock(rec.userId, async () => {
-            let ledger = await this.openLedger(rec);
+            // An invoice from an interrupted settlement is finished on the very next sweep, not only when the next period is due.
+            const finished = await finishPendingInvoice(this.psDeps().store, await this.openLedger(rec));
+            if (finished.invoice) console.log(`🧾 [BILLING] Finished interrupted invoice ${finished.invoice.id}: ${finished.invoice.amountDueUsdt} USDT for ${rec.userId}`);
+            let ledger = finished.ledger;
             const up = upgradeLedger(ledger, Date.now());
             if (up.changed) {
               ledger = up.ledger;

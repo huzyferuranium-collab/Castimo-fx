@@ -10,7 +10,7 @@
 import { DocExistsError } from './firestoreAdmin.ts';
 import type { PositionsResult } from './duplikiumClient.ts';
 import type { ClientLedger, Invoice } from './profitShare.ts';
-import { invoiceDueAt, invoiceId, round2 } from './profitShare.ts';
+import { MIN_PAYMENT_WINDOW_MINUTES, invoiceDueAt, invoiceId, round2 } from './profitShare.ts';
 import type { DayTrades } from './profitShareRealized.ts';
 import {
   dayKey,
@@ -131,10 +131,16 @@ function withoutPending(ledger: ClientLedger): ClientLedger {
 /**
  * Finishes a settlement that was interrupted after its ledger was saved: saves the invoice it recorded and clears the record.
  * Returns the ledger as it now stands and the invoice that was finished (null when there was nothing to finish).
+ *
+ * If the invoice is finished so late that less than the normal payment window is left before its recorded due time, it gets
+ * a fresh due time from `now` (as a new invoice would), so the client is never held back for an invoice they could not see.
  */
-export async function finishPendingInvoice(store: PsStore, ledger: ClientLedger): Promise<{ ledger: ClientLedger; invoice: Invoice | null }> {
-  const invoice = ledger.pendingInvoice;
-  if (!invoice) return { ledger, invoice: null };
+export async function finishPendingInvoice(store: PsStore, ledger: ClientLedger, now: Date = new Date()): Promise<{ ledger: ClientLedger; invoice: Invoice | null }> {
+  const recorded = ledger.pendingInvoice;
+  if (!recorded) return { ledger, invoice: null };
+  const due = Date.parse(recorded.dueAt);
+  const enoughTime = Number.isFinite(due) && due - now.getTime() >= MIN_PAYMENT_WINDOW_MINUTES * 60_000;
+  const invoice: Invoice = enoughTime ? recorded : { ...recorded, dueAt: invoiceDueAt(now) };
   await saveInvoice(store, invoice);
   const next = withoutPending(ledger);
   await store.setDoc('client_ledgers', ledger.userId, next as unknown as Record<string, unknown>);
@@ -150,7 +156,7 @@ export async function finishPendingInvoice(store: PsStore, ledger: ClientLedger)
  */
 export async function settleClient(deps: RunDeps, ledgerIn: ClientLedger, ctx: SettleContext): Promise<SettleOutcome> {
   // An earlier settlement that was interrupted is finished first, and is this call's result.
-  const finished = await finishPendingInvoice(deps.store, ledgerIn);
+  const finished = await finishPendingInvoice(deps.store, ledgerIn, ctx.now);
   if (finished.invoice) {
     return { kind: 'settled', ledger: finished.ledger, invoice: finished.invoice, periodPnl: Number(finished.invoice.periodPnl ?? 0), trades: Number(finished.invoice.periodTrades ?? 0) };
   }
