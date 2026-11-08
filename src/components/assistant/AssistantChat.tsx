@@ -15,7 +15,8 @@ const WELCOME: Msg = {
 const SUGGESTIONS = ['Why is my account not copying?', 'How do I pay my 50% share?', 'Where do I find my TXID?', 'How do referrals work?'];
 
 /**
- * The help assistant: a chat bubble in the bottom-right corner on every page. Answers come from the server (Gemini), which
+ * The help assistant: a chat bubble in the bottom-right corner of the signed-in pages (App.tsx keeps it off the welcome
+ * page). Answers come from the server (Gemini), which
  * knows the platform's rules and, for a signed-in client, their own account status. Shown only when the server has it on.
  * The conversation lives in this page only and is gone after a reload.
  */
