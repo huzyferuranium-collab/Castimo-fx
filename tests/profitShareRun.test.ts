@@ -202,9 +202,9 @@ test('three periods: invoice 50% of new profit, nothing while recovering, then i
   assert.equal(o1.invoice!.status, 'pending');
   assert.equal(o1.invoice!.dueAt, '2026-11-08T23:59:00.000Z', 'due before midnight GMT on the day it is made');
   assert.equal(o1.invoice!.periodStart, START);
-  assert.equal(o1.invoice!.id, 'inv-u1-20261108-100000');
-  assert.deepEqual([o1.ledger.pnlCum, o1.ledger.pnlHwm, o1.ledger.settledThrough, o1.ledger.lastInvoiceId], [147, 147, '2026-11-08T10:00:00.000Z', 'inv-u1-20261108-100000']);
-  assert.ok(store.docs.get('profit_invoices/inv-u1-20261108-100000'));
+  assert.equal(o1.invoice!.id, 'inv-u1-20261108-100000000');
+  assert.deepEqual([o1.ledger.pnlCum, o1.ledger.pnlHwm, o1.ledger.settledThrough, o1.ledger.lastInvoiceId], [147, 147, '2026-11-08T10:00:00.000Z', 'inv-u1-20261108-100000000']);
+  assert.ok(store.docs.get('profit_invoices/inv-u1-20261108-100000000'));
   assert.deepEqual(store.docs.get('client_ledgers/u1').pnlHwm, 147);
 
   // period 2: -100 + 60 = -40 -> nothing to pay, the high-water mark stays at 147
@@ -243,7 +243,7 @@ test('running the same settlement twice cannot create a second invoice', async (
   assert.equal(first.kind, 'settled');
   assert.equal(again.kind, 'settled');
   assert.equal([...store.docs.keys()].filter((k) => k.startsWith('profit_invoices/')).length, 1);
-  assert.equal(store.docs.get('profit_invoices/inv-u1-20261108-100000').amountDueUsdt, 100);
+  assert.equal(store.docs.get('profit_invoices/inv-u1-20261108-100000000').amountDueUsdt, 100);
 });
 
 test('money moved in or out of the account cannot change the bill (only closed trades are read)', async () => {
@@ -419,15 +419,34 @@ test('a settlement interrupted between its two saves is finished by the next run
 
 test('an interrupted invoice finished late gets a fresh due time; one finished in time keeps its own', async () => {
   const { finishPendingInvoice } = await import('../src/backend/profitShareRun.ts');
-  const inv = (dueAt: string): any => ({ id: 'inv-u1-20261108-100000', userId: 'u1', amountDueUsdt: 40, status: 'pending', dueAt, createdAt: '2026-11-08T10:00:00.000Z' });
+  const inv = (dueAt: string): any => ({ id: 'inv-u1-20261108-100000000', userId: 'u1', amountDueUsdt: 40, status: 'pending', dueAt, createdAt: '2026-11-08T10:00:00.000Z' });
 
   const late = new FakeStore();
   const a = await finishPendingInvoice(late, { ...ledger0(), pendingInvoice: inv('2026-11-08T23:59:00.000Z') } as any, new Date('2026-11-09T03:00:00.000Z'));
   assert.equal(a.invoice!.dueAt, '2026-11-09T23:59:00.000Z', 'past its recorded due time: due at the end of today instead');
-  assert.equal(late.docs.get('profit_invoices/inv-u1-20261108-100000').dueAt, '2026-11-09T23:59:00.000Z');
+  assert.equal(late.docs.get('profit_invoices/inv-u1-20261108-100000000').dueAt, '2026-11-09T23:59:00.000Z');
 
   const onTime = new FakeStore();
   const b = await finishPendingInvoice(onTime, { ...ledger0(), pendingInvoice: inv('2026-11-08T23:59:00.000Z') } as any, new Date('2026-11-08T10:05:00.000Z'));
   assert.equal(b.invoice!.dueAt, '2026-11-08T23:59:00.000Z');
   assert.equal(onTime.docs.get('client_ledgers/u1').pendingInvoice, undefined);
+});
+
+test('a different invoice already stored under the same id is never taken as "already saved": the pending record is kept', async () => {
+  const { finishPendingInvoice } = await import('../src/backend/profitShareRun.ts');
+  const store = new FakeStore();
+  const mine: any = { id: 'inv-u1-20261108-100000000', userId: 'u1', amountDueUsdt: 40, status: 'pending', dueAt: '2026-11-08T23:59:00.000Z', createdAt: '2026-11-08T10:00:00.000Z' };
+  store.docs.set('profit_invoices/inv-u1-20261108-100000000', { ...mine, amountDueUsdt: 25 }); // someone else's invoice, same id
+  const ledger: any = { ...ledger0(), pendingInvoice: mine };
+  store.docs.set('client_ledgers/u1', ledger);
+  await assert.rejects(finishPendingInvoice(store, ledger, new Date('2026-11-08T10:05:00.000Z')));
+  assert.equal(store.docs.get('client_ledgers/u1').pendingInvoice.amountDueUsdt, 40, 'the fee is kept, not dropped');
+  assert.equal(store.docs.get('profit_invoices/inv-u1-20261108-100000000').amountDueUsdt, 25, 'the stored invoice is not overwritten');
+
+  // The same invoice written by an earlier attempt still counts as done.
+  const again = new FakeStore();
+  again.docs.set('profit_invoices/inv-u1-20261108-100000000', { ...mine });
+  const out = await finishPendingInvoice(again, ledger, new Date('2026-11-08T10:05:00.000Z'));
+  assert.equal(out.invoice!.amountDueUsdt, 40);
+  assert.equal(again.docs.get('client_ledgers/u1').pendingInvoice, undefined);
 });

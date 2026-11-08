@@ -113,12 +113,19 @@ export type SettleOutcome =
   | { kind: 'skipped'; reason: string }
   | { kind: 'settled'; ledger: ClientLedger; invoice: Invoice | null; periodPnl: number; trades: number };
 
-/** Saves an invoice, treating "already saved" as done (the same invoice, written by an earlier attempt). */
+/**
+ * Saves an invoice. "Already saved" counts as done only when the stored invoice is this same one (written by an earlier
+ * attempt): same client, amount and creation time. A different invoice under the same id is an error, so the caller keeps
+ * its pending record instead of dropping a fee.
+ */
 async function saveInvoice(store: PsStore, invoice: Invoice): Promise<void> {
   try {
     await store.createDoc('profit_invoices', invoice.id, invoice as unknown as Record<string, unknown>);
   } catch (e) {
     if (!(e instanceof DocExistsError)) throw e;
+    const stored = (await store.getDoc('profit_invoices', invoice.id)) as Partial<Invoice> | null;
+    const same = stored && stored.userId === invoice.userId && stored.createdAt === invoice.createdAt && Number(stored.amountDueUsdt) === Number(invoice.amountDueUsdt);
+    if (!same) throw new Error(`Invoice id ${invoice.id} is already used by a different invoice; not overwriting it.`);
   }
 }
 
