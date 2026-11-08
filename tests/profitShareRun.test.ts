@@ -450,3 +450,25 @@ test('a different invoice already stored under the same id is never taken as "al
   assert.equal(out.invoice!.amountDueUsdt, 40);
   assert.equal(again.docs.get('client_ledgers/u1').pendingInvoice, undefined);
 });
+
+test('finishing late also gives an already-saved, unpaid invoice the fresh due time; a paid one is left alone', async () => {
+  const { finishPendingInvoice } = await import('../src/backend/profitShareRun.ts');
+  const recorded: any = { id: 'inv-u1-20261108-220000000', userId: 'u1', amountDueUsdt: 40, status: 'pending', dueAt: '2026-11-08T23:59:00.000Z', createdAt: '2026-11-08T22:00:00.000Z' };
+  const lateNow = new Date('2026-11-09T03:00:00.000Z');
+
+  // The interrupted run saved the invoice but stopped before clearing the ledger's record.
+  const store = new FakeStore();
+  store.docs.set(`profit_invoices/${recorded.id}`, { ...recorded });
+  await finishPendingInvoice(store, { ...ledger0(), pendingInvoice: recorded } as any, lateNow);
+  assert.equal(store.docs.get(`profit_invoices/${recorded.id}`).dueAt, '2026-11-09T23:59:00.000Z', 'the stored invoice gets the fresh due time');
+  assert.equal(store.docs.get(`profit_invoices/${recorded.id}`).amountDueUsdt, 40);
+  assert.equal(store.docs.get('client_ledgers/u1').pendingInvoice, undefined);
+
+  // If the client had already paid it, nothing about it changes.
+  const paidStore = new FakeStore();
+  paidStore.docs.set(`profit_invoices/${recorded.id}`, { ...recorded, status: 'paid', paidAt: '2026-11-08T23:00:00.000Z' });
+  await finishPendingInvoice(paidStore, { ...ledger0(), pendingInvoice: recorded } as any, lateNow);
+  const paid = paidStore.docs.get(`profit_invoices/${recorded.id}`);
+  assert.deepEqual([paid.status, paid.dueAt, paid.paidAt], ['paid', '2026-11-08T23:59:00.000Z', '2026-11-08T23:00:00.000Z'], 'the paid invoice is untouched');
+  assert.equal(paidStore.docs.get('client_ledgers/u1').pendingInvoice, undefined, 'and the record is cleared');
+});

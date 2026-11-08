@@ -149,6 +149,14 @@ export async function finishPendingInvoice(store: PsStore, ledger: ClientLedger,
   const enoughTime = Number.isFinite(due) && due - now.getTime() >= MIN_PAYMENT_WINDOW_MINUTES * 60_000;
   const invoice: Invoice = enoughTime ? recorded : { ...recorded, dueAt: invoiceDueAt(now) };
   await saveInvoice(store, invoice);
+  if (!enoughTime) {
+    // The invoice may have been saved by the interrupted run with the old due time: if it is still unpaid and due sooner,
+    // give it the fresh due time too, so the client is not held back the moment it is finished. A paid one is left alone.
+    const stored = (await store.getDoc('profit_invoices', invoice.id)) as Partial<Invoice> | null;
+    if (stored && stored.status === 'pending' && !(Date.parse(String(stored.dueAt)) >= Date.parse(invoice.dueAt))) {
+      await store.setDoc('profit_invoices', invoice.id, { ...stored, dueAt: invoice.dueAt } as Record<string, unknown>);
+    }
+  }
   const next = withoutPending(ledger);
   await store.setDoc('client_ledgers', ledger.userId, next as unknown as Record<string, unknown>);
   return { ledger: next, invoice };
