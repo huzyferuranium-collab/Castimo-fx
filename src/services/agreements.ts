@@ -1,5 +1,4 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { loadFirestore } from '../config/firebase';
 import { TERMS_VERSION } from '../legal/terms';
 import { authHeaders } from './apiAuth';
 
@@ -29,7 +28,8 @@ function writeLocal(uid: string) {
 }
 
 async function saveRecord(uid: string): Promise<void> {
-  await setDoc(doc(db, 'agreements', docId(uid)), {
+  const { fs, db } = await loadFirestore();
+  await fs.setDoc(fs.doc(db, 'agreements', docId(uid)), {
     userId: uid,
     version: TERMS_VERSION,
     acceptedAt: new Date().toISOString(),
@@ -60,7 +60,8 @@ export async function recoverAcceptance(uid: string): Promise<boolean> {
 
 export async function hasAcceptedTerms(uid: string): Promise<boolean> {
   try {
-    const snap = await getDoc(doc(db, 'agreements', docId(uid)));
+    const { fs, db } = await loadFirestore();
+    const snap = await fs.getDoc(fs.doc(db, 'agreements', docId(uid)));
     if (snap.exists()) {
       writeLocal(uid);
       return true;
