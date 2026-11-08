@@ -10,7 +10,7 @@
 import { DocExistsError } from './firestoreAdmin.ts';
 import type { PositionsResult } from './duplikiumClient.ts';
 import type { ClientLedger, Invoice } from './profitShare.ts';
-import { invoiceDueAt, invoiceId, round2 } from './profitShare.ts';
+import { MIN_PAYMENT_WINDOW_MINUTES, invoiceDueAt, invoiceId, round2 } from './profitShare.ts';
 import type { DayTrades } from './profitShareRealized.ts';
 import {
   dayKey,
@@ -113,8 +113,71 @@ export type SettleOutcome =
   | { kind: 'skipped'; reason: string }
   | { kind: 'settled'; ledger: ClientLedger; invoice: Invoice | null; periodPnl: number; trades: number };
 
-/** Ends the period: stores any new trades, works out the 50% share of new profit, invoices it, and moves the ledger on. */
-export async function settleClient(deps: RunDeps, ledger: ClientLedger, ctx: SettleContext): Promise<SettleOutcome> {
+/**
+ * Saves an invoice. "Already saved" counts as done only when the stored invoice is this same one (written by an earlier
+ * attempt): same client, amount and creation time. A different invoice under the same id is an error, so the caller keeps
+ * its pending record instead of dropping a fee.
+ */
+async function saveInvoice(store: PsStore, invoice: Invoice): Promise<void> {
+  try {
+    await store.createDoc('profit_invoices', invoice.id, invoice as unknown as Record<string, unknown>);
+  } catch (e) {
+    if (!(e instanceof DocExistsError)) throw e;
+    const stored = (await store.getDoc('profit_invoices', invoice.id)) as Partial<Invoice> | null;
+    const same = stored && stored.userId === invoice.userId && stored.createdAt === invoice.createdAt && Number(stored.amountDueUsdt) === Number(invoice.amountDueUsdt);
+    if (!same) throw new Error(`Invoice id ${invoice.id} is already used by a different invoice; not overwriting it.`);
+  }
+}
+
+/** The ledger without its pending invoice. */
+function withoutPending(ledger: ClientLedger): ClientLedger {
+  const { pendingInvoice: _done, ...rest } = ledger;
+  return rest;
+}
+
+/**
+ * Finishes a settlement that was interrupted after its ledger was saved: saves the invoice it recorded and clears the record.
+ * Returns the ledger as it now stands and the invoice that was finished (null when there was nothing to finish).
+ *
+ * If the invoice is finished so late that less than the normal payment window is left before its recorded due time, it gets
+ * a fresh due time from `now` (as a new invoice would), so the client is never held back for an invoice they could not see.
+ */
+export async function finishPendingInvoice(store: PsStore, ledger: ClientLedger, now: Date = new Date()): Promise<{ ledger: ClientLedger; invoice: Invoice | null }> {
+  const recorded = ledger.pendingInvoice;
+  if (!recorded) return { ledger, invoice: null };
+  const due = Date.parse(recorded.dueAt);
+  const enoughTime = Number.isFinite(due) && due - now.getTime() >= MIN_PAYMENT_WINDOW_MINUTES * 60_000;
+  const invoice: Invoice = enoughTime ? recorded : { ...recorded, dueAt: invoiceDueAt(now) };
+  await saveInvoice(store, invoice);
+  if (!enoughTime) {
+    // The invoice may have been saved by the interrupted run with the old due time: if it is still unpaid and due sooner,
+    // give it the fresh due time too, so the client is not held back the moment it is finished. A paid one is left alone.
+    // Callers hold the client's billing lock, which payments and admin confirmations take too, so this read-then-write
+    // cannot overwrite a payment made at the same moment.
+    const stored = (await store.getDoc('profit_invoices', invoice.id)) as Partial<Invoice> | null;
+    if (stored && stored.status === 'pending' && !(Date.parse(String(stored.dueAt)) >= Date.parse(invoice.dueAt))) {
+      await store.setDoc('profit_invoices', invoice.id, { ...stored, dueAt: invoice.dueAt } as Record<string, unknown>);
+    }
+  }
+  const next = withoutPending(ledger);
+  await store.setDoc('client_ledgers', ledger.userId, next as unknown as Record<string, unknown>);
+  return { ledger: next, invoice };
+}
+
+/**
+ * Ends the period: stores any new trades, works out the 50% share of new profit, invoices it, and moves the ledger on.
+ *
+ * Order of writes: (1) the ledger, moved on and carrying the new invoice as `pendingInvoice`; (2) the invoice; (3) the ledger
+ * again, without it. If anything stops after (1), the next settlement (or anyone reading the ledger through billing) finishes
+ * (2) and (3) first, so the invoice is never lost and the same profit is never billed twice.
+ */
+export async function settleClient(deps: RunDeps, ledgerIn: ClientLedger, ctx: SettleContext): Promise<SettleOutcome> {
+  // An earlier settlement that was interrupted is finished first, and is this call's result.
+  const finished = await finishPendingInvoice(deps.store, ledgerIn, ctx.now);
+  if (finished.invoice) {
+    return { kind: 'settled', ledger: finished.ledger, invoice: finished.invoice, periodPnl: Number(finished.invoice.periodPnl ?? 0), trades: Number(finished.invoice.periodTrades ?? 0) };
+  }
+  const ledger = finished.ledger;
   const nowIso = ctx.now.toISOString();
   const sync = await syncClosedTrades(deps, ledger.userId, ledger.settledThrough);
   if (!sync.ok) return { kind: 'skipped', reason: sync.reason };
@@ -149,11 +212,6 @@ export async function settleClient(deps: RunDeps, ledger: ClientLedger, ctx: Set
       periodTrades: trades,
       periodPnl: pnl,
     };
-    try {
-      await deps.store.createDoc('profit_invoices', id, invoice as unknown as Record<string, unknown>);
-    } catch (e) {
-      if (!(e instanceof DocExistsError)) throw e;
-    }
     lastInvoiceId = id;
   }
 
@@ -164,6 +222,13 @@ export async function settleClient(deps: RunDeps, ledger: ClientLedger, ctx: Set
     settledThrough: nowIso,
     ...(lastInvoiceId ? { lastInvoiceId } : {}),
   };
+  if (!invoice) {
+    await deps.store.setDoc('client_ledgers', ledger.userId, next as unknown as Record<string, unknown>);
+    return { kind: 'settled', ledger: next, invoice: null, periodPnl: pnl, trades };
+  }
+  // (1) the ledger with the invoice recorded, (2) the invoice, (3) the ledger without the record.
+  await deps.store.setDoc('client_ledgers', ledger.userId, { ...next, pendingInvoice: invoice } as unknown as Record<string, unknown>);
+  await saveInvoice(deps.store, invoice);
   await deps.store.setDoc('client_ledgers', ledger.userId, next as unknown as Record<string, unknown>);
   return { kind: 'settled', ledger: next, invoice, periodPnl: pnl, trades };
 }
@@ -174,8 +239,34 @@ export type PreviewOutcome =
   | { ok: false; reason: string }
   | { ok: true; periodPnl: number; trades: number; gain: number; fee: number };
 
-/** Stores any new closed trades and works out the 50% that is due on them now. Changes no ledger and makes no invoice. */
+/**
+ * A store that reads through to `base` but keeps every write in memory. Views use it so they can run the same code as a
+ * settlement without writing anything: only a settlement, holding the client's lock, may write trades or ledgers.
+ */
+export function readOnlyOverlay(base: PsStore): PsStore {
+  const local = new Map<string, Record<string, unknown>>();
+  const key = (c: string, id: string) => `${c}/${id}`;
+  return {
+    async getDoc(c, id) {
+      const k = key(c, id);
+      return local.has(k) ? structuredClone(local.get(k)!) : base.getDoc(c, id);
+    },
+    async setDoc(c, id, data) {
+      local.set(key(c, id), structuredClone(data));
+    },
+    async createDoc(c, id, data) {
+      if (local.has(key(c, id)) || (await base.getDoc(c, id))) throw new DocExistsError();
+      local.set(key(c, id), structuredClone(data));
+    },
+  };
+}
+
+/**
+ * Works out the 50% that would be due on the closed trades now. Writes nothing at all (new trades are only held in memory),
+ * so it is safe to call from views outside the client's lock. Changes no ledger and makes no invoice.
+ */
 export async function previewShare(deps: RunDeps, ledger: ClientLedger, feePct: number, now: Date): Promise<PreviewOutcome> {
+  deps = { ...deps, store: readOnlyOverlay(deps.store) };
   const sync = await syncClosedTrades(deps, ledger.userId, ledger.settledThrough);
   if (!sync.ok) return { ok: false, reason: sync.reason };
   const nowIso = now.toISOString();

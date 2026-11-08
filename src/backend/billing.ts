@@ -22,7 +22,7 @@ import {
   isSettlementDue,
   round2,
 } from './profitShare.ts';
-import { type RunDeps, dailyUpdateFor, dailyWindowOpen, previewShare, previousUtcDay, settleClient } from './profitShareRun.ts';
+import { type RunDeps, dailyUpdateFor, dailyWindowOpen, finishPendingInvoice, previewShare, previousUtcDay, settleClient } from './profitShareRun.ts';
 import { settlementAllowed, upgradeLedger } from './profitShareRealized.ts';
 import { readLimit } from './brokerVerification.ts';
 import { accrueCommissions, accrueWeeklyEquityCommission, recordEvent } from './referralService.ts';
@@ -186,6 +186,26 @@ export class BillingService {
   /** Daily updates already written or found today, so the database is asked about each client once a day. */
   private dailyDone = new Set<string>();
 
+  /**
+   * One settlement per client at a time: the sweep and "Pay my share now" both move the same ledger, so for each client they
+   * wait their turn instead of running together (which could make two invoices from one ledger, or lose one). One server
+   * instance is assumed, as elsewhere.
+   */
+  private userQueues = new Map<string, Promise<unknown>>();
+  private withUserLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.userQueues.get(userId) ?? Promise.resolve();
+    const next = prev.then(fn, fn);
+    const settled = next.then(
+      () => undefined,
+      () => undefined
+    );
+    this.userQueues.set(userId, settled);
+    void settled.then(() => {
+      if (this.userQueues.get(userId) === settled) this.userQueues.delete(userId);
+    });
+    return next;
+  }
+
   /** What the profit-share code needs: Firestore for storage and the copier service for closed trades. */
   private psDeps(): RunDeps {
     return {
@@ -312,7 +332,7 @@ export class BillingService {
         const plan = await this.getPlan(rec.userId);
         await this.applyBlocking(rec.userId, plan).catch((e) => console.warn('[BILLING] standing:', e?.message));
         if (plan?.model === 'subscription' || isDemoAccount(rec)) return; // subscribers, and practice accounts, have no profit-share ledger
-        await this.openLedger(rec);
+        await this.withUserLock(rec.userId, () => this.openLedger(rec)); // ledger writes happen only under the client's lock
       })().catch((e) => console.warn('[BILLING] ledger:', e?.message));
     // Hold back anyone who is overdue right away (a restart must not give them copying back while the first full sweep waits).
     void this.blockingPass().catch((e) => console.warn('[BILLING] first check:', e?.message));
@@ -369,8 +389,25 @@ export class BillingService {
   }
   private subscriptionCommissionDone = new Set<string>();
 
+  /**
+   * The client's ledger for a view (admin money table, "how much can I pay now"): never writes. If there is no open ledger
+   * yet, a fresh one is made in memory only, and an old-format ledger is upgraded in memory only. Writing is left to the
+   * paths that hold the client's lock (sweep, pay-now, payments, plan changes), so a view can never overwrite a settlement.
+   */
+  private async ledgerForView(rec: ClientConnectionRecord): Promise<ClientLedger> {
+    const existing = (await getDoc('client_ledgers', rec.userId)) as ClientLedger | null;
+    const now = new Date().toISOString();
+    const ledger: ClientLedger =
+      existing && !existing.closed
+        ? existing
+        : { userId: rec.userId, currency: rec.currency, startEquity: round2(rec.equity), hwm: round2(rec.equity), pnlCum: 0, pnlHwm: 0, settledThrough: now, createdAt: now };
+    return upgradeLedger(ledger, Date.now()).ledger;
+  }
+
   private async openLedger(rec: ClientConnectionRecord): Promise<ClientLedger> {
     const existing = (await getDoc('client_ledgers', rec.userId)) as ClientLedger | null;
+    // (An interrupted settlement is finished by settleClient and selectModel, which hold the client's lock; not here, because
+    // this is also used by read-only views outside the lock, which must never write an older copy of the ledger back.)
     if (existing && !existing.closed) return existing;
     const now = new Date().toISOString();
     const ledger: ClientLedger = {
@@ -431,18 +468,23 @@ export class BillingService {
         if (plans.get(rec.userId)?.model === 'subscription') continue; // subscribers have no profit-share ledger
         if (isDemoAccount(rec)) continue; // practice accounts are never invoiced
         try {
-          let ledger = await this.openLedger(rec);
-          const up = upgradeLedger(ledger, Date.now());
-          if (up.changed) {
-            ledger = up.ledger;
-            await setDoc('client_ledgers', rec.userId, ledger as any);
-            console.log(`💰 [BILLING] Ledger of ${rec.userId} moved to closed-trade billing; its first invoice is not made before ${ledger.settleAfter}.`);
-          }
-          // The daily update goes first, so it describes the period that is about to be closed.
-          await this.dailyUpdate(ledger, cfg);
-          if (isSettlementDue(ledger.settledThrough, Date.now(), cfg.periodDays) && settlementAllowed(ledger, Date.now())) {
-            await this.settle(rec, ledger);
-          }
+          await this.withUserLock(rec.userId, async () => {
+            // An invoice from an interrupted settlement is finished on the very next sweep, not only when the next period is due.
+            const finished = await finishPendingInvoice(this.psDeps().store, await this.openLedger(rec));
+            if (finished.invoice) console.log(`🧾 [BILLING] Finished interrupted invoice ${finished.invoice.id}: ${finished.invoice.amountDueUsdt} USDT for ${rec.userId}`);
+            let ledger = finished.ledger;
+            const up = upgradeLedger(ledger, Date.now());
+            if (up.changed) {
+              ledger = up.ledger;
+              await setDoc('client_ledgers', rec.userId, ledger as any);
+              console.log(`💰 [BILLING] Ledger of ${rec.userId} moved to closed-trade billing; its first invoice is not made before ${ledger.settleAfter}.`);
+            }
+            // The daily update goes first, so it describes the period that is about to be closed.
+            await this.dailyUpdate(ledger, cfg);
+            if (isSettlementDue(ledger.settledThrough, Date.now(), cfg.periodDays) && settlementAllowed(ledger, Date.now())) {
+              await this.settle(rec, ledger);
+            }
+          });
         } catch (e: any) {
           console.warn(`⚠️ [BILLING] Sweep failed for ${rec.userId}:`, e?.message);
         }
@@ -567,6 +609,14 @@ export class BillingService {
     if (!isFirestoreAdminConfigured()) throw new BillingError('Plans are not open yet. Please contact support.', 503);
     if (!isServiceModel(modelRaw)) throw new BillingError('Unknown service plan.');
     const model: ServiceModel = modelRaw;
+    // Changing plan closes the ledger, so it must not run while a settlement of this client is under way.
+    return this.withUserLock(userId, () => this.selectModelLocked(userId, model));
+  }
+
+  private async selectModelLocked(userId: string, model: ServiceModel): Promise<PlanRecord> {
+    // An interrupted settlement is finished first, so its invoice counts as unpaid below and blocks the change.
+    const openLedgerDoc = (await getDoc('client_ledgers', userId)) as unknown as ClientLedger | null;
+    if (openLedgerDoc && !openLedgerDoc.closed) await finishPendingInvoice(this.psDeps().store, openLedgerDoc);
     const current = await this.getPlan(userId);
     const invoices = (await queryEquals('profit_invoices', 'userId', userId)) as unknown as Invoice[];
     const verdict = canSelectModel(current, model, {
@@ -740,7 +790,7 @@ export class BillingService {
         } else {
           const invoices = await this.listInvoicesForUser(rec.userId);
           row.unpaidUsdt = round2(invoices.filter((i) => i.status !== 'paid').reduce((t, i) => t + (Number(i.amountDueUsdt) || 0), 0));
-          const ledger = await this.openLedger(rec);
+          const ledger = await this.ledgerForView(rec);
           const p = await previewShare(this.psDeps(), ledger, cfg.feePct, new Date());
           if (p.ok) {
             row.periodPnl = p.periodPnl;
@@ -782,12 +832,7 @@ export class BillingService {
     if (String(rec.currency).toUpperCase() !== 'USD') return { ...base, canPay: false, reason: 'Only USD accounts can pay the profit share here.' };
 
     const unpaid = (await this.listInvoicesForUser(userId)).find((i) => i.status !== 'paid');
-    let ledger = await this.openLedger(rec);
-    const up = upgradeLedger(ledger, Date.now());
-    if (up.changed) {
-      ledger = up.ledger;
-      await setDoc('client_ledgers', rec.userId, ledger as any);
-    }
+    const ledger = await this.ledgerForView(rec); // a view: nothing is written here
     const preview = await previewShare(this.psDeps(), ledger, cfg.feePct, new Date());
     if (!preview.ok) return { ...base, canPay: false, reason: 'Your closed trades could not be read just now. Please try again in a minute.' };
 
@@ -804,28 +849,39 @@ export class BillingService {
 
   /** Makes the invoice now for what payableNow allows (all checks are run again). The client then pays it as any invoice. */
   async payNow(userId: string): Promise<Invoice> {
-    if (this.payNowBusy.has(userId) || this.sweeping) throw new BillingError('Your invoice is being prepared. Please wait a moment and try again.', 409);
+    if (this.payNowBusy.has(userId)) throw new BillingError('Your invoice is being prepared. Please wait a moment and try again.', 409);
     this.payNowBusy.add(userId);
     try {
-      const view = await this.payableNow(userId);
-      if (!view.canPay) throw new BillingError(view.reason || 'Nothing can be paid right now.', 409);
-      const rec = (await this.connectedRecord(userId))!;
-      const cfg = billingConfig();
-      const ledger = await this.openLedger(rec);
-      const out = await settleClient(this.psDeps(), ledger, {
-        accountLogin: rec.login,
-        equity: Number(rec.equity),
-        treasury: cfg.treasury,
-        feePct: cfg.feePct,
-          now: new Date(),
-        minProfitUsd: cfg.minProfitUsd,
-      });
-      if (out.kind === 'skipped' || !out.invoice) throw new BillingError('The invoice could not be made just now. Please try again in a minute.', 409);
-      console.log(`🧾 [BILLING] Pay-now invoice ${out.invoice.id}: ${out.invoice.amountDueUsdt} USDT for ${userId} (${out.trades} closed trades)`);
-      return out.invoice;
+      // Waits for any settlement of this client the sweep is making, then checks everything again before invoicing.
+      return await this.withUserLock(userId, () => this.payNowLocked(userId));
     } finally {
       this.payNowBusy.delete(userId);
     }
+  }
+
+  private async payNowLocked(userId: string): Promise<Invoice> {
+    const view = await this.payableNow(userId);
+    if (!view.canPay) throw new BillingError(view.reason || 'Nothing can be paid right now.', 409);
+    const rec = (await this.connectedRecord(userId))!;
+    const cfg = billingConfig();
+    // Under the client's lock: the ledger may be created or upgraded and saved here, before settling.
+    let ledger = await this.openLedger(rec);
+    const up = upgradeLedger(ledger, Date.now());
+    if (up.changed) {
+      ledger = up.ledger;
+      await setDoc('client_ledgers', rec.userId, ledger as any);
+    }
+    const out = await settleClient(this.psDeps(), ledger, {
+      accountLogin: rec.login,
+      equity: Number(rec.equity),
+      treasury: cfg.treasury,
+      feePct: cfg.feePct,
+      now: new Date(),
+      minProfitUsd: cfg.minProfitUsd,
+    });
+    if (out.kind === 'skipped' || !out.invoice) throw new BillingError('The invoice could not be made just now. Please try again in a minute.', 409);
+    console.log(`🧾 [BILLING] Pay-now invoice ${out.invoice.id}: ${out.invoice.amountDueUsdt} USDT for ${userId} (${out.trades} closed trades)`);
+    return out.invoice;
   }
 
   async listInvoicesForUser(userId: string): Promise<Invoice[]> {
@@ -840,8 +896,16 @@ export class BillingService {
     return rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   }
 
-  /** Verifies a USDT payment on the TRON blockchain and marks the invoice paid. */
+  /**
+   * Verifies a USDT payment on the TRON blockchain and marks the invoice paid. Runs under the client's lock, like every other
+   * write to their invoices (settling, finishing an interrupted invoice, admin confirmation), so a payment can never be
+   * overwritten by a concurrent write of the same invoice.
+   */
   async payInvoice(userId: string, id: string, txHashRaw: string): Promise<Invoice> {
+    return this.withUserLock(userId, () => this.payInvoiceLocked(userId, id, txHashRaw));
+  }
+
+  private async payInvoiceLocked(userId: string, id: string, txHashRaw: string): Promise<Invoice> {
     if (!billingEnabled()) throw new BillingError('Payments are not open yet. Please contact support.', 503);
     const txHash = String(txHashRaw || '').trim().toLowerCase();
     if (!HASH.test(txHash)) throw new BillingError('Please paste the 64-character transaction ID (TXID) of your USDT payment.');
@@ -882,9 +946,16 @@ export class BillingService {
     return paid;
   }
 
-  /** Administrator marks an invoice paid by hand (for example, a payment from an exchange). */
+  /** Administrator marks an invoice paid by hand (for example, a payment from an exchange). Runs under the client's lock. */
   async adminConfirm(adminUid: string, id: string, note?: string): Promise<Invoice> {
     if (!isFirestoreAdminConfigured()) throw new BillingError('Billing is not set up on the server.', 503);
+    const found = (await getDoc('profit_invoices', String(id))) as unknown as Invoice | null;
+    if (!found) throw new BillingError('Invoice not found.', 404);
+    return this.withUserLock(found.userId, () => this.adminConfirmLocked(adminUid, id, note));
+  }
+
+  private async adminConfirmLocked(adminUid: string, id: string, note?: string): Promise<Invoice> {
+    // Read again inside the lock: the invoice may have changed while waiting.
     const invoice = (await getDoc('profit_invoices', String(id))) as unknown as Invoice | null;
     if (!invoice) throw new BillingError('Invoice not found.', 404);
     if (invoice.status === 'paid') return invoice;

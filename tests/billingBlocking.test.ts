@@ -238,3 +238,123 @@ test('the hourly watcher writes one reminder per hour, emails only at 6, 3 and 1
   billing.mailer = { send: async () => { throw new Error('mail down'); } };
   assert.equal(await billing.reminderPass(Date.parse('2026-11-11T18:30:00Z')), 1, 'only the unpaid one, and the failing mailer is survived');
 });
+
+test('"Pay my share now" twice on one day makes two invoices, each for its own profit', async () => {
+  const { fake, db, billing } = await world();
+  const t0 = Date.parse('2026-11-09T09:00:00Z');
+  mock.timers.enable({ apis: ['Date'], now: t0 });
+  const led: any = db.docs.get('client_ledgers/u1');
+  db.docs.set('client_ledgers/u1', { ...led, settledThrough: new Date(t0 - 6 * HOUR).toISOString(), createdAt: new Date(t0 - 6 * HOUR).toISOString() });
+  fake.closedPositions['D1'] = [trade('t1', 100, new Date(t0 - HOUR).toISOString())];
+
+  const first = await billing.payNow('u1');
+  assert.equal(first.amountDueUsdt, 50);
+  await billing.adminConfirm('admin1', first.id, 'paid');
+
+  mock.timers.setTime(t0 + 7 * HOUR);
+  fake.closedPositions['D1'] = [...fake.closedPositions['D1'], trade('t2', 400, new Date(t0 + 6 * HOUR).toISOString())];
+  const second = await billing.payNow('u1');
+  assert.equal(second.amountDueUsdt, 200);
+  assert.notEqual(second.id, first.id);
+  const saved = db.invoices('u1').map((i: any) => i.amountDueUsdt).sort((a: number, b: number) => a - b);
+  assert.deepEqual(saved, [50, 200], 'the second invoice is really stored, not lost');
+});
+
+test('the sweep and "Pay my share now" at the same moment make one invoice, and the fee is neither lost nor doubled', async () => {
+  const { fake, db, billing } = await world();
+  const t0 = Date.parse('2026-11-09T09:00:00Z');
+  mock.timers.enable({ apis: ['Date'], now: t0 });
+  const led: any = db.docs.get('client_ledgers/u1');
+  db.docs.set('client_ledgers/u1', { ...led, settledThrough: new Date(t0 - 2 * DAY).toISOString(), createdAt: new Date(t0 - 2 * DAY).toISOString() });
+  fake.closedPositions['D1'] = [trade('t1', 300, new Date(t0 - DAY).toISOString())];
+  // Each read of the closed trades takes a second, as a real one would, so the two runs settle at different moments.
+  const m: any = (billing as any).manager;
+  const read = m.getClosedPositionsForBilling.bind(m);
+  m.getClosedPositionsForBilling = async (uid: string) => {
+    mock.timers.tick(1000);
+    return read(uid);
+  };
+
+  const results = await Promise.allSettled([billing.payNow('u1'), billing.sweep()]);
+  const invoices = db.invoices('u1');
+  assert.equal(invoices.length, 1, 'exactly one invoice');
+  assert.equal(invoices[0].amountDueUsdt, 150);
+  const ledger: any = db.docs.get('client_ledgers/u1');
+  assert.deepEqual([ledger.pnlCum, ledger.pnlHwm], [300, 300]);
+  assert.equal(ledger.pendingInvoice, undefined);
+  assert.equal(results[0].status, 'fulfilled', 'pay-now made the invoice; the sweep then found nothing new to settle');
+});
+
+test('the next sweep finishes an interrupted invoice right away, with time left to pay it', async () => {
+  const { fake, db, billing } = await world();
+  const t0 = Date.parse('2026-11-09T03:00:00Z');
+  mock.timers.enable({ apis: ['Date'], now: t0 });
+  const led: any = db.docs.get('client_ledgers/u1');
+  // The last settlement (yesterday 22:00) saved the ledger but stopped before saving its invoice, which was due 23:59 yesterday.
+  const pending = { id: 'inv-u1-20261108-220000', userId: 'u1', accountLogin: '5551234', currency: 'USD', amountDueUsdt: 40, status: 'pending', createdAt: '2026-11-08T22:00:00.000Z', dueAt: '2026-11-08T23:59:00.000Z', periodPnl: 80, periodTrades: 1 };
+  db.docs.set('client_ledgers/u1', { ...led, pnlCum: 80, pnlHwm: 80, settledThrough: '2026-11-08T22:00:00.000Z', createdAt: '2026-11-01T00:00:00.000Z', pendingInvoice: pending });
+
+  await billing.sweep(); // the next period is not due until 22:00 today
+  const [inv] = db.invoices('u1');
+  assert.ok(inv, 'the invoice exists after the very next sweep');
+  assert.equal(inv.amountDueUsdt, 40);
+  assert.equal(inv.dueAt, '2026-11-09T23:59:00.000Z', 'a fresh due time, not the one that passed while it was missing');
+  assert.equal(db.docs.get('client_ledgers/u1').pendingInvoice, undefined);
+  await billing.sweep();
+  await sleep(30);
+  assert.equal(fake.copier.get('D1'), 1, 'the client is not held back for an invoice they could not see');
+});
+
+test('a payment confirmed while the sweep is recovering the same invoice stays paid', async () => {
+  const { db, billing } = await world();
+  const t0 = Date.parse('2026-11-09T03:00:00Z');
+  mock.timers.enable({ apis: ['Date'], now: t0 });
+  const led: any = db.docs.get('client_ledgers/u1');
+  // An interrupted run saved the invoice (due 23:59 yesterday) but not the ledger's cleared record.
+  const inv = { id: 'inv-u1-20261108-220000000', userId: 'u1', accountLogin: '5551234', currency: 'USD', amountDueUsdt: 40, status: 'pending', createdAt: '2026-11-08T22:00:00.000Z', dueAt: '2026-11-08T23:59:00.000Z', periodPnl: 80, periodTrades: 1 };
+  db.docs.set(`profit_invoices/${inv.id}`, { ...inv });
+  db.docs.set('client_ledgers/u1', { ...led, pnlCum: 80, pnlHwm: 80, settledThrough: '2026-11-08T22:00:00.000Z', createdAt: '2026-11-01T00:00:00.000Z', pendingInvoice: inv });
+  // The worst moment: the sweep has just read the invoice (still unpaid) to give it a fresh due time, and before it writes
+  // it back the administrator confirms the payment. Without a shared lock the sweep would then write "pending" over "paid".
+  const get = db.getDoc.bind(db);
+  let reads = 0;
+  let confirm: Promise<unknown> | null = null;
+  db.getDoc = async (c: string, id: string) => {
+    const snapshot = await get(c, id);
+    if (c === 'profit_invoices' && ++reads === 2) {
+      confirm = billing.adminConfirm('admin1', inv.id, 'paid from an exchange');
+      await new Promise((r) => setTimeout(r, 50)); // time for an unlocked confirmation to finish
+    }
+    return snapshot;
+  };
+
+  await billing.sweep();
+  await confirm;
+  const stored: any = db.docs.get(`profit_invoices/${inv.id}`);
+  assert.equal(stored.status, 'paid', 'the payment is never overwritten');
+  assert.equal(db.docs.get('client_ledgers/u1').pendingInvoice, undefined);
+});
+
+test('views write nothing: "how much can I pay now" and the admin money table only read', async () => {
+  const { fake, db, billing } = await world({ users: [['u1', '5551234'], ['u2', '5559876']] });
+  const t0 = Date.parse('2026-11-09T09:00:00Z');
+  mock.timers.enable({ apis: ['Date'], now: t0 });
+  const led: any = db.docs.get('client_ledgers/u1');
+  // u1 has an old-format ledger (no pnlCum), u2 has no ledger at all.
+  const { pnlCum: _c, pnlHwm: _h, ...legacy } = led;
+  db.docs.set('client_ledgers/u1', { ...legacy, settledThrough: new Date(t0 - DAY).toISOString(), createdAt: new Date(t0 - 5 * DAY).toISOString() });
+  db.docs.delete('client_ledgers/u2');
+  fake.closedPositions['D1'] = [trade('t1', 100, new Date(t0 - HOUR).toISOString())];
+  const before = JSON.stringify([...db.docs.entries()]);
+  let writes = 0;
+  const set = db.setDoc.bind(db);
+  const create = db.createDoc.bind(db);
+  db.setDoc = async (...a: [string, string, Record<string, unknown>]) => { writes++; return set(...a); };
+  db.createDoc = async (...a: [string, string, Record<string, unknown>]) => { writes++; return create(...a); };
+
+  const view = await billing.payableNow('u1');
+  assert.equal(view.periodPnl, 100, 'the preview still sees the new trade');
+  await billing.adminClientMoney();
+  assert.equal(writes, 0, 'nothing was written');
+  assert.equal(JSON.stringify([...db.docs.entries()]), before, 'the database is unchanged');
+});

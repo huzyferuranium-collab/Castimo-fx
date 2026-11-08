@@ -47,6 +47,13 @@ export interface ClientLedger {
   pnlHwm?: number;
   /** Set once on a ledger made before closed-trade billing existed: no invoice before this time (see profitShareRealized.ts). */
   settleAfter?: string;
+  /**
+   * An invoice the ledger has already been moved on for, but which may not be saved in `profit_invoices` yet. The ledger is
+   * written first (with this), then the invoice, then this is cleared; whoever reads the ledger next finishes the job
+   * (finishPendingInvoice in profitShareRun.ts). So an interruption between the two writes can neither lose the invoice
+   * nor bill the same profit twice.
+   */
+  pendingInvoice?: Invoice;
 }
 
 export interface Invoice {
@@ -77,8 +84,15 @@ export interface Invoice {
   periodPnl?: number;
 }
 
+/**
+ * One id per settlement: the client and the moment it was made, to the millisecond (inv-u1-20261108-101500123). A second
+ * invoice on the same day (for example "Pay my share now" twice) gets its own id instead of colliding with the first.
+ */
 export function invoiceId(userId: string, periodEndIso: string): string {
-  return `inv-${userId}-${periodEndIso.slice(0, 10).replace(/-/g, '')}`;
+  const t = Date.parse(periodEndIso);
+  const iso = Number.isFinite(t) ? new Date(t).toISOString() : periodEndIso; // always yyyy-mm-ddThh:mm:ss.mmmZ
+  const d = iso.replace(/[-:.]/g, '');
+  return `inv-${userId}-${d.slice(0, 8)}-${d.slice(9, 18)}`;
 }
 
 /** True once a whole settlement period has passed since the last one. */
