@@ -9,8 +9,7 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db, testFirestoreConnection } from '../config/firebase';
+import { auth, loadFirestore, testFirestoreConnection } from '../config/firebase';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 import { UserProfile, UserRole } from '../types';
 import { attachPendingReferral } from '../services/referralApi';
@@ -92,8 +91,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     console.log('OAuth Client ID:', firebaseConfigJson.oAuthClientId || 'None');
     console.groupEnd();
 
-    testFirestoreConnection();
-
     // Remove any browser-only session left by older versions. Only real Firebase sign-ins count now.
     try {
       localStorage.removeItem(OLD_SESSION_KEY);
@@ -108,9 +105,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setUser(currentUser);
         // If this visitor arrived through a referral link, tell the server (it decides whether it counts).
         void attachPendingReferral();
+        // The database is downloaded only now that someone is signed in (see loadFirestore).
+        void testFirestoreConnection();
         try {
-          const userDocRef = doc(db, 'users', currentUser.uid);
-          const docSnap = await getDoc(userDocRef);
+          const { fs, db } = await loadFirestore();
+          const userDocRef = fs.doc(db, 'users', currentUser.uid);
+          const docSnap = await fs.getDoc(userDocRef);
 
           if (docSnap.exists()) {
             const data = docSnap.data();
@@ -133,9 +133,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               createdAt: new Date().toISOString(),
               photoURL: currentUser.photoURL || undefined,
             };
-            await setDoc(userDocRef, {
+            await fs.setDoc(userDocRef, {
               ...newProfile,
-              serverCreatedAt: serverTimestamp(),
+              serverCreatedAt: fs.serverTimestamp(),
             });
             setUserProfile(newProfile);
           }
@@ -240,9 +240,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       };
 
       try {
-        await setDoc(doc(db, 'users', createdUser.uid), {
+        const { fs, db } = await loadFirestore();
+        await fs.setDoc(fs.doc(db, 'users', createdUser.uid), {
           ...newProfile,
-          serverCreatedAt: serverTimestamp(),
+          serverCreatedAt: fs.serverTimestamp(),
         });
         console.log('✅ [Firestore] Created user document in /users/' + createdUser.uid);
       } catch (e: any) {

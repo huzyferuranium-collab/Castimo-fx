@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import type { Firestore } from 'firebase/firestore';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -13,23 +13,40 @@ const firebaseConfig = {
 };
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+
+// Sign-in is needed on every page (even the welcome page has to know whether someone is signed in), so it loads at once.
 export const auth = getAuth(app);
 
-// Use initializeFirestore with experimentalAutoDetectLongPolling to ensure connectivity in sandboxed / iframe environments
-export const db = initializeFirestore(
-  app,
-  {
-    experimentalAutoDetectLongPolling: true,
-  },
-  firebaseConfigJson.firestoreDatabaseId || undefined
-);
+/**
+ * The database (Firestore) is large and only signed-in people use it, so it is NOT part of the first download: the
+ * welcome page never loads it. The first call downloads it (a separate file, kept in the browser's cache afterwards)
+ * and sets it up; every later call gets the same instance. If the download fails (for example the connection dropped),
+ * the next call tries again.
+ */
+export type FirestoreKit = { fs: typeof import('firebase/firestore'); db: Firestore };
+let firestoreLoad: Promise<FirestoreKit> | null = null;
 
-// Connection verification check on initial boot as per Firebase guidelines
+export function loadFirestore(): Promise<FirestoreKit> {
+  if (!firestoreLoad) {
+    firestoreLoad = import('firebase/firestore').then((fs) => ({
+      fs,
+      // experimentalAutoDetectLongPolling keeps it working in sandboxed / iframe environments
+      db: fs.initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, firebaseConfigJson.firestoreDatabaseId || undefined),
+    }));
+    firestoreLoad.catch(() => {
+      firestoreLoad = null;
+    });
+  }
+  return firestoreLoad;
+}
+
+// Connection check, run once someone is signed in (it only writes to the browser console).
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
-    const testDoc = doc(db, 'test', 'connection');
+    const { fs, db } = await loadFirestore();
+    const testDoc = fs.doc(db, 'test', 'connection');
     // Wrap with a 4-second timeout to avoid unhandled offline hangs
-    const checkPromise = getDocFromServer(testDoc);
+    const checkPromise = fs.getDocFromServer(testDoc);
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Connection check timeout')), 4000)
     );
