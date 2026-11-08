@@ -334,3 +334,27 @@ test('a payment confirmed while the sweep is recovering the same invoice stays p
   assert.equal(stored.status, 'paid', 'the payment is never overwritten');
   assert.equal(db.docs.get('client_ledgers/u1').pendingInvoice, undefined);
 });
+
+test('views write nothing: "how much can I pay now" and the admin money table only read', async () => {
+  const { fake, db, billing } = await world({ users: [['u1', '5551234'], ['u2', '5559876']] });
+  const t0 = Date.parse('2026-11-09T09:00:00Z');
+  mock.timers.enable({ apis: ['Date'], now: t0 });
+  const led: any = db.docs.get('client_ledgers/u1');
+  // u1 has an old-format ledger (no pnlCum), u2 has no ledger at all.
+  const { pnlCum: _c, pnlHwm: _h, ...legacy } = led;
+  db.docs.set('client_ledgers/u1', { ...legacy, settledThrough: new Date(t0 - DAY).toISOString(), createdAt: new Date(t0 - 5 * DAY).toISOString() });
+  db.docs.delete('client_ledgers/u2');
+  fake.closedPositions['D1'] = [trade('t1', 100, new Date(t0 - HOUR).toISOString())];
+  const before = JSON.stringify([...db.docs.entries()]);
+  let writes = 0;
+  const set = db.setDoc.bind(db);
+  const create = db.createDoc.bind(db);
+  db.setDoc = async (...a: [string, string, Record<string, unknown>]) => { writes++; return set(...a); };
+  db.createDoc = async (...a: [string, string, Record<string, unknown>]) => { writes++; return create(...a); };
+
+  const view = await billing.payableNow('u1');
+  assert.equal(view.periodPnl, 100, 'the preview still sees the new trade');
+  await billing.adminClientMoney();
+  assert.equal(writes, 0, 'nothing was written');
+  assert.equal(JSON.stringify([...db.docs.entries()]), before, 'the database is unchanged');
+});

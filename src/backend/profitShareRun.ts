@@ -239,8 +239,34 @@ export type PreviewOutcome =
   | { ok: false; reason: string }
   | { ok: true; periodPnl: number; trades: number; gain: number; fee: number };
 
-/** Stores any new closed trades and works out the 50% that is due on them now. Changes no ledger and makes no invoice. */
+/**
+ * A store that reads through to `base` but keeps every write in memory. Views use it so they can run the same code as a
+ * settlement without writing anything: only a settlement, holding the client's lock, may write trades or ledgers.
+ */
+export function readOnlyOverlay(base: PsStore): PsStore {
+  const local = new Map<string, Record<string, unknown>>();
+  const key = (c: string, id: string) => `${c}/${id}`;
+  return {
+    async getDoc(c, id) {
+      const k = key(c, id);
+      return local.has(k) ? structuredClone(local.get(k)!) : base.getDoc(c, id);
+    },
+    async setDoc(c, id, data) {
+      local.set(key(c, id), structuredClone(data));
+    },
+    async createDoc(c, id, data) {
+      if (local.has(key(c, id)) || (await base.getDoc(c, id))) throw new DocExistsError();
+      local.set(key(c, id), structuredClone(data));
+    },
+  };
+}
+
+/**
+ * Works out the 50% that would be due on the closed trades now. Writes nothing at all (new trades are only held in memory),
+ * so it is safe to call from views outside the client's lock. Changes no ledger and makes no invoice.
+ */
 export async function previewShare(deps: RunDeps, ledger: ClientLedger, feePct: number, now: Date): Promise<PreviewOutcome> {
+  deps = { ...deps, store: readOnlyOverlay(deps.store) };
   const sync = await syncClosedTrades(deps, ledger.userId, ledger.settledThrough);
   if (!sync.ok) return { ok: false, reason: sync.reason };
   const nowIso = now.toISOString();

@@ -472,3 +472,13 @@ test('finishing late also gives an already-saved, unpaid invoice the fresh due t
   assert.deepEqual([paid.status, paid.dueAt, paid.paidAt], ['paid', '2026-11-08T23:59:00.000Z', '2026-11-08T23:00:00.000Z'], 'the paid invoice is untouched');
   assert.equal(paidStore.docs.get('client_ledgers/u1').pendingInvoice, undefined, 'and the record is cleared');
 });
+
+test('previewShare writes nothing: new trades are held in memory only', async () => {
+  const { previewShare } = await import('../src/backend/profitShareRun.ts');
+  const store = new FakeStore();
+  const deps = { store, fetchClosed: async () => ({ positions: [pos('t1', 60, '2026-11-02T09:00:00Z')], skipped: 0 }) };
+  const p = await previewShare(deps, ledger0() as any, 50, new Date('2026-11-08T10:00:00.000Z'));
+  assert.equal(p.ok && p.fee, 30);
+  assert.equal(store.writes, 0);
+  assert.equal(store.docs.size, 0);
+});

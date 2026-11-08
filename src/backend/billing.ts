@@ -332,7 +332,7 @@ export class BillingService {
         const plan = await this.getPlan(rec.userId);
         await this.applyBlocking(rec.userId, plan).catch((e) => console.warn('[BILLING] standing:', e?.message));
         if (plan?.model === 'subscription' || isDemoAccount(rec)) return; // subscribers, and practice accounts, have no profit-share ledger
-        await this.openLedger(rec);
+        await this.withUserLock(rec.userId, () => this.openLedger(rec)); // ledger writes happen only under the client's lock
       })().catch((e) => console.warn('[BILLING] ledger:', e?.message));
     // Hold back anyone who is overdue right away (a restart must not give them copying back while the first full sweep waits).
     void this.blockingPass().catch((e) => console.warn('[BILLING] first check:', e?.message));
@@ -388,6 +388,21 @@ export class BillingService {
     }
   }
   private subscriptionCommissionDone = new Set<string>();
+
+  /**
+   * The client's ledger for a view (admin money table, "how much can I pay now"): never writes. If there is no open ledger
+   * yet, a fresh one is made in memory only, and an old-format ledger is upgraded in memory only. Writing is left to the
+   * paths that hold the client's lock (sweep, pay-now, payments, plan changes), so a view can never overwrite a settlement.
+   */
+  private async ledgerForView(rec: ClientConnectionRecord): Promise<ClientLedger> {
+    const existing = (await getDoc('client_ledgers', rec.userId)) as ClientLedger | null;
+    const now = new Date().toISOString();
+    const ledger: ClientLedger =
+      existing && !existing.closed
+        ? existing
+        : { userId: rec.userId, currency: rec.currency, startEquity: round2(rec.equity), hwm: round2(rec.equity), pnlCum: 0, pnlHwm: 0, settledThrough: now, createdAt: now };
+    return upgradeLedger(ledger, Date.now()).ledger;
+  }
 
   private async openLedger(rec: ClientConnectionRecord): Promise<ClientLedger> {
     const existing = (await getDoc('client_ledgers', rec.userId)) as ClientLedger | null;
@@ -775,7 +790,7 @@ export class BillingService {
         } else {
           const invoices = await this.listInvoicesForUser(rec.userId);
           row.unpaidUsdt = round2(invoices.filter((i) => i.status !== 'paid').reduce((t, i) => t + (Number(i.amountDueUsdt) || 0), 0));
-          const ledger = await this.openLedger(rec);
+          const ledger = await this.ledgerForView(rec);
           const p = await previewShare(this.psDeps(), ledger, cfg.feePct, new Date());
           if (p.ok) {
             row.periodPnl = p.periodPnl;
@@ -817,12 +832,7 @@ export class BillingService {
     if (String(rec.currency).toUpperCase() !== 'USD') return { ...base, canPay: false, reason: 'Only USD accounts can pay the profit share here.' };
 
     const unpaid = (await this.listInvoicesForUser(userId)).find((i) => i.status !== 'paid');
-    let ledger = await this.openLedger(rec);
-    const up = upgradeLedger(ledger, Date.now());
-    if (up.changed) {
-      ledger = up.ledger;
-      await setDoc('client_ledgers', rec.userId, ledger as any);
-    }
+    const ledger = await this.ledgerForView(rec); // a view: nothing is written here
     const preview = await previewShare(this.psDeps(), ledger, cfg.feePct, new Date());
     if (!preview.ok) return { ...base, canPay: false, reason: 'Your closed trades could not be read just now. Please try again in a minute.' };
 
@@ -854,7 +864,13 @@ export class BillingService {
     if (!view.canPay) throw new BillingError(view.reason || 'Nothing can be paid right now.', 409);
     const rec = (await this.connectedRecord(userId))!;
     const cfg = billingConfig();
-    const ledger = await this.openLedger(rec);
+    // Under the client's lock: the ledger may be created or upgraded and saved here, before settling.
+    let ledger = await this.openLedger(rec);
+    const up = upgradeLedger(ledger, Date.now());
+    if (up.changed) {
+      ledger = up.ledger;
+      await setDoc('client_ledgers', rec.userId, ledger as any);
+    }
     const out = await settleClient(this.psDeps(), ledger, {
       accountLogin: rec.login,
       equity: Number(rec.equity),
