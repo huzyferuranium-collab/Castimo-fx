@@ -880,8 +880,16 @@ export class BillingService {
     return rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   }
 
-  /** Verifies a USDT payment on the TRON blockchain and marks the invoice paid. */
+  /**
+   * Verifies a USDT payment on the TRON blockchain and marks the invoice paid. Runs under the client's lock, like every other
+   * write to their invoices (settling, finishing an interrupted invoice, admin confirmation), so a payment can never be
+   * overwritten by a concurrent write of the same invoice.
+   */
   async payInvoice(userId: string, id: string, txHashRaw: string): Promise<Invoice> {
+    return this.withUserLock(userId, () => this.payInvoiceLocked(userId, id, txHashRaw));
+  }
+
+  private async payInvoiceLocked(userId: string, id: string, txHashRaw: string): Promise<Invoice> {
     if (!billingEnabled()) throw new BillingError('Payments are not open yet. Please contact support.', 503);
     const txHash = String(txHashRaw || '').trim().toLowerCase();
     if (!HASH.test(txHash)) throw new BillingError('Please paste the 64-character transaction ID (TXID) of your USDT payment.');
@@ -922,9 +930,16 @@ export class BillingService {
     return paid;
   }
 
-  /** Administrator marks an invoice paid by hand (for example, a payment from an exchange). */
+  /** Administrator marks an invoice paid by hand (for example, a payment from an exchange). Runs under the client's lock. */
   async adminConfirm(adminUid: string, id: string, note?: string): Promise<Invoice> {
     if (!isFirestoreAdminConfigured()) throw new BillingError('Billing is not set up on the server.', 503);
+    const found = (await getDoc('profit_invoices', String(id))) as unknown as Invoice | null;
+    if (!found) throw new BillingError('Invoice not found.', 404);
+    return this.withUserLock(found.userId, () => this.adminConfirmLocked(adminUid, id, note));
+  }
+
+  private async adminConfirmLocked(adminUid: string, id: string, note?: string): Promise<Invoice> {
+    // Read again inside the lock: the invoice may have changed while waiting.
     const invoice = (await getDoc('profit_invoices', String(id))) as unknown as Invoice | null;
     if (!invoice) throw new BillingError('Invoice not found.', 404);
     if (invoice.status === 'paid') return invoice;

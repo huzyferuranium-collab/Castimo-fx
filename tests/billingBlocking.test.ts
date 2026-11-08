@@ -304,3 +304,33 @@ test('the next sweep finishes an interrupted invoice right away, with time left 
   await sleep(30);
   assert.equal(fake.copier.get('D1'), 1, 'the client is not held back for an invoice they could not see');
 });
+
+test('a payment confirmed while the sweep is recovering the same invoice stays paid', async () => {
+  const { db, billing } = await world();
+  const t0 = Date.parse('2026-11-09T03:00:00Z');
+  mock.timers.enable({ apis: ['Date'], now: t0 });
+  const led: any = db.docs.get('client_ledgers/u1');
+  // An interrupted run saved the invoice (due 23:59 yesterday) but not the ledger's cleared record.
+  const inv = { id: 'inv-u1-20261108-220000000', userId: 'u1', accountLogin: '5551234', currency: 'USD', amountDueUsdt: 40, status: 'pending', createdAt: '2026-11-08T22:00:00.000Z', dueAt: '2026-11-08T23:59:00.000Z', periodPnl: 80, periodTrades: 1 };
+  db.docs.set(`profit_invoices/${inv.id}`, { ...inv });
+  db.docs.set('client_ledgers/u1', { ...led, pnlCum: 80, pnlHwm: 80, settledThrough: '2026-11-08T22:00:00.000Z', createdAt: '2026-11-01T00:00:00.000Z', pendingInvoice: inv });
+  // The worst moment: the sweep has just read the invoice (still unpaid) to give it a fresh due time, and before it writes
+  // it back the administrator confirms the payment. Without a shared lock the sweep would then write "pending" over "paid".
+  const get = db.getDoc.bind(db);
+  let reads = 0;
+  let confirm: Promise<unknown> | null = null;
+  db.getDoc = async (c: string, id: string) => {
+    const snapshot = await get(c, id);
+    if (c === 'profit_invoices' && ++reads === 2) {
+      confirm = billing.adminConfirm('admin1', inv.id, 'paid from an exchange');
+      await new Promise((r) => setTimeout(r, 50)); // time for an unlocked confirmation to finish
+    }
+    return snapshot;
+  };
+
+  await billing.sweep();
+  await confirm;
+  const stored: any = db.docs.get(`profit_invoices/${inv.id}`);
+  assert.equal(stored.status, 'paid', 'the payment is never overwritten');
+  assert.equal(db.docs.get('client_ledgers/u1').pendingInvoice, undefined);
+});
