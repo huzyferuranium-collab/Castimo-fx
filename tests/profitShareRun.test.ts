@@ -202,9 +202,9 @@ test('three periods: invoice 50% of new profit, nothing while recovering, then i
   assert.equal(o1.invoice!.status, 'pending');
   assert.equal(o1.invoice!.dueAt, '2026-11-08T23:59:00.000Z', 'due before midnight GMT on the day it is made');
   assert.equal(o1.invoice!.periodStart, START);
-  assert.equal(o1.invoice!.id, 'inv-u1-20261108');
-  assert.deepEqual([o1.ledger.pnlCum, o1.ledger.pnlHwm, o1.ledger.settledThrough, o1.ledger.lastInvoiceId], [147, 147, '2026-11-08T10:00:00.000Z', 'inv-u1-20261108']);
-  assert.ok(store.docs.get('profit_invoices/inv-u1-20261108'));
+  assert.equal(o1.invoice!.id, 'inv-u1-20261108-100000');
+  assert.deepEqual([o1.ledger.pnlCum, o1.ledger.pnlHwm, o1.ledger.settledThrough, o1.ledger.lastInvoiceId], [147, 147, '2026-11-08T10:00:00.000Z', 'inv-u1-20261108-100000']);
+  assert.ok(store.docs.get('profit_invoices/inv-u1-20261108-100000'));
   assert.deepEqual(store.docs.get('client_ledgers/u1').pnlHwm, 147);
 
   // period 2: -100 + 60 = -40 -> nothing to pay, the high-water mark stays at 147
@@ -243,7 +243,7 @@ test('running the same settlement twice cannot create a second invoice', async (
   assert.equal(first.kind, 'settled');
   assert.equal(again.kind, 'settled');
   assert.equal([...store.docs.keys()].filter((k) => k.startsWith('profit_invoices/')).length, 1);
-  assert.equal(store.docs.get('profit_invoices/inv-u1-20261108').amountDueUsdt, 100);
+  assert.equal(store.docs.get('profit_invoices/inv-u1-20261108-100000').amountDueUsdt, 100);
 });
 
 test('money moved in or out of the account cannot change the bill (only closed trades are read)', async () => {
@@ -355,4 +355,64 @@ test('pay now: under 20 USD of new profit the preview shows it but settling make
   assert.equal(p.ok && p.fee, 6);
   const o = await settleClient(deps, ledger0(), { ...ctx('2026-11-02T13:00:00.000Z'), minProfitUsd: 20 });
   assert.equal(o.kind === 'settled' && o.invoice, null);
+});
+
+// ---------- settlements that are interrupted, or happen twice in a day ----------
+
+/** A store whose first save of an invoice fails, as if the server stopped between the two writes. */
+class FailFirstInvoiceStore extends FakeStore {
+  failed = false;
+  override async createDoc(c: string, id: string, data: Record<string, unknown>) {
+    if (c === 'profit_invoices' && !this.failed) {
+      this.failed = true;
+      throw new Error('connection lost');
+    }
+    return super.createDoc(c, id, data);
+  }
+}
+
+const invoicesIn = (store: FakeStore) => [...store.docs.entries()].filter(([k]) => k.startsWith('profit_invoices/')).map(([, v]) => v);
+
+test('two settlements on the same day make two invoices: the second fee is not lost', async () => {
+  const store = new FakeStore();
+  let all = [pos('t1', 100, '2026-11-08T08:00:00Z')];
+  const deps = { store, fetchClosed: async () => ({ positions: all, skipped: 0 }) };
+  const o1 = await settleClient(deps, ledger0(), ctx('2026-11-08T09:00:00.000Z'));
+  assert.equal(o1.kind, 'settled');
+  if (o1.kind !== 'settled') return;
+  assert.equal(o1.invoice!.amountDueUsdt, 50);
+
+  all = [...all, pos('t2', 400, '2026-11-08T15:00:00Z')];
+  const o2 = await settleClient(deps, o1.ledger, ctx('2026-11-08T16:00:00.000Z'));
+  assert.equal(o2.kind, 'settled');
+  if (o2.kind !== 'settled') return;
+  assert.equal(o2.invoice!.amountDueUsdt, 200);
+  assert.notEqual(o2.invoice!.id, o1.invoice!.id);
+  const saved = invoicesIn(store).map((i) => i.amountDueUsdt).sort((a, b) => a - b);
+  assert.deepEqual(saved, [50, 200], 'both invoices are stored');
+  assert.deepEqual([o2.ledger.pnlCum, o2.ledger.pnlHwm], [500, 500]);
+});
+
+test('a settlement interrupted between its two saves is finished by the next run, never lost and never billed twice', async () => {
+  const store = new FailFirstInvoiceStore();
+  const deps = { store, fetchClosed: async () => ({ positions: [pos('t1', 200, '2026-11-02T09:00:00Z')], skipped: 0 }) };
+  await assert.rejects(settleClient(deps, ledger0(), ctx('2026-11-08T10:00:00.000Z')));
+  assert.equal(invoicesIn(store).length, 0, 'the invoice could not be saved');
+  const stored = store.docs.get('client_ledgers/u1');
+  assert.equal(stored.pendingInvoice.amountDueUsdt, 100, 'the ledger remembers the invoice it was moved on for');
+
+  // The next run reads the stored ledger, even on the next day: it finishes that invoice instead of billing the profit again.
+  const again = await settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-09T10:00:00.000Z'));
+  assert.equal(again.kind, 'settled');
+  if (again.kind !== 'settled') return;
+  assert.equal(again.invoice!.amountDueUsdt, 100);
+  assert.equal(invoicesIn(store).length, 1);
+  assert.equal(store.docs.get('client_ledgers/u1').pendingInvoice, undefined, 'the record is cleared');
+
+  // And a later settlement with no new trades bills nothing more.
+  const later = await settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-10T10:00:00.000Z'));
+  assert.equal(later.kind, 'settled');
+  if (later.kind !== 'settled') return;
+  assert.equal(later.invoice, null);
+  assert.equal(invoicesIn(store).length, 1);
 });

@@ -113,8 +113,48 @@ export type SettleOutcome =
   | { kind: 'skipped'; reason: string }
   | { kind: 'settled'; ledger: ClientLedger; invoice: Invoice | null; periodPnl: number; trades: number };
 
-/** Ends the period: stores any new trades, works out the 50% share of new profit, invoices it, and moves the ledger on. */
-export async function settleClient(deps: RunDeps, ledger: ClientLedger, ctx: SettleContext): Promise<SettleOutcome> {
+/** Saves an invoice, treating "already saved" as done (the same invoice, written by an earlier attempt). */
+async function saveInvoice(store: PsStore, invoice: Invoice): Promise<void> {
+  try {
+    await store.createDoc('profit_invoices', invoice.id, invoice as unknown as Record<string, unknown>);
+  } catch (e) {
+    if (!(e instanceof DocExistsError)) throw e;
+  }
+}
+
+/** The ledger without its pending invoice. */
+function withoutPending(ledger: ClientLedger): ClientLedger {
+  const { pendingInvoice: _done, ...rest } = ledger;
+  return rest;
+}
+
+/**
+ * Finishes a settlement that was interrupted after its ledger was saved: saves the invoice it recorded and clears the record.
+ * Returns the ledger as it now stands and the invoice that was finished (null when there was nothing to finish).
+ */
+export async function finishPendingInvoice(store: PsStore, ledger: ClientLedger): Promise<{ ledger: ClientLedger; invoice: Invoice | null }> {
+  const invoice = ledger.pendingInvoice;
+  if (!invoice) return { ledger, invoice: null };
+  await saveInvoice(store, invoice);
+  const next = withoutPending(ledger);
+  await store.setDoc('client_ledgers', ledger.userId, next as unknown as Record<string, unknown>);
+  return { ledger: next, invoice };
+}
+
+/**
+ * Ends the period: stores any new trades, works out the 50% share of new profit, invoices it, and moves the ledger on.
+ *
+ * Order of writes: (1) the ledger, moved on and carrying the new invoice as `pendingInvoice`; (2) the invoice; (3) the ledger
+ * again, without it. If anything stops after (1), the next settlement (or anyone reading the ledger through billing) finishes
+ * (2) and (3) first, so the invoice is never lost and the same profit is never billed twice.
+ */
+export async function settleClient(deps: RunDeps, ledgerIn: ClientLedger, ctx: SettleContext): Promise<SettleOutcome> {
+  // An earlier settlement that was interrupted is finished first, and is this call's result.
+  const finished = await finishPendingInvoice(deps.store, ledgerIn);
+  if (finished.invoice) {
+    return { kind: 'settled', ledger: finished.ledger, invoice: finished.invoice, periodPnl: Number(finished.invoice.periodPnl ?? 0), trades: Number(finished.invoice.periodTrades ?? 0) };
+  }
+  const ledger = finished.ledger;
   const nowIso = ctx.now.toISOString();
   const sync = await syncClosedTrades(deps, ledger.userId, ledger.settledThrough);
   if (!sync.ok) return { kind: 'skipped', reason: sync.reason };
@@ -149,11 +189,6 @@ export async function settleClient(deps: RunDeps, ledger: ClientLedger, ctx: Set
       periodTrades: trades,
       periodPnl: pnl,
     };
-    try {
-      await deps.store.createDoc('profit_invoices', id, invoice as unknown as Record<string, unknown>);
-    } catch (e) {
-      if (!(e instanceof DocExistsError)) throw e;
-    }
     lastInvoiceId = id;
   }
 
@@ -164,6 +199,13 @@ export async function settleClient(deps: RunDeps, ledger: ClientLedger, ctx: Set
     settledThrough: nowIso,
     ...(lastInvoiceId ? { lastInvoiceId } : {}),
   };
+  if (!invoice) {
+    await deps.store.setDoc('client_ledgers', ledger.userId, next as unknown as Record<string, unknown>);
+    return { kind: 'settled', ledger: next, invoice: null, periodPnl: pnl, trades };
+  }
+  // (1) the ledger with the invoice recorded, (2) the invoice, (3) the ledger without the record.
+  await deps.store.setDoc('client_ledgers', ledger.userId, { ...next, pendingInvoice: invoice } as unknown as Record<string, unknown>);
+  await saveInvoice(deps.store, invoice);
   await deps.store.setDoc('client_ledgers', ledger.userId, next as unknown as Record<string, unknown>);
   return { kind: 'settled', ledger: next, invoice, periodPnl: pnl, trades };
 }

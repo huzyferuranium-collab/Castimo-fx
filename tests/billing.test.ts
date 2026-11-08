@@ -14,7 +14,8 @@ test('settlement timing, overdue and ids', () => {
   assert.equal(isSettlementDue(t0, Date.parse(t0) + 7 * day, 7), true);
   assert.equal(isOverdue({ status: 'pending', dueAt: t0 }, Date.parse(t0) + 1), true);
   assert.equal(isOverdue({ status: 'paid', dueAt: t0 }, Date.parse(t0) + 1), false);
-  assert.equal(invoiceId('u1', '2026-10-08T10:00:00Z'), 'inv-u1-20261008');
+  assert.equal(invoiceId('u1', '2026-10-08T10:00:00Z'), 'inv-u1-20261008-100000');
+  assert.notEqual(invoiceId('u1', '2026-10-08T10:00:00.000Z'), invoiceId('u1', '2026-10-08T16:30:00.000Z'), 'two settlements on one day get different ids');
   assert.equal(round2(1.005 + 0.0001), 1.01);
 });
 

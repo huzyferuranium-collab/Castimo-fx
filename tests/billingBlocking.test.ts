@@ -238,3 +238,49 @@ test('the hourly watcher writes one reminder per hour, emails only at 6, 3 and 1
   billing.mailer = { send: async () => { throw new Error('mail down'); } };
   assert.equal(await billing.reminderPass(Date.parse('2026-11-11T18:30:00Z')), 1, 'only the unpaid one, and the failing mailer is survived');
 });
+
+test('"Pay my share now" twice on one day makes two invoices, each for its own profit', async () => {
+  const { fake, db, billing } = await world();
+  const t0 = Date.parse('2026-11-09T09:00:00Z');
+  mock.timers.enable({ apis: ['Date'], now: t0 });
+  const led: any = db.docs.get('client_ledgers/u1');
+  db.docs.set('client_ledgers/u1', { ...led, settledThrough: new Date(t0 - 6 * HOUR).toISOString(), createdAt: new Date(t0 - 6 * HOUR).toISOString() });
+  fake.closedPositions['D1'] = [trade('t1', 100, new Date(t0 - HOUR).toISOString())];
+
+  const first = await billing.payNow('u1');
+  assert.equal(first.amountDueUsdt, 50);
+  await billing.adminConfirm('admin1', first.id, 'paid');
+
+  mock.timers.setTime(t0 + 7 * HOUR);
+  fake.closedPositions['D1'] = [...fake.closedPositions['D1'], trade('t2', 400, new Date(t0 + 6 * HOUR).toISOString())];
+  const second = await billing.payNow('u1');
+  assert.equal(second.amountDueUsdt, 200);
+  assert.notEqual(second.id, first.id);
+  const saved = db.invoices('u1').map((i: any) => i.amountDueUsdt).sort((a: number, b: number) => a - b);
+  assert.deepEqual(saved, [50, 200], 'the second invoice is really stored, not lost');
+});
+
+test('the sweep and "Pay my share now" at the same moment make one invoice, and the fee is neither lost nor doubled', async () => {
+  const { fake, db, billing } = await world();
+  const t0 = Date.parse('2026-11-09T09:00:00Z');
+  mock.timers.enable({ apis: ['Date'], now: t0 });
+  const led: any = db.docs.get('client_ledgers/u1');
+  db.docs.set('client_ledgers/u1', { ...led, settledThrough: new Date(t0 - 2 * DAY).toISOString(), createdAt: new Date(t0 - 2 * DAY).toISOString() });
+  fake.closedPositions['D1'] = [trade('t1', 300, new Date(t0 - DAY).toISOString())];
+  // Each read of the closed trades takes a second, as a real one would, so the two runs settle at different moments.
+  const m: any = (billing as any).manager;
+  const read = m.getClosedPositionsForBilling.bind(m);
+  m.getClosedPositionsForBilling = async (uid: string) => {
+    mock.timers.tick(1000);
+    return read(uid);
+  };
+
+  const results = await Promise.allSettled([billing.payNow('u1'), billing.sweep()]);
+  const invoices = db.invoices('u1');
+  assert.equal(invoices.length, 1, 'exactly one invoice');
+  assert.equal(invoices[0].amountDueUsdt, 150);
+  const ledger: any = db.docs.get('client_ledgers/u1');
+  assert.deepEqual([ledger.pnlCum, ledger.pnlHwm], [300, 300]);
+  assert.equal(ledger.pendingInvoice, undefined);
+  assert.equal(results[0].status, 'fulfilled', 'pay-now made the invoice; the sweep then found nothing new to settle');
+});

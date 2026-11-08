@@ -22,7 +22,7 @@ import {
   isSettlementDue,
   round2,
 } from './profitShare.ts';
-import { type RunDeps, dailyUpdateFor, dailyWindowOpen, previewShare, previousUtcDay, settleClient } from './profitShareRun.ts';
+import { type RunDeps, dailyUpdateFor, dailyWindowOpen, finishPendingInvoice, previewShare, previousUtcDay, settleClient } from './profitShareRun.ts';
 import { settlementAllowed, upgradeLedger } from './profitShareRealized.ts';
 import { readLimit } from './brokerVerification.ts';
 import { accrueCommissions, accrueWeeklyEquityCommission, recordEvent } from './referralService.ts';
@@ -185,6 +185,26 @@ export class BillingService {
   private notBilled: string[] = [];
   /** Daily updates already written or found today, so the database is asked about each client once a day. */
   private dailyDone = new Set<string>();
+
+  /**
+   * One settlement per client at a time: the sweep and "Pay my share now" both move the same ledger, so for each client they
+   * wait their turn instead of running together (which could make two invoices from one ledger, or lose one). One server
+   * instance is assumed, as elsewhere.
+   */
+  private userQueues = new Map<string, Promise<unknown>>();
+  private withUserLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.userQueues.get(userId) ?? Promise.resolve();
+    const next = prev.then(fn, fn);
+    const settled = next.then(
+      () => undefined,
+      () => undefined
+    );
+    this.userQueues.set(userId, settled);
+    void settled.then(() => {
+      if (this.userQueues.get(userId) === settled) this.userQueues.delete(userId);
+    });
+    return next;
+  }
 
   /** What the profit-share code needs: Firestore for storage and the copier service for closed trades. */
   private psDeps(): RunDeps {
@@ -371,6 +391,8 @@ export class BillingService {
 
   private async openLedger(rec: ClientConnectionRecord): Promise<ClientLedger> {
     const existing = (await getDoc('client_ledgers', rec.userId)) as ClientLedger | null;
+    // (An interrupted settlement is finished by settleClient and selectModel, which hold the client's lock; not here, because
+    // this is also used by read-only views outside the lock, which must never write an older copy of the ledger back.)
     if (existing && !existing.closed) return existing;
     const now = new Date().toISOString();
     const ledger: ClientLedger = {
@@ -431,18 +453,20 @@ export class BillingService {
         if (plans.get(rec.userId)?.model === 'subscription') continue; // subscribers have no profit-share ledger
         if (isDemoAccount(rec)) continue; // practice accounts are never invoiced
         try {
-          let ledger = await this.openLedger(rec);
-          const up = upgradeLedger(ledger, Date.now());
-          if (up.changed) {
-            ledger = up.ledger;
-            await setDoc('client_ledgers', rec.userId, ledger as any);
-            console.log(`💰 [BILLING] Ledger of ${rec.userId} moved to closed-trade billing; its first invoice is not made before ${ledger.settleAfter}.`);
-          }
-          // The daily update goes first, so it describes the period that is about to be closed.
-          await this.dailyUpdate(ledger, cfg);
-          if (isSettlementDue(ledger.settledThrough, Date.now(), cfg.periodDays) && settlementAllowed(ledger, Date.now())) {
-            await this.settle(rec, ledger);
-          }
+          await this.withUserLock(rec.userId, async () => {
+            let ledger = await this.openLedger(rec);
+            const up = upgradeLedger(ledger, Date.now());
+            if (up.changed) {
+              ledger = up.ledger;
+              await setDoc('client_ledgers', rec.userId, ledger as any);
+              console.log(`💰 [BILLING] Ledger of ${rec.userId} moved to closed-trade billing; its first invoice is not made before ${ledger.settleAfter}.`);
+            }
+            // The daily update goes first, so it describes the period that is about to be closed.
+            await this.dailyUpdate(ledger, cfg);
+            if (isSettlementDue(ledger.settledThrough, Date.now(), cfg.periodDays) && settlementAllowed(ledger, Date.now())) {
+              await this.settle(rec, ledger);
+            }
+          });
         } catch (e: any) {
           console.warn(`⚠️ [BILLING] Sweep failed for ${rec.userId}:`, e?.message);
         }
@@ -567,6 +591,14 @@ export class BillingService {
     if (!isFirestoreAdminConfigured()) throw new BillingError('Plans are not open yet. Please contact support.', 503);
     if (!isServiceModel(modelRaw)) throw new BillingError('Unknown service plan.');
     const model: ServiceModel = modelRaw;
+    // Changing plan closes the ledger, so it must not run while a settlement of this client is under way.
+    return this.withUserLock(userId, () => this.selectModelLocked(userId, model));
+  }
+
+  private async selectModelLocked(userId: string, model: ServiceModel): Promise<PlanRecord> {
+    // An interrupted settlement is finished first, so its invoice counts as unpaid below and blocks the change.
+    const openLedgerDoc = (await getDoc('client_ledgers', userId)) as unknown as ClientLedger | null;
+    if (openLedgerDoc && !openLedgerDoc.closed) await finishPendingInvoice(this.psDeps().store, openLedgerDoc);
     const current = await this.getPlan(userId);
     const invoices = (await queryEquals('profit_invoices', 'userId', userId)) as unknown as Invoice[];
     const verdict = canSelectModel(current, model, {
@@ -804,28 +836,33 @@ export class BillingService {
 
   /** Makes the invoice now for what payableNow allows (all checks are run again). The client then pays it as any invoice. */
   async payNow(userId: string): Promise<Invoice> {
-    if (this.payNowBusy.has(userId) || this.sweeping) throw new BillingError('Your invoice is being prepared. Please wait a moment and try again.', 409);
+    if (this.payNowBusy.has(userId)) throw new BillingError('Your invoice is being prepared. Please wait a moment and try again.', 409);
     this.payNowBusy.add(userId);
     try {
-      const view = await this.payableNow(userId);
-      if (!view.canPay) throw new BillingError(view.reason || 'Nothing can be paid right now.', 409);
-      const rec = (await this.connectedRecord(userId))!;
-      const cfg = billingConfig();
-      const ledger = await this.openLedger(rec);
-      const out = await settleClient(this.psDeps(), ledger, {
-        accountLogin: rec.login,
-        equity: Number(rec.equity),
-        treasury: cfg.treasury,
-        feePct: cfg.feePct,
-          now: new Date(),
-        minProfitUsd: cfg.minProfitUsd,
-      });
-      if (out.kind === 'skipped' || !out.invoice) throw new BillingError('The invoice could not be made just now. Please try again in a minute.', 409);
-      console.log(`🧾 [BILLING] Pay-now invoice ${out.invoice.id}: ${out.invoice.amountDueUsdt} USDT for ${userId} (${out.trades} closed trades)`);
-      return out.invoice;
+      // Waits for any settlement of this client the sweep is making, then checks everything again before invoicing.
+      return await this.withUserLock(userId, () => this.payNowLocked(userId));
     } finally {
       this.payNowBusy.delete(userId);
     }
+  }
+
+  private async payNowLocked(userId: string): Promise<Invoice> {
+    const view = await this.payableNow(userId);
+    if (!view.canPay) throw new BillingError(view.reason || 'Nothing can be paid right now.', 409);
+    const rec = (await this.connectedRecord(userId))!;
+    const cfg = billingConfig();
+    const ledger = await this.openLedger(rec);
+    const out = await settleClient(this.psDeps(), ledger, {
+      accountLogin: rec.login,
+      equity: Number(rec.equity),
+      treasury: cfg.treasury,
+      feePct: cfg.feePct,
+      now: new Date(),
+      minProfitUsd: cfg.minProfitUsd,
+    });
+    if (out.kind === 'skipped' || !out.invoice) throw new BillingError('The invoice could not be made just now. Please try again in a minute.', 409);
+    console.log(`🧾 [BILLING] Pay-now invoice ${out.invoice.id}: ${out.invoice.amountDueUsdt} USDT for ${userId} (${out.trades} closed trades)`);
+    return out.invoice;
   }
 
   async listInvoicesForUser(userId: string): Promise<Invoice[]> {
