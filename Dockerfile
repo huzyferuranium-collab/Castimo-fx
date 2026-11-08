@@ -2,8 +2,9 @@
 FROM node:22
 WORKDIR /app
 COPY package.json ./
-COPY package-lock.json* ./
-RUN npm install --no-audit --no-fund --legacy-peer-deps
+COPY package-lock.json ./
+# Installs exactly the versions in package-lock.json, so every deploy gets the same packages.
+RUN npm ci --no-audit --no-fund
 COPY . .
 # Your real USDT (TRC20) wallet, baked into the website at build time.
 ARG VITE_TREASURY_ADDRESS
