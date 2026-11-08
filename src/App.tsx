@@ -218,8 +218,9 @@ const MainContent: React.FC = () => {
       {/* Global Auth Modal */}
       <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
 
-      {/* Help assistant (bottom-right), shown when the server has it switched on */}
-      <AssistantChat />
+      {/* Help assistant (bottom-right): only inside the app once someone is signed in, never on the welcome page,
+          and only when the server has it switched on */}
+      {userProfile && <AssistantChat />}
 
     </div>
   );

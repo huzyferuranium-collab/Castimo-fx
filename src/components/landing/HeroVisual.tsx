@@ -227,10 +227,8 @@ export const HeroPhone: React.FC<{ children: React.ReactNode; actions: React.Rea
           <div className="hv-behind absolute -inset-x-5 -top-28 -bottom-14" aria-hidden="true">
             <HeroChart className="w-full h-full" shift={-20} />
           </div>
-          {/* Both price cards stay on the left: the help assistant's bubble is fixed to the bottom-right corner, and on
-              first load one of these cards lands there on many phones, so a right-aligned card ends up under it. */}
           <ProfitCard className="hv-flow self-start w-[10.4rem] min-[400px]:w-[11.4rem] max-w-[66%]" />
-          <MonthlyCard className="hv-flow self-start w-[10.3rem] min-[400px]:w-[11.2rem] max-w-[66%] -mt-3" />
+          <MonthlyCard className="hv-flow self-end w-[10.3rem] min-[400px]:w-[11.2rem] max-w-[66%] -mt-3" />
           <FundsCard className="hv-flow" />
         </div>
 
