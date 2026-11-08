@@ -1,6 +1,6 @@
 # Hosting the verifying server (Render, step by step)
 
-Cloudflare only serves web pages. The broker check and the copier control run in `server.ts`, which needs a Node host.
+The website, the broker check and the copier control all run from `server.ts`, which needs a Node host. Cloudflare sits in front only as a proxy.
 This repo has a Dockerfile, so any Docker host works (Render, Railway, Google Cloud Run).
 
 CASTIMOFx uses **Duplikium** (trade-copier.com) to copy trades. Duplikium logs in to each client's MT5 account and copies the master

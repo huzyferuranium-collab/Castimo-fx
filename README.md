@@ -70,7 +70,6 @@ for each missing piece.
 | `npm test` | Run the tests in `tests/`. |
 | `npm run preview` | Preview the built website with Vite (no API). |
 | `npm run clean` | Delete `dist/`. |
-| `npm run deploy:cloudflare` | Build and publish the static website to Cloudflare Pages. |
 
 To run the production build locally:
 
@@ -119,7 +118,6 @@ tests/                 Unit tests for the backend and services
 public/                Static files: PWA manifest, icons, service worker, offline page
 firestore.rules        Firestore security rules (publish them in the Firebase console)
 Dockerfile             One container that builds the website and runs the server
-wrangler.toml          Cloudflare Pages settings (static website only)
 DEPLOY.md              Step-by-step hosting and setup guide
 ```
 
@@ -136,7 +134,7 @@ DEPLOY.md              Step-by-step hosting and setup guide
 
 ## Deployment
 
-The website can be served as static files (for example Cloudflare Pages), but broker verification, copier control and billing run in `server.ts` and
-need a Node host. The included `Dockerfile` works on Render, Railway or Google Cloud Run.
+The website and the API are served together by `server.ts`, which needs a Node host. The live site runs on Render, with Cloudflare in
+front as a proxy. The included `Dockerfile` also works on Railway or Google Cloud Run.
 
 [DEPLOY.md](DEPLOY.md) has the full guide: Duplikium setup, Render, Firebase, payments, billing, email codes, security and the Android app.
