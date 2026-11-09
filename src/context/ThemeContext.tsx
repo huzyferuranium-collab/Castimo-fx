@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 
 export type Theme = 'dark' | 'light';
 
@@ -28,14 +29,7 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   });
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-      root.classList.remove('light');
-    } else {
-      root.classList.add('light');
-      root.classList.remove('dark');
-    }
+    applyRootClass(theme);
 
     try {
       localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -44,22 +38,32 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }
   }, [theme]);
 
-  // Briefly enable colour transitions so switching between light and dark fades instead of flashing.
-  const animateSwitch = () => {
-    const root = document.documentElement;
-    root.classList.add('theme-switching');
-    window.setTimeout(() => root.classList.remove('theme-switching'), 600);
+  /**
+   * Switches theme with one cross-fade of the whole screen (the browser's View Transitions: it fades a snapshot, so it costs
+   * the same however busy the page is). Browsers without it, and people who ask for reduced motion, get an instant switch.
+   * (The previous approach animated the colours of every element on the page at once, which was slow on full dashboards.)
+   */
+  const switchTo = (next: Theme) => {
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+    const reduceMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const apply = () => {
+      applyRootClass(next);
+      flushSync(() => setThemeState(next));
+    };
+    if (!reduceMotion && typeof doc.startViewTransition === 'function') {
+      try {
+        doc.startViewTransition(apply);
+        return;
+      } catch {
+        // fall through to an instant switch
+      }
+    }
+    apply();
   };
 
-  const toggleTheme = () => {
-    animateSwitch();
-    setThemeState((prev) => (prev === 'dark' ? 'light' : 'dark'));
-  };
+  const toggleTheme = () => switchTo(theme === 'dark' ? 'light' : 'dark');
 
-  const setTheme = (newTheme: Theme) => {
-    animateSwitch();
-    setThemeState(newTheme);
-  };
+  const setTheme = (newTheme: Theme) => switchTo(newTheme);
 
   return (
     <ThemeContext.Provider value={{ theme, isDark: theme === 'dark', toggleTheme, setTheme }}>
@@ -67,6 +71,12 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     </ThemeContext.Provider>
   );
 };
+
+function applyRootClass(theme: Theme): void {
+  const root = document.documentElement;
+  root.classList.toggle('dark', theme === 'dark');
+  root.classList.toggle('light', theme === 'light');
+}
 
 export const useTheme = (): ThemeContextType => {
   const context = useContext(ThemeContext);
