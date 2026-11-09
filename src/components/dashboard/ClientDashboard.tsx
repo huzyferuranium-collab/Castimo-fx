@@ -54,13 +54,18 @@ import {
   Copy,
   Check,
   QrCode,
+  Flame,
 } from 'lucide-react';
 
 interface ClientDashboardProps {
   onNavigateToReferrals?: () => void;
+  onNavigateToYieldPool?: () => void;
 }
 
-export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToReferrals }) => {
+export const ClientDashboard: React.FC<ClientDashboardProps> = ({
+  onNavigateToReferrals,
+  onNavigateToYieldPool,
+}) => {
   const { userProfile, isEmailVerified, isAdmin } = useAuth();
   const isUserAdmin = isAdmin ?? (userProfile?.role === 'admin');
 
@@ -742,6 +747,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({ onNavigateToRe
                 { tone: 'royal', art: 'clock', icon: <History className="w-5 h-5" />, title: 'Trade history', hint: 'Review your closed trades', onClick: () => setActiveSection('history') },
                 ...(onNavigateToReferrals
                   ? [{ tone: 'ruby' as Tone, art: 'network' as ArtName, icon: <Share2 className="w-5 h-5" />, title: 'Referral Hub', hint: 'Earn across three levels', onClick: onNavigateToReferrals }]
+                  : []),
+                ...(onNavigateToYieldPool
+                  ? [{ tone: 'mint' as Tone, art: 'coins' as ArtName, icon: <Flame className="w-5 h-5" />, title: 'Yield Pool Hub', hint: 'Variable performance pool up to 2%', onClick: onNavigateToYieldPool }]
                   : []),
                 { tone: 'magenta', art: 'badge', icon: <ShieldCheck className="w-5 h-5" />, title: 'Profile', hint: 'Your account details', onClick: () => setActiveSection('profile') },
               ];

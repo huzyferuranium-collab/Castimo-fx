@@ -16,10 +16,12 @@ import { referralRatesLabel } from './utils/format';
 const ClientDashboard = lazy(() => import('./components/dashboard/ClientDashboard').then((m) => ({ default: m.ClientDashboard })));
 const AdminDashboard = lazy(() => import('./components/dashboard/AdminDashboard').then((m) => ({ default: m.AdminDashboard })));
 const ReferralCommissionView = lazy(() => import('./components/referrals/ReferralCommissionView').then((m) => ({ default: m.ReferralCommissionView })));
+const YieldPoolSection = lazy(() => import('./components/dashboard/YieldPoolSection').then((m) => ({ default: m.YieldPoolSection })));
 import {
   TrendingUp,
   Server,
   Share2,
+  Flame,
 } from 'lucide-react';
 
 captureReferralFromUrl();
@@ -38,13 +40,15 @@ const TickerBar: React.FC = () => {
         <span>•</span>
         <span>REFERRALS: {referralRatesLabel()}</span>
         <span>•</span>
+        <span>YIELD POOL: UP TO 2% DAILY</span>
+        <span>•</span>
         <span>INVOICES DUE BEFORE MIDNIGHT GMT</span>
       </div>
     </div>
   );
 };
 
-type ActivePortalTab = 'client' | 'referrals' | 'admin';
+type ActivePortalTab = 'client' | 'referrals' | 'yield_pool' | 'admin';
 
 const MainContent: React.FC = () => {
   const { userProfile, loading } = useAuth();
@@ -145,6 +149,20 @@ const MainContent: React.FC = () => {
                 {referralRatesLabel('•')}
               </span>
             </button>
+            <button
+              onClick={() => handleSelectTab('yield_pool')}
+              className={`px-3 sm:px-3.5 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                activeTab === 'yield_pool'
+                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Flame className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Yield Pool Hub</span>
+              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                Up to 2%
+              </span>
+            </button>
 
             {/* ONLY DISPLAYED TO VERIFIED ADMINISTRATORS */}
             {isAdmin && (
@@ -188,8 +206,17 @@ const MainContent: React.FC = () => {
                   <AdminDashboard />
                 ) : activeTab === 'referrals' ? (
                   <ReferralCommissionView />
+                ) : activeTab === 'yield_pool' ? (
+                  <YieldPoolSection
+                    userId={userProfile?.uid || ''}
+                    userEmail={userProfile?.email}
+                    onNavigateToPositions={() => setActiveTab('client')}
+                  />
                 ) : (
-                  <ClientDashboard onNavigateToReferrals={() => setActiveTab('referrals')} />
+                  <ClientDashboard
+                    onNavigateToReferrals={() => setActiveTab('referrals')}
+                    onNavigateToYieldPool={() => setActiveTab('yield_pool')}
+                  />
                 )}
               </Suspense>
             </ErrorBoundary>

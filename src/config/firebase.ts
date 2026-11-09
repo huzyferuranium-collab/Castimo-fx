@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import type { Firestore } from 'firebase/firestore';
+import { initializeFirestore, type Firestore } from 'firebase/firestore';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 
 const firebaseConfig = {
@@ -17,12 +17,13 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 // Sign-in is needed on every page (even the welcome page has to know whether someone is signed in), so it loads at once.
 export const auth = getAuth(app);
 
-/**
- * The database (Firestore) is large and only signed-in people use it, so it is NOT part of the first download: the
- * welcome page never loads it. The first call downloads it (a separate file, kept in the browser's cache afterwards)
- * and sets it up; every later call gets the same instance. If the download fails (for example the connection dropped),
- * the next call tries again.
- */
+// Export shared Firestore instance with long-polling configured for sandboxed environments
+export const db: Firestore = initializeFirestore(
+  app,
+  { experimentalAutoDetectLongPolling: true },
+  firebaseConfigJson.firestoreDatabaseId || undefined
+);
+
 export type FirestoreKit = { fs: typeof import('firebase/firestore'); db: Firestore };
 let firestoreLoad: Promise<FirestoreKit> | null = null;
 
@@ -30,8 +31,7 @@ export function loadFirestore(): Promise<FirestoreKit> {
   if (!firestoreLoad) {
     firestoreLoad = import('firebase/firestore').then((fs) => ({
       fs,
-      // experimentalAutoDetectLongPolling keeps it working in sandboxed / iframe environments
-      db: fs.initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, firebaseConfigJson.firestoreDatabaseId || undefined),
+      db,
     }));
     firestoreLoad.catch(() => {
       firestoreLoad = null;

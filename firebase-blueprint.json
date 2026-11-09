@@ -114,6 +114,46 @@
         "attempts": { "type": "number", "description": "Number of validation attempts" }
       },
       "required": ["id", "email", "code", "expiresAt", "verified"]
+    },
+    "UserYieldAllocation": {
+      "title": "User Yield Allocation",
+      "description": "Dynamic trading performance pool allocation tracker for a user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Allocation record identifier" },
+        "userId": { "type": "string", "description": "Client user UID" },
+        "allocatedAmountUsdt": { "type": "number", "description": "Total principal allocated to the performance pool" },
+        "walletBalanceUsdt": { "type": "number", "description": "Current available unallocated wallet balance" },
+        "totalYieldEarnedUsdt": { "type": "number", "description": "Total cumulative dynamic yield earned" },
+        "dailyRatePct": { "type": "number", "description": "Current active trading day performance rate percentage" },
+        "status": { "type": "string", "enum": ["active", "paused", "pending"], "description": "Pool participation status" },
+        "lastDistributionAt": { "type": "string", "description": "ISO timestamp of last yield distribution" },
+        "createdAt": { "type": "string", "description": "Creation ISO timestamp" },
+        "updatedAt": { "type": "string", "description": "Last update ISO timestamp" }
+      },
+      "required": ["id", "userId", "allocatedAmountUsdt", "status"]
+    },
+    "YieldLedgerEntry": {
+      "title": "Yield Ledger Entry",
+      "description": "Transaction and audit entry for yield pool allocations, distributions, and withdrawals",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Ledger entry UUID" },
+        "userId": { "type": "string", "description": "Client user UID" },
+        "allocationId": { "type": "string", "description": "Associated allocation ID" },
+        "type": { "type": "string", "enum": ["allocation", "yield_distribution", "withdrawal_request"], "description": "Entry category" },
+        "amount": { "type": "number", "description": "Gross amount in USDT" },
+        "netAmount": { "type": "number", "description": "Net credited or debited amount in USDT" },
+        "feeAmount": { "type": "number", "description": "Transaction or network fee if applicable" },
+        "txHash": { "type": "string", "description": "TRC20 transaction hash" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "active", "rejected", "completed"], "description": "Ledger status" },
+        "description": { "type": "string", "description": "Human-readable transaction description" },
+        "network": { "type": "string", "description": "Blockchain or settlement network" },
+        "recipientAddress": { "type": "string", "description": "Destination address for withdrawals" },
+        "createdAt": { "type": "string", "description": "ISO timestamp" },
+        "confirmedAt": { "type": "string", "description": "ISO timestamp of confirmation" }
+      },
+      "required": ["id", "userId", "type", "amount", "netAmount", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -140,6 +180,14 @@
     "/email_verifications/{verificationId}": {
       "schema": { "$ref": "#/entities/EmailVerification" },
       "description": "Email OTP verification records"
+    },
+    "/user_yield_allocations/{userId}": {
+      "schema": { "$ref": "#/entities/UserYieldAllocation" },
+      "description": "Yield and performance pool allocations keyed by user UID"
+    },
+    "/yield_ledger/{ledgerId}": {
+      "schema": { "$ref": "#/entities/YieldLedgerEntry" },
+      "description": "Comprehensive yield ledger audit trail for deposits, distributions, and withdrawals"
     }
   }
 }
