@@ -3,7 +3,7 @@
   "appId": "1:483872490465:web:5014e0e4ae99d1ba1248a0",
   "apiKey": "AIzaSyCBXjAH_p9gyU2Y887hQg_8fOxWCKR7Yog",
   "authDomain": "castimo-fx.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-castimofxtrading-565afdce-97c9-43a1-82b2-a473a0715999",
+  "firestoreDatabaseId": "(default)",
   "storageBucket": "castimo-fx.firebasestorage.app",
   "messagingSenderId": "483872490465",
   "measurementId": "",
