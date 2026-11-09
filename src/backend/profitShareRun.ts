@@ -158,8 +158,11 @@ async function loadDays(store: PsStore, userId: string, fromIso: string, toIso: 
 async function periodTrades(store: PsStore, ledger: ClientLedger, toIso: string): Promise<{ pnl: number; trades: number; lateIds: string[] }> {
   const days = await loadDays(store, ledger.userId, ledger.settledThrough, toIso);
   const window = sumTrades(days, ledger.settledThrough, toIso);
+  // Only late trades that closed by `toIso` belong to this figure (a daily update for yesterday must not include a trade
+  // from today). For a settlement `toIso` is now, so every late trade is in.
+  const to = Date.parse(toIso);
   const late = await loadLate(store, ledger.userId);
-  const lateIds = Object.keys(late);
+  const lateIds = Object.keys(late).filter((id) => Date.parse(String(late[id]?.closeTime)) <= to);
   const latePnl = lateIds.reduce((t, id) => t + (Number(late[id]?.net) || 0), 0);
   return { pnl: round2(window.pnl + latePnl), trades: window.trades + lateIds.length, lateIds };
 }

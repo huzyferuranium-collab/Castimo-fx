@@ -601,3 +601,19 @@ test('a late trade is not lost if saving the late list fails', async () => {
   assert.equal(later.kind === 'settled' && later.invoice, null);
   assert.deepEqual(fees(store), [40, 50]);
 });
+
+test("the daily update for yesterday leaves out a late trade that closed today", async () => {
+  const store = new FakeStore();
+  const start = '2026-11-01T00:00:00.000Z';
+  // Settled at 00:05 today; a trade that closed at 00:02 today is listed only afterwards (late).
+  const led: any = { ...ledger0(), createdAt: start, lateWatchFrom: start, settledThrough: '2026-11-09T00:05:00.000Z', pnlCum: 0, pnlHwm: 0 };
+  const deps = { store, fetchClosed: async () => ({ positions: [pos('lateToday', 90, '2026-11-09T00:02:00Z'), pos('yday', 30, '2026-11-08T15:00:00Z')], skipped: 0 }) };
+  store.docs.set('ps_days/u1_20261108', { userId: 'u1', day: '20261108', trades: { yday: { net: 30, closeTime: '2026-11-08T15:00:00.000Z' } } });
+
+  const out = await dailyUpdateFor(deps, led, { feePct: 50, periodDays: 1, dayIso: '2026-11-08T12:00:00.000Z', now: new Date('2026-11-09T00:15:00.000Z') });
+  assert.equal(out, 'created');
+  const daily = store.docs.get('ps_daily/u1_20261108');
+  assert.equal(daily.periodPnl, 0, "yesterday's report has no trade from today");
+  assert.equal(daily.shareSoFarUsdt, 0);
+  assert.ok(store.docs.get('ps_late/u1').trades.lateToday, 'the trade is on the late list for the next settlement');
+});
