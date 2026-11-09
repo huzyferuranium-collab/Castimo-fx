@@ -574,3 +574,30 @@ test('the preview includes a late trade and still writes nothing', async () => {
   assert.equal(p.ok && p.periodPnl, 60);
   assert.equal(store.writes, writes);
 });
+
+test('a late trade is not lost if saving the late list fails', async () => {
+  /** Fails the first save of the late list, as if the server stopped there. */
+  class FailDayOnce extends FakeStore {
+    armed = false;
+    override async setDoc(c: string, id: string, data: Record<string, unknown>) {
+      if (this.armed && c === 'ps_late') {
+        this.armed = false;
+        throw new Error('stopped');
+      }
+      return super.setDoc(c, id, data);
+    }
+  }
+  const store = new FailDayOnce();
+  let all = [pos('t1', 100, '2026-11-08T08:00:00Z')];
+  const deps = { store, fetchClosed: async () => ({ positions: all, skipped: 0 }) };
+  await settleClient(deps, ledger0(), ctx('2026-11-08T10:00:00.000Z')); // fee 50
+  all = [...all, pos('late', 80, '2026-11-08T09:59:00Z')];
+  store.armed = true;
+  await assert.rejects(settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-09T10:00:00.000Z')));
+
+  const o = await settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-09T10:05:00.000Z'));
+  assert.equal(o.kind === 'settled' && o.invoice!.amountDueUsdt, 40, 'the late trade is still counted, once');
+  const later = await settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-10T10:00:00.000Z'));
+  assert.equal(later.kind === 'settled' && later.invoice, null);
+  assert.deepEqual(fees(store), [40, 50]);
+});

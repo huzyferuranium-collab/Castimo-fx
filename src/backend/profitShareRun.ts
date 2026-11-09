@@ -119,6 +119,7 @@ export async function syncClosedTrades(deps: RunDeps, userId: string, sinceIso: 
 
   const lateBefore = lateBeforeIso ? Date.parse(lateBeforeIso) : NaN;
   const late: DayTrades = {};
+  const dayWrites: Array<{ id: string; key: string; merged: DayTrades }> = [];
   let added = 0;
   for (const [key, incoming] of read.byDay) {
     const id = `${userId}_${key}`;
@@ -130,11 +131,17 @@ export async function syncClosedTrades(deps: RunDeps, userId: string, sinceIso: 
         if (existing?.[tradeId]) continue;
         if (Number.isFinite(lateBefore) && Date.parse(t.closeTime) <= lateBefore) late[tradeId] = t;
       }
-      await deps.store.setDoc('ps_days', id, { userId, day: key, trades: merged, updatedAt: new Date().toISOString() });
+      dayWrites.push({ id, key, merged });
       added += n;
     }
   }
+  // The late list is written BEFORE the days: if anything stops in between, the trade is not stored yet, so the next read
+  // finds it new and late again (the list keeps one entry per trade id). The other order could store the trade without ever
+  // putting it on the list. A settlement only goes on once all of this has succeeded.
   if (Object.keys(late).length > 0) await addLate(deps.store, userId, late);
+  for (const w of dayWrites) {
+    await deps.store.setDoc('ps_days', w.id, { userId, day: w.key, trades: w.merged, updatedAt: new Date().toISOString() });
+  }
   return { ok: true, reason: '', added, skippedRows: result.skipped };
 }
 
