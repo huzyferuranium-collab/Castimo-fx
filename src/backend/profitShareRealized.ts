@@ -47,6 +47,8 @@ export interface ReadTrades {
   byDay: Map<string, DayTrades>;
   /** Trades that closed after `sinceIso` (or whose close time is unknown) but whose result could not be read. */
   unreadable: number;
+  /** The ids of those unreadable trades (a caller may know some of them already, stored with readable values). */
+  unreadableIds: string[];
   counted: number;
 }
 
@@ -54,17 +56,19 @@ export interface ReadTrades {
 export function readClosedTrades(positions: DuplikiumPosition[], sinceIso: string): ReadTrades {
   const since = Date.parse(sinceIso);
   if (!Number.isFinite(since)) throw new Error('The ledger start time is not valid.');
-  const out: ReadTrades = { byDay: new Map(), unreadable: 0, counted: 0 };
+  const out: ReadTrades = { byDay: new Map(), unreadable: 0, unreadableIds: [], counted: 0 };
   for (const p of positions || []) {
     const closedAt = p.closeTime ? Date.parse(p.closeTime) : NaN;
     if (!Number.isFinite(closedAt)) {
       out.unreadable += 1; // cannot tell when it closed, so cannot tell which period it belongs to
+      out.unreadableIds.push(String(p.id));
       continue;
     }
     if (closedAt <= since) continue; // closed before this ledger started: not ours to bill
     const net = tradeNet(p);
     if (net === null) {
       out.unreadable += 1;
+      out.unreadableIds.push(String(p.id));
       continue;
     }
     const key = dayKey(p.closeTime as string);

@@ -114,7 +114,13 @@ export async function syncClosedTrades(deps: RunDeps, userId: string, sinceIso: 
   }
   const read = readClosedTrades(result.positions, sinceIso);
   if (read.unreadable > 0) {
-    return { ok: false, reason: `${read.unreadable} closed trade(s) have no readable profit or close time`, added: 0, skippedRows: 0 };
+    // A trade already stored (for example one re-read by the look-back) keeps its stored values: an unreadable copy of it in
+    // this answer does not stop billing. Only a trade we have never stored, and cannot read now, does.
+    const stored = await storedTradeIds(deps.store, userId, sinceIso);
+    const unknown = read.unreadableIds.filter((id) => !stored.has(id));
+    if (unknown.length > 0) {
+      return { ok: false, reason: `${unknown.length} closed trade(s) have no readable profit or close time`, added: 0, skippedRows: 0 };
+    }
   }
 
   const lateBefore = lateBeforeIso ? Date.parse(lateBeforeIso) : NaN;
@@ -143,6 +149,13 @@ export async function syncClosedTrades(deps: RunDeps, userId: string, sinceIso: 
     await deps.store.setDoc('ps_days', w.id, { userId, day: w.key, trades: w.merged, updatedAt: new Date().toISOString() });
   }
   return { ok: true, reason: '', added, skippedRows: result.skipped };
+}
+
+/** The ids of the trades already stored for this client, from the day of `sinceIso` to today. */
+async function storedTradeIds(store: PsStore, userId: string, sinceIso: string): Promise<Set<string>> {
+  const ids = new Set<string>();
+  for (const day of await loadDays(store, userId, sinceIso, new Date().toISOString())) for (const id of Object.keys(day ?? {})) ids.add(id);
+  return ids;
 }
 
 async function loadDays(store: PsStore, userId: string, fromIso: string, toIso: string): Promise<Array<DayTrades | null>> {

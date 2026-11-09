@@ -617,3 +617,20 @@ test("the daily update for yesterday leaves out a late trade that closed today",
   assert.equal(daily.shareSoFarUsdt, 0);
   assert.ok(store.docs.get('ps_late/u1').trades.lateToday, 'the trade is on the late list for the next settlement');
 });
+
+test('an unreadable copy of a trade that is already stored does not stop billing; an unknown unreadable trade still does', async () => {
+  const store = new FakeStore();
+  const start = '2026-11-01T00:00:00.000Z';
+  const led: any = { ...ledger0(), createdAt: start, lateWatchFrom: start, settledThrough: '2026-11-08T10:00:00.000Z', pnlCum: 100, pnlHwm: 100 };
+  // t1 was settled earlier and is stored with its real result; the copier now returns it without a profit.
+  store.docs.set('ps_days/u1_20261107', { userId: 'u1', day: '20261107', trades: { t1: { net: 100, closeTime: '2026-11-07T12:00:00.000Z' } } });
+  let positions = [pos('t1', null, '2026-11-07T12:00:00Z'), pos('t2', 60, '2026-11-08T15:00:00Z')];
+  const deps = { store, fetchClosed: async () => ({ positions, skipped: 0 }) };
+  const o = await settleClient(deps, led, ctx('2026-11-09T10:00:00.000Z'));
+  assert.equal(o.kind, 'settled', 'billing goes on');
+  assert.equal(o.kind === 'settled' && o.invoice!.amountDueUsdt, 30, 'only the new trade is billed; t1 keeps its stored value');
+
+  positions = [pos('t3', null, '2026-11-09T15:00:00Z')]; // a new trade we cannot read
+  const blocked = await settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-10T10:00:00.000Z'));
+  assert.equal(blocked.kind, 'skipped', 'never billed on a guess');
+});
