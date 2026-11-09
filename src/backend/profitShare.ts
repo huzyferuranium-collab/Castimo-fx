@@ -54,6 +54,16 @@ export interface ClientLedger {
    * nor bill the same profit twice.
    */
   pendingInvoice?: Invoice;
+  /**
+   * Late trades (see profitShareRun.ts) the ledger has already counted but which may still be on the late list. Cleared
+   * together with `pendingInvoice` by finishPendingInvoice, so a late trade is never counted twice.
+   */
+  pendingLateIds?: string[];
+  /**
+   * The earliest close time that is looked at again for trades the copier reported late. Set at the first settlement after
+   * late-trade checking started, so trades from before then (already billed another way) are never read again.
+   */
+  lateWatchFrom?: string;
 }
 
 export interface Invoice {

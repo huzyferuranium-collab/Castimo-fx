@@ -146,6 +146,7 @@ Because a closed trade is never affected by money moving in or out of the accoun
 service does not need to report them.
 - The first time a client's broker account is verified, a ledger starts. Only trades that closed after that moment are ever counted.
 - Every closed trade is stored once (Firestore `ps_days`), so repeating a check can never count it twice.
+- A trade the copier service lists only after its period was settled (it reports with a delay) is not lost: each read looks back up to 7 days, and such a trade goes on the client's late list (Firestore `ps_late`) and is counted in the next settlement, once. A late loss lowers the next bill; a late profit is billed then.
 - At each period end (`SETTLEMENT_PERIOD_DAYS`, every 24 hours by default) the cumulative closed-trade result is compared with its high-water mark. 50% of the part above the mark
   becomes an invoice once that new profit reaches `MIN_INVOICE_PROFIT_USD` ($20 by default); below that, or when the fee would be under $1, it rolls into the next period.
   After a loss, profit must first climb back above the mark. Open (floating) trades are not charged until they close.

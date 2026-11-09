@@ -482,3 +482,155 @@ test('previewShare writes nothing: new trades are held in memory only', async ()
   assert.equal(store.writes, 0);
   assert.equal(store.docs.size, 0);
 });
+
+// ---------- trades the copier reports late ----------
+
+const fees = (store: FakeStore) => invoicesIn(store).map((i) => i.amountDueUsdt).sort((a, b) => a - b);
+
+test('a loss the copier reports only after the settlement is counted in the next one (it lowers the next bill)', async () => {
+  const store = new FakeStore();
+  let all = [pos('t1', 300, '2026-11-08T08:00:00Z')];
+  const deps = { store, fetchClosed: async () => ({ positions: all, skipped: 0 }) };
+  const o1 = await settleClient(deps, ledger0(), ctx('2026-11-08T10:00:00.000Z')); // the -100 trade at 09:58 is not listed yet
+  assert.equal(o1.kind === 'settled' && o1.invoice!.amountDueUsdt, 150);
+
+  all = [...all, pos('late', -100, '2026-11-08T09:58:00Z'), pos('t2', 300, '2026-11-09T08:00:00Z')];
+  const o2 = await settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-09T10:00:00.000Z'));
+  assert.equal(o2.kind, 'settled');
+  if (o2.kind !== 'settled') return;
+  assert.equal(o2.periodPnl, 200, '+300 today and the late -100');
+  assert.equal(o2.trades, 2);
+  assert.equal(o2.invoice!.amountDueUsdt, 100, '50% of 200, not of 300');
+  assert.deepEqual(fees(store), [100, 150]);
+});
+
+test('a profit reported late is billed in the next settlement, and only once', async () => {
+  const store = new FakeStore();
+  let all = [pos('t1', 100, '2026-11-08T08:00:00Z')];
+  const deps = { store, fetchClosed: async () => ({ positions: all, skipped: 0 }) };
+  await settleClient(deps, ledger0(), ctx('2026-11-08T10:00:00.000Z')); // fee 50
+  all = [...all, pos('late', 80, '2026-11-08T09:59:00Z')];
+  const o2 = await settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-09T10:00:00.000Z'));
+  assert.equal(o2.kind === 'settled' && o2.invoice!.amountDueUsdt, 40);
+  assert.deepEqual(await store.getDoc('ps_late', 'u1').then((d: any) => Object.keys(d?.trades ?? {})), [], 'it is off the late list');
+
+  // Read again (it is still inside the look-back window): it is not counted a second time.
+  const o3 = await settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-10T10:00:00.000Z'));
+  assert.equal(o3.kind === 'settled' && o3.invoice, null);
+  assert.equal(o3.kind === 'settled' && o3.periodPnl, 0);
+  assert.deepEqual(fees(store), [40, 50]);
+});
+
+test('before late-trade checking starts for a ledger, nothing older than its last settlement is read again', async () => {
+  const store = new FakeStore();
+  // A ledger settled before this change (no lateWatchFrom). An old trade it never stored must not be billed now.
+  const old: any = { ...ledger0(), settledThrough: '2026-11-08T10:00:00.000Z', pnlCum: 0, pnlHwm: 0 };
+  const deps = { store, fetchClosed: async () => ({ positions: [pos('old', 500, '2026-11-07T12:00:00Z'), pos('new', 40, '2026-11-08T12:00:00Z')], skipped: 0 }) };
+  const o = await settleClient(deps, old, ctx('2026-11-09T10:00:00.000Z'));
+  assert.equal(o.kind, 'settled');
+  if (o.kind !== 'settled') return;
+  assert.equal(o.periodPnl, 40, 'only the trade after the last settlement');
+  assert.equal(o.ledger.lateWatchFrom, '2026-11-08T10:00:00.000Z', 'checking starts from here on');
+  assert.equal(await store.getDoc('ps_late', 'u1'), null);
+});
+
+test('the look-back stops after 7 days', async () => {
+  const store = new FakeStore();
+  const start = '2026-11-01T00:00:00.000Z';
+  const led: any = { ...ledger0(), createdAt: start, lateWatchFrom: start, settledThrough: '2026-11-20T10:00:00.000Z', pnlCum: 0, pnlHwm: 0 };
+  const deps = { store, fetchClosed: async () => ({ positions: [pos('eightDays', 100, '2026-11-12T09:00:00Z'), pos('sixDays', 60, '2026-11-14T11:00:00Z')], skipped: 0 }) };
+  const o = await settleClient(deps, led, ctx('2026-11-21T10:00:00.000Z'));
+  assert.equal(o.kind === 'settled' && o.periodPnl, 60, 'a trade first seen 8 days after it closed is not picked up');
+});
+
+test('a settlement interrupted after counting late trades finishes without counting them twice', async () => {
+  const store = new FailFirstInvoiceStore();
+  let all = [pos('t1', 100, '2026-11-08T08:00:00Z')];
+  const deps = { store, fetchClosed: async () => ({ positions: all, skipped: 0 }) };
+  store.failed = true; // first settlement saves normally
+  await settleClient(deps, ledger0(), ctx('2026-11-08T10:00:00.000Z')); // fee 50
+  store.failed = false; // the next invoice save fails once
+  all = [...all, pos('late', 60, '2026-11-08T09:59:00Z')];
+  await assert.rejects(settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-09T10:00:00.000Z')));
+  const stuck: any = await store.getDoc('client_ledgers', 'u1');
+  assert.deepEqual(stuck.pendingLateIds, ['late']);
+
+  const again = await settleClient(deps, stuck, ctx('2026-11-09T10:10:00.000Z'));
+  assert.equal(again.kind === 'settled' && again.invoice!.amountDueUsdt, 30, 'the interrupted invoice is finished');
+  const later = await settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-10T10:00:00.000Z'));
+  assert.equal(later.kind === 'settled' && later.invoice, null, 'the late trade is not billed again');
+  assert.deepEqual(fees(store), [30, 50]);
+});
+
+test('the preview includes a late trade and still writes nothing', async () => {
+  const { previewShare } = await import('../src/backend/profitShareRun.ts');
+  const store = new FakeStore();
+  let all = [pos('t1', 100, '2026-11-08T08:00:00Z')];
+  const deps = { store, fetchClosed: async () => ({ positions: all, skipped: 0 }) };
+  await settleClient(deps, ledger0(), ctx('2026-11-08T10:00:00.000Z'));
+  all = [...all, pos('late', -40, '2026-11-08T09:59:00Z'), pos('t2', 100, '2026-11-08T12:00:00Z')];
+  const writes = store.writes;
+  const p = await previewShare(deps, (await store.getDoc('client_ledgers', 'u1')) as any, 50, new Date('2026-11-08T13:00:00.000Z'));
+  assert.equal(p.ok && p.periodPnl, 60);
+  assert.equal(store.writes, writes);
+});
+
+test('a late trade is not lost if saving the late list fails', async () => {
+  /** Fails the first save of the late list, as if the server stopped there. */
+  class FailDayOnce extends FakeStore {
+    armed = false;
+    override async setDoc(c: string, id: string, data: Record<string, unknown>) {
+      if (this.armed && c === 'ps_late') {
+        this.armed = false;
+        throw new Error('stopped');
+      }
+      return super.setDoc(c, id, data);
+    }
+  }
+  const store = new FailDayOnce();
+  let all = [pos('t1', 100, '2026-11-08T08:00:00Z')];
+  const deps = { store, fetchClosed: async () => ({ positions: all, skipped: 0 }) };
+  await settleClient(deps, ledger0(), ctx('2026-11-08T10:00:00.000Z')); // fee 50
+  all = [...all, pos('late', 80, '2026-11-08T09:59:00Z')];
+  store.armed = true;
+  await assert.rejects(settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-09T10:00:00.000Z')));
+
+  const o = await settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-09T10:05:00.000Z'));
+  assert.equal(o.kind === 'settled' && o.invoice!.amountDueUsdt, 40, 'the late trade is still counted, once');
+  const later = await settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-10T10:00:00.000Z'));
+  assert.equal(later.kind === 'settled' && later.invoice, null);
+  assert.deepEqual(fees(store), [40, 50]);
+});
+
+test("the daily update for yesterday leaves out a late trade that closed today", async () => {
+  const store = new FakeStore();
+  const start = '2026-11-01T00:00:00.000Z';
+  // Settled at 00:05 today; a trade that closed at 00:02 today is listed only afterwards (late).
+  const led: any = { ...ledger0(), createdAt: start, lateWatchFrom: start, settledThrough: '2026-11-09T00:05:00.000Z', pnlCum: 0, pnlHwm: 0 };
+  const deps = { store, fetchClosed: async () => ({ positions: [pos('lateToday', 90, '2026-11-09T00:02:00Z'), pos('yday', 30, '2026-11-08T15:00:00Z')], skipped: 0 }) };
+  store.docs.set('ps_days/u1_20261108', { userId: 'u1', day: '20261108', trades: { yday: { net: 30, closeTime: '2026-11-08T15:00:00.000Z' } } });
+
+  const out = await dailyUpdateFor(deps, led, { feePct: 50, periodDays: 1, dayIso: '2026-11-08T12:00:00.000Z', now: new Date('2026-11-09T00:15:00.000Z') });
+  assert.equal(out, 'created');
+  const daily = store.docs.get('ps_daily/u1_20261108');
+  assert.equal(daily.periodPnl, 0, "yesterday's report has no trade from today");
+  assert.equal(daily.shareSoFarUsdt, 0);
+  assert.ok(store.docs.get('ps_late/u1').trades.lateToday, 'the trade is on the late list for the next settlement');
+});
+
+test('an unreadable copy of a trade that is already stored does not stop billing; an unknown unreadable trade still does', async () => {
+  const store = new FakeStore();
+  const start = '2026-11-01T00:00:00.000Z';
+  const led: any = { ...ledger0(), createdAt: start, lateWatchFrom: start, settledThrough: '2026-11-08T10:00:00.000Z', pnlCum: 100, pnlHwm: 100 };
+  // t1 was settled earlier and is stored with its real result; the copier now returns it without a profit.
+  store.docs.set('ps_days/u1_20261107', { userId: 'u1', day: '20261107', trades: { t1: { net: 100, closeTime: '2026-11-07T12:00:00.000Z' } } });
+  let positions = [pos('t1', null, '2026-11-07T12:00:00Z'), pos('t2', 60, '2026-11-08T15:00:00Z')];
+  const deps = { store, fetchClosed: async () => ({ positions, skipped: 0 }) };
+  const o = await settleClient(deps, led, ctx('2026-11-09T10:00:00.000Z'));
+  assert.equal(o.kind, 'settled', 'billing goes on');
+  assert.equal(o.kind === 'settled' && o.invoice!.amountDueUsdt, 30, 'only the new trade is billed; t1 keeps its stored value');
+
+  positions = [pos('t3', null, '2026-11-09T15:00:00Z')]; // a new trade we cannot read
+  const blocked = await settleClient(deps, await store.getDoc('client_ledgers', 'u1'), ctx('2026-11-10T10:00:00.000Z'));
+  assert.equal(blocked.kind, 'skipped', 'never billed on a guess');
+});

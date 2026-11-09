@@ -51,11 +51,54 @@ export interface SyncResult {
   skippedRows: number;
 }
 
+/** How many days back each read looks again for trades the copier reported only after they were settled. */
+export const LATE_TRADE_LOOKBACK_DAYS = 7;
+
+/**
+ * Where a read of closed trades starts for this ledger: up to LATE_TRADE_LOOKBACK_DAYS before the last settlement, but never
+ * before the ledger started or before late-trade checking began for it (`lateWatchFrom`; until then, the last settlement).
+ */
+export function lookbackFloor(ledger: Pick<ClientLedger, 'createdAt' | 'settledThrough' | 'lateWatchFrom'>): string {
+  const settled = Date.parse(ledger.settledThrough);
+  const watch = Date.parse(ledger.lateWatchFrom ?? ledger.settledThrough);
+  const created = Date.parse(ledger.createdAt);
+  const floor = Math.max(settled - LATE_TRADE_LOOKBACK_DAYS * 86_400_000, Number.isFinite(watch) ? watch : settled, Number.isFinite(created) ? created : -Infinity);
+  return new Date(Math.min(floor, settled)).toISOString();
+}
+
+/** Trades that closed before the last settlement but were first seen after it: counted in the next settlement. */
+async function loadLate(store: PsStore, userId: string): Promise<DayTrades> {
+  const doc = await store.getDoc('ps_late', userId);
+  return ((doc?.trades as DayTrades | undefined) ?? {}) as DayTrades;
+}
+
+async function addLate(store: PsStore, userId: string, found: DayTrades): Promise<void> {
+  const { merged, added } = mergeDay(await loadLate(store, userId), found);
+  if (added > 0) await store.setDoc('ps_late', userId, { userId, trades: merged, updatedAt: new Date().toISOString() });
+}
+
+async function clearLate(store: PsStore, userId: string, ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const trades = await loadLate(store, userId);
+  let removed = 0;
+  for (const id of ids) {
+    if (trades[id]) {
+      delete trades[id];
+      removed++;
+    }
+  }
+  if (removed > 0) await store.setDoc('ps_late', userId, { userId, trades, updatedAt: new Date().toISOString() });
+}
+
 /**
  * Reads the client's closed trades and stores every one closed after `sinceIso` that is not stored yet.
  * Fails (and stores nothing) when any trade's result cannot be read, so a period is never billed on a guess.
+ *
+ * With `lateBeforeIso` (the last settlement), a trade stored here for the first time although it closed at or before that
+ * moment was reported late by the copier: it was not part of that settlement, so it also goes on the late list, which the
+ * next settlement counts.
  */
-export async function syncClosedTrades(deps: RunDeps, userId: string, sinceIso: string): Promise<SyncResult> {
+export async function syncClosedTrades(deps: RunDeps, userId: string, sinceIso: string, lateBeforeIso?: string): Promise<SyncResult> {
   let result: PositionsResult | null;
   try {
     result = await deps.fetchClosed(userId);
@@ -71,20 +114,48 @@ export async function syncClosedTrades(deps: RunDeps, userId: string, sinceIso: 
   }
   const read = readClosedTrades(result.positions, sinceIso);
   if (read.unreadable > 0) {
-    return { ok: false, reason: `${read.unreadable} closed trade(s) have no readable profit or close time`, added: 0, skippedRows: 0 };
+    // A trade already stored (for example one re-read by the look-back) keeps its stored values: an unreadable copy of it in
+    // this answer does not stop billing. Only a trade we have never stored, and cannot read now, does.
+    const stored = await storedTradeIds(deps.store, userId, sinceIso);
+    const unknown = read.unreadableIds.filter((id) => !stored.has(id));
+    if (unknown.length > 0) {
+      return { ok: false, reason: `${unknown.length} closed trade(s) have no readable profit or close time`, added: 0, skippedRows: 0 };
+    }
   }
 
+  const lateBefore = lateBeforeIso ? Date.parse(lateBeforeIso) : NaN;
+  const late: DayTrades = {};
+  const dayWrites: Array<{ id: string; key: string; merged: DayTrades }> = [];
   let added = 0;
   for (const [key, incoming] of read.byDay) {
     const id = `${userId}_${key}`;
     const doc = await deps.store.getDoc('ps_days', id);
-    const { merged, added: n } = mergeDay((doc?.trades as DayTrades | undefined) ?? null, incoming);
+    const existing = (doc?.trades as DayTrades | undefined) ?? null;
+    const { merged, added: n } = mergeDay(existing, incoming);
     if (n > 0) {
-      await deps.store.setDoc('ps_days', id, { userId, day: key, trades: merged, updatedAt: new Date().toISOString() });
+      for (const [tradeId, t] of Object.entries(incoming)) {
+        if (existing?.[tradeId]) continue;
+        if (Number.isFinite(lateBefore) && Date.parse(t.closeTime) <= lateBefore) late[tradeId] = t;
+      }
+      dayWrites.push({ id, key, merged });
       added += n;
     }
   }
+  // The late list is written BEFORE the days: if anything stops in between, the trade is not stored yet, so the next read
+  // finds it new and late again (the list keeps one entry per trade id). The other order could store the trade without ever
+  // putting it on the list. A settlement only goes on once all of this has succeeded.
+  if (Object.keys(late).length > 0) await addLate(deps.store, userId, late);
+  for (const w of dayWrites) {
+    await deps.store.setDoc('ps_days', w.id, { userId, day: w.key, trades: w.merged, updatedAt: new Date().toISOString() });
+  }
   return { ok: true, reason: '', added, skippedRows: result.skipped };
+}
+
+/** The ids of the trades already stored for this client, from the day of `sinceIso` to today. */
+async function storedTradeIds(store: PsStore, userId: string, sinceIso: string): Promise<Set<string>> {
+  const ids = new Set<string>();
+  for (const day of await loadDays(store, userId, sinceIso, new Date().toISOString())) for (const id of Object.keys(day ?? {})) ids.add(id);
+  return ids;
 }
 
 async function loadDays(store: PsStore, userId: string, fromIso: string, toIso: string): Promise<Array<DayTrades | null>> {
@@ -94,6 +165,24 @@ async function loadDays(store: PsStore, userId: string, fromIso: string, toIso: 
     out.push((doc?.trades as DayTrades | undefined) ?? null);
   }
   return out;
+}
+
+/** The trades of the open period: closed after the last settlement and up to `toIso`, plus the late list. */
+async function periodTrades(store: PsStore, ledger: ClientLedger, toIso: string): Promise<{ pnl: number; trades: number; lateIds: string[] }> {
+  const days = await loadDays(store, ledger.userId, ledger.settledThrough, toIso);
+  const window = sumTrades(days, ledger.settledThrough, toIso);
+  // Only late trades that closed by `toIso` belong to this figure (a daily update for yesterday must not include a trade
+  // from today). For a settlement `toIso` is now, so every late trade is in.
+  const to = Date.parse(toIso);
+  const late = await loadLate(store, ledger.userId);
+  const lateIds = Object.keys(late).filter((id) => Date.parse(String(late[id]?.closeTime)) <= to);
+  const latePnl = lateIds.reduce((t, id) => t + (Number(late[id]?.net) || 0), 0);
+  return { pnl: round2(window.pnl + latePnl), trades: window.trades + lateIds.length, lateIds };
+}
+
+/** Reads and stores new trades for this ledger, looking back for late ones (see lookbackFloor). */
+function syncFor(deps: RunDeps, ledger: ClientLedger): Promise<SyncResult> {
+  return syncClosedTrades(deps, ledger.userId, lookbackFloor(ledger), ledger.settledThrough);
 }
 
 // ---------- settlement (the invoice) ----------
@@ -129,9 +218,9 @@ async function saveInvoice(store: PsStore, invoice: Invoice): Promise<void> {
   }
 }
 
-/** The ledger without its pending invoice. */
+/** The ledger without its pending records. */
 function withoutPending(ledger: ClientLedger): ClientLedger {
-  const { pendingInvoice: _done, ...rest } = ledger;
+  const { pendingInvoice: _done, pendingLateIds: _late, ...rest } = ledger;
   return rest;
 }
 
@@ -144,7 +233,15 @@ function withoutPending(ledger: ClientLedger): ClientLedger {
  */
 export async function finishPendingInvoice(store: PsStore, ledger: ClientLedger, now: Date = new Date()): Promise<{ ledger: ClientLedger; invoice: Invoice | null }> {
   const recorded = ledger.pendingInvoice;
-  if (!recorded) return { ledger, invoice: null };
+  const lateIds = ledger.pendingLateIds ?? [];
+  if (!recorded && lateIds.length === 0) return { ledger, invoice: null };
+  // Late trades the ledger already counted come off the late list, so they are never counted again.
+  await clearLate(store, ledger.userId, lateIds);
+  if (!recorded) {
+    const next = withoutPending(ledger);
+    await store.setDoc('client_ledgers', ledger.userId, next as unknown as Record<string, unknown>);
+    return { ledger: next, invoice: null };
+  }
   const due = Date.parse(recorded.dueAt);
   const enoughTime = Number.isFinite(due) && due - now.getTime() >= MIN_PAYMENT_WINDOW_MINUTES * 60_000;
   const invoice: Invoice = enoughTime ? recorded : { ...recorded, dueAt: invoiceDueAt(now) };
@@ -179,11 +276,10 @@ export async function settleClient(deps: RunDeps, ledgerIn: ClientLedger, ctx: S
   }
   const ledger = finished.ledger;
   const nowIso = ctx.now.toISOString();
-  const sync = await syncClosedTrades(deps, ledger.userId, ledger.settledThrough);
+  const sync = await syncFor(deps, ledger);
   if (!sync.ok) return { kind: 'skipped', reason: sync.reason };
 
-  const days = await loadDays(deps.store, ledger.userId, ledger.settledThrough, nowIso);
-  const { pnl, trades } = sumTrades(days, ledger.settledThrough, nowIso);
+  const { pnl, trades, lateIds } = await periodTrades(deps.store, ledger, nowIso);
   const state = realizedState(ledger);
   const r = settleRealized(state, pnl, ctx.feePct, ctx.minProfitUsd ?? 0);
 
@@ -220,15 +316,23 @@ export async function settleClient(deps: RunDeps, ledgerIn: ClientLedger, ctx: S
     pnlCum: r.next.pnlCum,
     pnlHwm: r.next.pnlHwm,
     settledThrough: nowIso,
+    // Late-trade checking reaches back no further than the first settlement that used it.
+    lateWatchFrom: ledger.lateWatchFrom ?? ledger.settledThrough,
     ...(lastInvoiceId ? { lastInvoiceId } : {}),
   };
-  if (!invoice) {
+  if (!invoice && lateIds.length === 0) {
     await deps.store.setDoc('client_ledgers', ledger.userId, next as unknown as Record<string, unknown>);
     return { kind: 'settled', ledger: next, invoice: null, periodPnl: pnl, trades };
   }
-  // (1) the ledger with the invoice recorded, (2) the invoice, (3) the ledger without the record.
-  await deps.store.setDoc('client_ledgers', ledger.userId, { ...next, pendingInvoice: invoice } as unknown as Record<string, unknown>);
-  await saveInvoice(deps.store, invoice);
+  // (1) the ledger with what is still to do recorded, (2) the late trades off their list, (3) the invoice, (4) the ledger
+  // without the record. If anything stops after (1), finishPendingInvoice completes (2)-(4) next time.
+  await deps.store.setDoc('client_ledgers', ledger.userId, {
+    ...next,
+    ...(invoice ? { pendingInvoice: invoice } : {}),
+    ...(lateIds.length ? { pendingLateIds: lateIds } : {}),
+  } as unknown as Record<string, unknown>);
+  await clearLate(deps.store, ledger.userId, lateIds);
+  if (invoice) await saveInvoice(deps.store, invoice);
   await deps.store.setDoc('client_ledgers', ledger.userId, next as unknown as Record<string, unknown>);
   return { kind: 'settled', ledger: next, invoice, periodPnl: pnl, trades };
 }
@@ -267,11 +371,9 @@ export function readOnlyOverlay(base: PsStore): PsStore {
  */
 export async function previewShare(deps: RunDeps, ledger: ClientLedger, feePct: number, now: Date): Promise<PreviewOutcome> {
   deps = { ...deps, store: readOnlyOverlay(deps.store) };
-  const sync = await syncClosedTrades(deps, ledger.userId, ledger.settledThrough);
+  const sync = await syncFor(deps, ledger);
   if (!sync.ok) return { ok: false, reason: sync.reason };
-  const nowIso = now.toISOString();
-  const days = await loadDays(deps.store, ledger.userId, ledger.settledThrough, nowIso);
-  const { pnl, trades } = sumTrades(days, ledger.settledThrough, nowIso);
+  const { pnl, trades } = await periodTrades(deps.store, ledger, now.toISOString());
   const s = shareOn(realizedState(ledger), pnl, feePct);
   return { ok: true, periodPnl: pnl, trades, gain: s.gain, fee: s.fee };
 }
@@ -295,7 +397,7 @@ export async function dailyUpdateFor(
   if (await deps.store.getDoc('ps_daily', docId)) return 'exists';
   if (key < dayKey(ledger.createdAt)) return 'before_start';
 
-  const sync = await syncClosedTrades(deps, ledger.userId, ledger.settledThrough);
+  const sync = await syncFor(deps, ledger);
   if (!sync.ok) return { skipped: sync.reason };
 
   const dayStart = `${dayKeyToDate(key)}T00:00:00.000Z`;
@@ -303,8 +405,7 @@ export async function dailyUpdateFor(
   const dayDoc = await deps.store.getDoc('ps_days', docId);
   const dayTotals = sumTrades([(dayDoc?.trades as DayTrades | undefined) ?? null], new Date(Date.parse(dayStart) - 1).toISOString(), dayEnd);
 
-  const days = await loadDays(deps.store, ledger.userId, ledger.settledThrough, dayEnd);
-  const period = sumTrades(days, ledger.settledThrough, dayEnd);
+  const period = await periodTrades(deps.store, ledger, dayEnd); // includes trades reported late
   const share = shareOn(realizedState(ledger), period.pnl, ctx.feePct);
 
   const nextAt = new Date(Date.parse(ledger.settledThrough) + ctx.periodDays * 86_400_000).toISOString();
