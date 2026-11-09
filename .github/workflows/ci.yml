@@ -1,0 +1,35 @@
+# Checks every proposed change before it can reach the live site: the type check, all tests and the build.
+# A pull request shows a green tick when all three pass and a red cross (with the reason in the log) when one fails.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Type check, tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install (exact versions from package-lock.json)
+        run: npm ci --no-audit --no-fund
+      - name: Type check
+        run: npm run lint
+      - name: Tests
+        run: npm test
+      - name: Build
+        run: npm run build
