@@ -1,0 +1,88 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Users can create their own profile only as a client, and can never change their role.
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && request.resource.data.role == 'client';
+      allow update: if (isOwner(userId) && request.resource.data.role == resource.data.role) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Money-related records: only admins (later, your backend) can change them.
+    match /subscriptions/{id} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+    }
+    match /profit_invoices/{id} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+    // Broker accounts are verified by the server against the broker. A client must never be
+    // able to write (and so forge) one of these records, so only admins can change them.
+    match /mt5_accounts/{id} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
+    }
+    // Nothing in the app writes audit logs from the browser, so no client may create them (stops junk records).
+    match /audit_logs/{id} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+
+    // Billing records are written ONLY by the server (service account bypasses these rules).
+    match /client_ledgers/{id} {
+      allow read: if isSignedIn() && (id == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+    // Email confirmation codes (salted hashes). Only the server can read or write them.
+    match /email_codes/{id} {
+      allow read, write: if false;
+    }
+    // Service plans and subscription payments are written only by the server. A user can read their own.
+    match /service_plans/{id} {
+      allow read: if isSignedIn() && (id == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+    match /subscription_payments/{id} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+    // Referral and withdrawal records are written only by the server. A user can read their own.
+    match /referral_commissions/{id} {
+      allow read: if isSignedIn() && (resource.data.beneficiaryUid == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+    match /referral_withdrawals/{id} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+    match /referrals/{id} { allow read, write: if false; }
+    match /referral_codes/{id} { allow read, write: if false; }
+    match /referral_code_owners/{id} { allow read, write: if false; }
+    match /platform_events/{id} { allow read, write: if false; }
+    match /used_tx_hashes/{id} {
+      allow read, write: if false;
+    }
+
+    // Proof that a user accepted a version of the terms. Created once, never changed.
+    match /agreements/{id} {
+      allow read: if isSignedIn() && (id.matches(request.auth.uid + '_.*') || isAdmin());
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && id == request.auth.uid + '_' + request.resource.data.version;
+      allow update, delete: if false;
+    }
+
+    // Everything not listed above is refused. (The app's start-up connection check treats a refusal as "connected".)
+  }
+}

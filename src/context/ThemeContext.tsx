@@ -1,0 +1,77 @@
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+
+export type Theme = 'dark' | 'light';
+
+interface ThemeContextType {
+  theme: Theme;
+  isDark: boolean;
+  toggleTheme: () => void;
+  setTheme: (theme: Theme) => void;
+}
+
+// v2: the premium dark look is the default for everyone; the toggle still switches to light.
+const THEME_STORAGE_KEY = 'castimo_theme_v2';
+
+const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+
+export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [theme, setThemeState] = useState<Theme>(() => {
+    try {
+      const saved = localStorage.getItem(THEME_STORAGE_KEY);
+      if (saved === 'light' || saved === 'dark') {
+        return saved;
+      }
+    } catch {
+      // Fallback
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
+    } else {
+      root.classList.add('light');
+      root.classList.remove('dark');
+    }
+
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // Ignore
+    }
+  }, [theme]);
+
+  // Briefly enable colour transitions so switching between light and dark fades instead of flashing.
+  const animateSwitch = () => {
+    const root = document.documentElement;
+    root.classList.add('theme-switching');
+    window.setTimeout(() => root.classList.remove('theme-switching'), 600);
+  };
+
+  const toggleTheme = () => {
+    animateSwitch();
+    setThemeState((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  };
+
+  const setTheme = (newTheme: Theme) => {
+    animateSwitch();
+    setThemeState(newTheme);
+  };
+
+  return (
+    <ThemeContext.Provider value={{ theme, isDark: theme === 'dark', toggleTheme, setTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};
+
+export const useTheme = (): ThemeContextType => {
+  const context = useContext(ThemeContext);
+  if (!context) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return context;
+};

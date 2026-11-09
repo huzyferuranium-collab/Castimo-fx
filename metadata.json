@@ -1,0 +1,8 @@
+{
+  "name": "Castimofx Trading Platform",
+  "description": "Castimofx MT5 Trade Copier, Real-time Risk Engine, TRC20 USDT Payments & Secure Client Portal",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

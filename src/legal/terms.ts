@@ -1,0 +1,120 @@
+/**
+ * Terms, Profit-Share Agreement and Risk Disclosure shown to every client before they can use the
+ * service. Change TERMS_VERSION whenever the text changes: everyone is then asked to accept again.
+ *
+ * IMPORTANT: this is a plain-language DRAFT. Have a lawyer in your country review it before launch.
+ */
+export const TERMS_VERSION = '2026-11-v4';
+
+export interface TermsSection {
+  title: string;
+  body: string[];
+}
+
+export const TERMS_SECTIONS: TermsSection[] = [
+  {
+    title: '1. What CASTIMOFx does',
+    body: [
+      'CASTIMOFx copies the trades of a master MT5 account onto your own MT5 broker account. Your money stays in your account at your own broker. CASTIMOFx never holds, receives or withdraws your trading funds.',
+      'CASTIMOFx is a trade-copying tool. It does not give you personal investment advice and is not a bank, broker or investment fund.',
+    ],
+  },
+  {
+    title: '2. Risk warning: you can lose money',
+    body: [
+      'Trading forex, gold and other leveraged products is risky. You can lose some or all of the money in your account, and with leverage you can lose quickly.',
+      'Past results of the master account do not guarantee future results. Nothing on this platform is a promise or guarantee of profit.',
+      'Copied trades will not always match the master account. Differences in price, spread, slippage, delays, minimum lot size, margin and your broker\'s rules can cause your results to differ, sometimes by a lot. A trade may fail to copy, copy late, or close at a different price.',
+      'Technical problems (internet, servers, our trade-copying provider Duplikium, your broker, or our systems) can interrupt copying while trades are still open. We cannot promise the service will be uninterrupted or error-free.',
+      'Only trade with money you can afford to lose.',
+    ],
+  },
+  {
+    title: '3. Your account and login details',
+    body: [
+      'You confirm you are at least 18 years old, that trading is legal where you live, and that all information you give is true.',
+      'To copy trades we need your MT5 account number, server and TRADING password. The password is sent securely to our trade-copying provider (Duplikium), which holds it in order to log in to your broker and copy trades onto your account. We do not keep your MT5 password on our own servers. Read-only (investor) passwords cannot be used. You can change your MT5 password or disconnect at any time.',
+      'You may connect only an account that belongs to you. We may refuse or remove any account we cannot verify with the broker.',
+    ],
+  },
+  {
+    title: '4. How copying works',
+    body: [
+      'Trade sizes are scaled to your account balance compared with the master account, and can be adjusted by the settings we offer. You are responsible for keeping enough margin and balance in your account.',
+      'We may pause or stop copying at any time, for example for risk limits, maintenance, an overdue invoice, or if something looks wrong.',
+      'If you disconnect or copying stops, trades that are already open stay open on your broker account. They are not closed for you. You must manage them in your MT5.',
+    ],
+  },
+  {
+    title: '5. Profit share (our fee)',
+    body: [
+      'There is no fee for losses. We charge 50% of NEW net profit made by your closed trades (profit, minus commission and swap), as reported for your real broker account.',
+      'Money you deposit or withdraw never counts as profit or loss, and trades that are still open are not charged until they close. Losses must be recovered before a new fee is charged (the "high-water mark").',
+      'Every 24 hours we add up the new profit from your closed trades. If it is at least 20 USD, we issue an invoice in USDT for 50% of it. If it is less than 20 USD, no invoice is issued, copying continues, and that profit is carried forward to the next day.',
+      'Pay in USDT on the TRON network (TRC20) to the wallet shown on your invoice. Network fees are paid by you. Send only to the address shown in the app. We never ask you to pay anywhere else.',
+      'If an invoice is not paid before the due time (midnight GMT, that is 23:59 GMT, on the day it is issued), copying is paused for your account until it is paid. We send reminders in your notifications every hour during the last 6 hours before the due time. Unpaid invoices remain owed.',
+    ],
+  },
+  {
+    title: '6. Ending the service',
+    body: [
+      'You can disconnect your account at any time from the dashboard. Invoices already issued remain payable.',
+      'We may suspend or end your access if you break these terms, give false information, try to abuse the system, or if we must stop the service. We will try to give notice where possible.',
+    ],
+  },
+  {
+    title: '7. Your data',
+    body: [
+      'We store your sign-in details, the MT5 account number and server you connect, the balance and equity figures reported by your broker, your invoices and payments, and a record that you accepted these terms. Your MT5 password is passed to our trade-copying provider (Duplikium), which holds it to log in to your broker; we do not keep it on our own servers, and it is not shown back to you.',
+      'We do not sell your personal data.',
+    ],
+  },
+  {
+    title: '8. No guarantees, limits on responsibility',
+    body: [
+      'The service is provided "as is". To the fullest extent the law allows, CASTIMOFx is not responsible for trading losses, missed or delayed trades, broker or third-party failures, or indirect losses. Nothing here limits any right you have under the law that cannot be limited.',
+    ],
+  },
+  {
+    title: '9. Third parties and conflicts of interest',
+    body: [
+      'Copying runs through third parties: your broker, our trade-copying provider (Duplikium), blockchain networks and hosting providers. We do not control them and are not responsible for their errors, outages or decisions.',
+      'The master account is traded by CASTIMOFx and may hold the same positions that you copy. We earn a fee only when you profit, but we may also trade our own money in the master account.',
+    ],
+  },
+  {
+    title: '10. Rules of use',
+    body: [
+      'You may not use the service for anything illegal, to hide the source of money, to attack or overload our systems, to share your login with others, or to connect an account that is not yours.',
+      'You are responsible for your own tax obligations on your trading results.',
+    ],
+  },
+  {
+    title: '11. Events outside our control',
+    body: [
+      'We are not responsible for failures or delays caused by events we cannot reasonably control, such as internet or power outages, broker or exchange suspensions, market gaps, cyber-attacks, government action or natural disasters.',
+    ],
+  },
+  {
+    title: '12. Messages and complaints',
+    body: [
+      'We may contact you through the app and your registered email about your account, invoices and changes to these terms.',
+      'If you have a complaint, contact us through the support channel shown in the app. We will try to answer within a reasonable time.',
+    ],
+  },
+  {
+    title: '13. Changes and law',
+    body: [
+      'We may update these terms. When we do, we will ask you to accept the new version before you continue.',
+      'These terms are governed by the laws of the Republic of Uganda, unless the law where you live gives you stronger protection.',
+      'If any part of these terms is found to be invalid, the rest stays in force. These terms are the whole agreement between you and CASTIMOFx about the service.',
+    ],
+  },
+];
+
+/** The short statement shown next to the I Agree button. */
+export const TERMS_SUMMARY = [
+  'Trading is risky. You can lose some or all of your money, and nothing is guaranteed.',
+  'Your funds stay in your own broker account. CASTIMOFx never holds your money.',
+  'CASTIMOFx charges 50% of new profit only (nothing on losses), invoiced in USDT.',
+];

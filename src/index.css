@@ -1,0 +1,1394 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---- Premium visual layer: glass, glows, hero motion, dual-tone headings ---- */
+@theme {
+  --color-ink: #050505;
+  --color-neon: #4ade80;
+  /* Premium multicolour palette */
+  --color-ruby-300: #fda4af; --color-ruby-400: #fb7185; --color-ruby-500: #e11d48; --color-ruby-600: #be123c; --color-ruby-700: #9f1239;
+  --color-royal-300: #93a8ff; --color-royal-400: #6b86ff; --color-royal-500: #3b5bdb; --color-royal-600: #2f4bdb; --color-royal-700: #1e3a9a; --color-royal-900: #0f1d5c;
+  --color-electric-400: #4d8dff; --color-electric-500: #1d6bff;
+  --color-gold-300: #f1dd9a; --color-gold-400: #e4c35e; --color-gold-500: #d4af37; --color-gold-600: #b8912a;
+  --color-magenta-400: #e879f9; --color-magenta-500: #d946ef; --color-magenta-600: #c026d3;
+  --color-pink-300: #f9a8d4; --color-pink-400: #f472b6;
+  --color-pearl: #F8FAFF;
+  --color-silver: #c3c9d4;
+  /* Signature brand palette (exact brand values) */
+  --color-brand-crimson: #F52236;
+  --color-brand-crimson-ink: #D90F2B;
+  --color-brand-royal: #1746D2;
+  --color-brand-electric: #176BFF;
+  --color-brand-sky: #38BDF8;
+  --color-brand-cyan: #06D6E9;
+  --color-brand-violet: #853BFF;
+  --color-brand-magenta: #E83EFF;
+  --color-brand-turquoise: #08C9B5;
+  --color-brand-gold: #E9BE62;
+  --color-brand-pearl: #F8FAFF;
+  --animate-float-a: float-a 9s ease-in-out infinite;
+  --animate-float-b: float-b 12s ease-in-out infinite;
+  --animate-float-c: float-c 15s ease-in-out infinite;
+  --animate-spin-slow: spin-slow 40s linear infinite;
+  --animate-gradient-pan: gradient-pan 9s ease-in-out infinite;
+  --animate-draw: draw 2.4s cubic-bezier(.3,.7,.2,1) .3s both;
+  --animate-grow-x: grow-x 1.4s cubic-bezier(.2,.7,.2,1) .5s both;
+  --animate-silk: silk 22s ease-in-out infinite;
+  @keyframes float-a { 0%,100% { transform: translate3d(0,0,0) rotate(0deg); } 50% { transform: translate3d(0,-18px,0) rotate(4deg); } }
+  @keyframes float-b { 0%,100% { transform: translate3d(0,0,0) rotate(0deg); } 50% { transform: translate3d(10px,14px,0) rotate(-5deg); } }
+  @keyframes float-c { 0%,100% { transform: translate3d(0,0,0); } 50% { transform: translate3d(-12px,-10px,0); } }
+  @keyframes spin-slow { to { transform: rotate(360deg); } }
+  @keyframes gradient-pan { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+  @keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  @keyframes grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @keyframes silk { 0%,100% { transform: translate3d(0,0,0); } 50% { transform: translate3d(-40px,6px,0); } }
+  --font-display: 'Sora', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --animate-grid-drift: grid-drift 40s linear infinite;
+  --animate-blob-a: blob-a 26s ease-in-out infinite;
+  --animate-blob-b: blob-b 32s ease-in-out infinite;
+  --animate-line-flow: line-flow 14s linear infinite;
+  --animate-glow-breathe: glow-breathe 4.5s ease-in-out infinite;
+
+  @keyframes grid-drift { to { transform: translate3d(-48px, -48px, 0); } }
+  @keyframes blob-a {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+    50% { transform: translate3d(60px, 40px, 0) scale(1.12); }
+  }
+  @keyframes blob-b {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1.05); }
+    50% { transform: translate3d(-50px, -30px, 0) scale(.94); }
+  }
+  @keyframes line-flow { to { stroke-dashoffset: -480; } }
+  @keyframes glow-breathe { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
+}
+
+@utility glass {
+  background: linear-gradient(160deg, rgba(29,32,39,.92), rgba(16,17,20,.96) 60%);
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 24px 48px -24px rgba(0,0,0,.7), var(--glow, 0 0 #0000);
+}
+
+@utility glass-rim {
+  position: relative;
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: linear-gradient(145deg,
+      rgba(255,255,255,.38) 0%, rgba(255,255,255,.08) 22%,
+      rgba(255,255,255,0) 48%, rgba(45,212,191,0) 70%, rgba(45,212,191,.24) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+}
+
+@utility glow-green {
+  --glow: 0 0 0 1px rgba(74,222,128,.25), 0 0 18px -3px rgba(74,222,128,.32), 0 0 48px -14px rgba(74,222,128,.20);
+}
+@utility glow-teal {
+  --glow: 0 0 0 1px rgba(45,212,191,.22), 0 0 22px -4px rgba(45,212,191,.28), 0 0 60px -16px rgba(45,212,191,.18);
+}
+
+@utility text-electric {
+  background-image: linear-gradient(100deg, #bbf7d0 0%, #4ade80 28%, #2dd4bf 62%, #67e8f9 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 28px rgba(45,212,191,.22));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-grid-drift, .animate-blob-a, .animate-blob-b,
+  .animate-line-flow, .animate-glow-breathe, .animate-float-a, .animate-float-b, .animate-float-c,
+  .animate-spin-slow, .animate-gradient-pan, .animate-draw, .animate-grow-x, .animate-silk { animation: none !important; }
+}
+
+:root {
+  color-scheme: dark light;
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  background-color: #050505;
+}
+
+.font-mono,
+code,
+kbd,
+samp {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Mobile-friendly touch scrolling and tap highlight */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hide scrollbar for clean horizontal swipe on mobile */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html.dark {
+  color-scheme: dark;
+  /* ---- Pure black luxury (dark theme only) ----
+     page and cards #000000, hairlines #2B2B2B, headings #FFFFFF, regular text #EAEAEA, neutral greys below.
+     The slate scale is re-pointed at neutral greys, so every existing slate class follows it in dark only
+     (the light theme has its own explicit overrides and is not affected). No blue or charcoal tint anywhere. */
+  --lux-line: #2b2b2b;
+  --lux-line-strong: #454545;
+  --color-slate-50: #ffffff;
+  --color-slate-100: #f5f5f5;
+  --color-slate-200: #f0f0f0;
+  --color-slate-300: #eaeaea;
+  --color-slate-400: #a6a6a6;
+  --color-slate-500: #8c8c8c;
+  --color-slate-600: #6b6b6b;
+  --color-slate-700: #2b2b2b;
+  --color-slate-800: #141414;
+  --color-slate-900: #000000;
+  --color-slate-950: #000000;
+  /* navy-tinted panel fills become plain black */
+  --color-indigo-950: #000000;
+  --color-blue-950: #000000;
+  --color-sky-950: #000000;
+  --color-violet-950: #000000;
+  --color-purple-950: #000000;
+  --color-cyan-950: #000000;
+  --color-teal-950: #000000;
+}
+
+:root {
+  /* Brand colours as r,g,b triplets for rgba(var(--c-x), .3) */
+  --c-crimson: 245, 34, 54;
+  --c-royal: 23, 70, 210;
+  --c-electric: 23, 107, 255;
+  --c-sky: 56, 189, 248;
+  --c-cyan: 6, 214, 233;
+  --c-violet: 133, 59, 255;
+  --c-magenta: 232, 62, 255;
+  --c-turquoise: 8, 201, 181;
+  --c-gold: 233, 190, 98;
+
+  --g-flame: linear-gradient(110deg, #ff4d5e 0%, #f062ff 32%, #9b6bff 62%, #38bdf8 100%);
+  --g-flame-ink: linear-gradient(110deg, #d90f2b 0%, #b01fd0 38%, #6a2bd9 66%, #1746d2 100%);
+  --g-aqua: linear-gradient(110deg, #38bdf8 0%, #4d8dff 50%, #06d6e9 100%);
+  --g-aqua-ink: linear-gradient(110deg, #0a6fb8 0%, #1746d2 55%, #07909c 100%);
+  --g-gold: linear-gradient(120deg, #f6dfa6, #e9be62 50%, #b98e2c);
+  --g-gold-ink: linear-gradient(120deg, #8a6a12, #b98e2c 50%, #6f530a);
+  --g-primary: linear-gradient(135deg, #176bff 0%, #4e53ff 52%, #853bff 100%);
+  --g-ruby: linear-gradient(135deg, #e8192f 0%, #d90f2b 45%, #853bff 100%);
+  --rim-accent: 23, 107, 255;
+  /* Illustration lighting: soft blue-violet shadow in light mode, coloured glow in dark mode */
+  --art-shadow: 0 22px 26px rgba(40, 60, 160, .28);
+  --art-lift: .0;
+  --grid-line: rgba(100, 116, 139, .09);
+}
+html.dark { --grid-line: rgba(148, 163, 184, .10); --art-shadow: 0 0 34px rgba(23, 107, 255, .45); }
+html[data-page="client"] { --rim-accent: 23, 107, 255; }
+html[data-page="referrals"] { --rim-accent: 245, 34, 54; }
+html[data-page="admin"] { --rim-accent: 133, 59, 255; }
+
+/* Illustrations: every piece of artwork floats with a theme-specific light source. */
+.art { filter: drop-shadow(var(--art-shadow)); }
+html.dark .art { filter: drop-shadow(0 0 22px rgba(var(--rim-accent), .5)) drop-shadow(0 14px 18px rgba(0, 0, 0, .55)); }
+
+html.light {
+  color-scheme: light;
+}
+
+/* ========================================================
+   LIGHT / WHITE THEME HARMONIZATION SYSTEM
+   Balances backgrounds, cards, borders, text, and financial
+   accents (emerald/rose/amber/purple) for crisp WCAG contrast.
+   Eliminates all dark muddy areas and unreadable dark text.
+   ======================================================== */
+
+html.light body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* 1. Surfaces & Cards in White Theme */
+html.light .bg-slate-950,
+html.light [class*="bg-slate-950"] {
+  background-color: #f8fafc !important;
+  color: #0f172a;
+}
+
+html.light .bg-slate-900,
+html.light [class*="bg-slate-900"] {
+  background-color: #ffffff !important;
+  color: #0f172a;
+}
+
+html.light .bg-slate-800,
+html.light [class*="bg-slate-800"] {
+  background-color: #f1f5f9 !important;
+  color: #1e293b;
+}
+
+/* Hover States on Light Theme */
+html.light [class*="hover:bg-slate-800"]:hover {
+  background-color: #e2e8f0 !important;
+}
+
+html.light [class*="hover:bg-slate-700"]:hover {
+  background-color: #cbd5e1 !important;
+}
+
+html.light [class*="hover:bg-slate-900"]:hover {
+  background-color: #f8fafc !important;
+}
+
+/* Table Headers & Table Rows */
+html.light thead,
+html.light thead tr,
+html.light thead th {
+  background-color: #f1f5f9 !important;
+  color: #475569 !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light tr[class*="hover:bg-slate-800"]:hover,
+html.light div[class*="hover:bg-slate-800"]:hover {
+  background-color: #f1f5f9 !important;
+}
+
+/* 2. Borders in White Theme */
+html.light [class*="border-slate-8"],
+html.light [class*="border-slate-9"] {
+  border-color: #e2e8f0 !important;
+}
+
+html.light [class*="border-slate-7"] {
+  border-color: #cbd5e1 !important;
+}
+
+html.light [class*="divide-slate-8"] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #e2e8f0 !important;
+}
+
+/* 3. Eradicate Dark Gradient Patches on Cards & Dialog Headers */
+html.light [class*="from-emerald-9"],
+html.light [class*="from-emerald-8"] {
+  --tw-gradient-from: #ecfdf5 !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #ffffff, #ffffff !important;
+}
+
+html.light [class*="from-purple-9"],
+html.light [class*="from-purple-8"] {
+  --tw-gradient-from: #f5f3ff !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #ffffff, #ffffff !important;
+}
+
+html.light [class*="from-blue-9"],
+html.light [class*="from-blue-8"],
+html.light [class*="from-blue-6"] {
+  --tw-gradient-from: #eff6ff !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #ffffff, #ffffff !important;
+}
+
+html.light [class*="from-amber-9"],
+html.light [class*="from-amber-8"],
+html.light [class*="from-amber-6"] {
+  --tw-gradient-from: #fffbeb !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #ffffff, #ffffff !important;
+}
+
+html.light [class*="from-slate-8"],
+html.light [class*="from-slate-9"],
+html.light [class*="from-slate-950"] {
+  --tw-gradient-from: #f8fafc !important;
+  --tw-gradient-stops: var(--tw-gradient-from), #ffffff, #ffffff !important;
+}
+
+html.light [class*="via-slate-8"],
+html.light [class*="via-slate-9"] {
+  --tw-gradient-via: #ffffff !important;
+}
+
+html.light [class*="to-slate-8"],
+html.light [class*="to-slate-9"] {
+  --tw-gradient-to: #ffffff !important;
+}
+
+/* 4. Dark Accent Badge Backgrounds Converted to Luminous Pastels.
+   Matches only the plain class (start of list or after a space), never dark:/hover: variants,
+   so inactive sidebar items are not filled. */
+html.light [class*=" bg-purple-950"],
+html.light [class^="bg-purple-950"],
+html.light [class*=" bg-purple-900"],
+html.light [class^="bg-purple-900"] {
+  background-color: #f5f3ff !important;
+  color: #6b21a8 !important;
+}
+
+html.light [class*=" bg-emerald-950"],
+html.light [class^="bg-emerald-950"],
+html.light [class*=" bg-emerald-900"],
+html.light [class^="bg-emerald-900"] {
+  background-color: #ecfdf5 !important;
+  color: #065f46 !important;
+}
+
+html.light [class*=" bg-amber-950"],
+html.light [class^="bg-amber-950"],
+html.light [class*=" bg-amber-900"],
+html.light [class^="bg-amber-900"] {
+  background-color: #fffbeb !important;
+  color: #92400e !important;
+}
+
+html.light [class*=" bg-rose-950"],
+html.light [class^="bg-rose-950"],
+html.light [class*=" bg-rose-900"],
+html.light [class^="bg-rose-900"],
+html.light [class*=" bg-red-950"],
+html.light [class^="bg-red-950"],
+html.light [class*=" bg-red-900"],
+html.light [class^="bg-red-900"] {
+  background-color: #fff1f2 !important;
+  color: #9f1239 !important;
+}
+
+html.light [class*="border-purple-8"],
+html.light [class*="border-purple-9"] {
+  border-color: #ddd6fe !important;
+}
+
+html.light [class*="border-emerald-8"],
+html.light [class*="border-emerald-9"] {
+  border-color: #a7f3d0 !important;
+}
+
+html.light [class*="border-amber-8"],
+html.light [class*="border-amber-9"] {
+  border-color: #fde68a !important;
+}
+
+html.light [class*="border-rose-8"],
+html.light [class*="border-rose-9"] {
+  border-color: #fecdd3 !important;
+}
+
+/* 5. Typography Contrast in White Theme */
+html.light .text-white,
+html.light [class*="text-white"] {
+  color: #0f172a !important;
+}
+
+html.light .text-slate-900,
+html.light [class*="text-slate-900"] {
+  color: #0f172a !important;
+}
+
+html.light .text-slate-800,
+html.light [class*="text-slate-800"] {
+  color: #1e293b !important;
+}
+
+html.light .text-slate-700,
+html.light [class*="text-slate-700"] {
+  color: #334155 !important;
+}
+
+html.light .text-slate-600,
+html.light [class*="text-slate-600"] {
+  color: #475569 !important;
+}
+
+html.light .text-slate-500,
+html.light [class*="text-slate-500"] {
+  color: #475569 !important;
+}
+
+html.light .text-slate-400,
+html.light [class*="text-slate-400"] {
+  color: #475569 !important;
+}
+
+html.light .text-slate-300,
+html.light [class*="text-slate-300"] {
+  color: #334155 !important;
+}
+
+html.light .text-slate-200,
+html.light [class*="text-slate-200"] {
+  color: #1e293b !important;
+}
+
+html.light .text-slate-100,
+html.light [class*="text-slate-100"] {
+  color: #0f172a !important;
+}
+
+/* High-contrast colored status accents for light mode */
+html.light .text-emerald-400,
+html.light .text-emerald-300 {
+  color: #059669 !important; /* emerald-600 */
+}
+
+html.light .bg-emerald-500\/10,
+html.light .bg-emerald-500\/15,
+html.light .bg-emerald-500\/20 {
+  background-color: #ecfdf5 !important; /* emerald-50 */
+}
+
+html.light .border-emerald-500\/20,
+html.light .border-emerald-500\/30,
+html.light .border-emerald-500\/40 {
+  border-color: #a7f3d0 !important; /* emerald-200 */
+}
+
+html.light .text-rose-400,
+html.light .text-rose-300,
+html.light .text-red-400,
+html.light .text-red-300 {
+  color: #e11d48 !important; /* rose-600 */
+}
+
+html.light .text-rose-200,
+html.light .text-rose-200\/90 {
+  color: #881337 !important; /* rose-900 */
+}
+
+html.light .bg-rose-500\/10,
+html.light .bg-rose-500\/15,
+html.light .bg-rose-500\/20,
+html.light .bg-red-600\/30 {
+  background-color: #fff1f2 !important; /* rose-50 */
+}
+
+html.light .border-rose-500\/20,
+html.light .border-rose-500\/30,
+html.light .border-rose-500\/40,
+html.light .border-red-500\/40 {
+  border-color: #fecdd3 !important; /* rose-200 */
+}
+
+html.light .text-amber-400,
+html.light .text-amber-300 {
+  color: #b45309 !important; /* amber-700 */
+}
+
+html.light .text-amber-200,
+html.light .text-amber-200\/90 {
+  color: #78350f !important; /* amber-900 */
+}
+
+html.light .bg-amber-500\/10,
+html.light .bg-amber-500\/15,
+html.light .bg-amber-500\/20 {
+  background-color: #fffbeb !important; /* amber-50 */
+}
+
+html.light .border-amber-500\/20,
+html.light .border-amber-500\/30,
+html.light .border-amber-500\/40 {
+  border-color: #fde68a !important; /* amber-200 */
+}
+
+html.light .text-purple-400,
+html.light .text-purple-300,
+html.light .text-purple-200 {
+  color: #7c3aed !important; /* purple-600 */
+}
+
+html.light .bg-purple-500\/10,
+html.light .bg-purple-500\/15,
+html.light .bg-purple-500\/20 {
+  background-color: #f5f3ff !important; /* purple-50 */
+}
+
+html.light .border-purple-500\/40,
+html.light .border-purple-500\/30 {
+  border-color: #ddd6fe !important; /* purple-200 */
+}
+
+html.light .text-blue-400,
+html.light .text-blue-300 {
+  color: #2563eb !important; /* blue-600 */
+}
+
+html.light .bg-blue-500\/10,
+html.light .bg-blue-500\/15,
+html.light .bg-blue-500\/20 {
+  background-color: #eff6ff !important; /* blue-50 */
+}
+
+html.light .border-blue-500\/20,
+html.light .border-blue-500\/30,
+html.light .border-blue-500\/40 {
+  border-color: #bfdbfe !important; /* blue-200 */
+}
+
+/* High-contrast Cyan Accents for Light Theme */
+html.light .text-cyan-400,
+html.light .text-cyan-300,
+html.light .text-cyan-200 {
+  color: #0e7490 !important; /* cyan-700: deep, clear, high-contrast readable */
+}
+
+html.light .bg-cyan-500\/10,
+html.light .bg-cyan-500\/15,
+html.light .bg-cyan-500\/20 {
+  background-color: #ecfeff !important; /* cyan-50 */
+}
+
+html.light .border-cyan-500\/20,
+html.light .border-cyan-500\/30,
+html.light .border-cyan-500\/40,
+html.light .border-cyan-400\/70,
+html.light .border-cyan-500\/60 {
+  border-color: #a5f3fc !important; /* cyan-200 */
+}
+
+/* Eradicate hardcoded dark palette & white border in Light Theme */
+html.light .bg-\[\#090D16\],
+html.light [class*="bg-[#090D16]"],
+html.light [class*="bg-[#090d16]"] {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #e2e8f0 !important;
+}
+
+html.light [class*="border-white"] {
+  border-color: #e2e8f0 !important;
+}
+
+/* 6. Preserve White Text on Solid Color Buttons & Badges */
+html.light button.bg-purple-600,
+html.light button.bg-purple-500,
+html.light button.bg-blue-600,
+html.light button.bg-blue-500,
+html.light button.bg-emerald-600,
+html.light button.bg-indigo-600,
+html.light [class*="bg-purple-600"] .text-white,
+html.light [class*="bg-blue-600"] .text-white,
+html.light [class*="bg-emerald-600"] .text-white,
+html.light [class*="bg-indigo-600"] .text-white,
+html.light button[class*="from-purple"] .text-white,
+html.light button[class*="from-blue"] .text-white,
+html.light button[class*="from-emerald"] .text-white {
+  color: #ffffff !important;
+}
+
+/* 7. Soft Shadows in White Theme */
+html.light [class*="shadow-purple-9"],
+html.light [class*="shadow-emerald-9"],
+html.light [class*="shadow-rose-9"],
+html.light [class*="shadow-amber-9"] {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05) !important;
+}
+
+html.light .shadow-xl,
+html.light .shadow-2xl {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -4px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* 8. Inputs & Form Elements in White Theme */
+html.light input:not([type="checkbox"]):not([type="radio"]),
+html.light select,
+html.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+html.light input:focus,
+html.light select:focus,
+html.light textarea:focus {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15) !important;
+}
+
+/* 9. Modals & Backdrops in White Theme */
+html.light .fixed.bg-black\/80,
+html.light .fixed.bg-black\/75,
+html.light .fixed.bg-black\/60,
+html.light .fixed.bg-slate-950\/80,
+html.light .fixed.bg-slate-950\/90 {
+  background-color: rgba(15, 23, 42, 0.45) !important;
+}
+
+/* Custom Scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ========================================================
+   COMPACT FUTURISTIC AI ROBOT SIMULATION ANIMATIONS
+   ======================================================== */
+
+@keyframes robot-float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(0.8deg);
+  }
+}
+
+@keyframes robot-eyes-scan {
+  0%, 100% {
+    transform: translateX(-5px);
+  }
+  50% {
+    transform: translateX(5px);
+  }
+}
+
+@keyframes radar-sweep {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes candle-drift {
+  0%, 100% {
+    transform: translateY(0px) scale(0.98);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(-8px) scale(1.02);
+    opacity: 1;
+  }
+}
+
+@keyframes beacon-pulse {
+  0%, 100% {
+    transform: scale(0.9);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+@keyframes data-particle {
+  0% {
+    transform: translateY(12px) scale(0.6);
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-16px) scale(1);
+    opacity: 0;
+  }
+}
+
+.animate-robot-float {
+  animation: robot-float 4s ease-in-out infinite;
+}
+
+.animate-robot-eyes {
+  animation: robot-eyes-scan 2.8s ease-in-out infinite alternate;
+}
+
+.animate-radar-sweep {
+  animation: radar-sweep 5s linear infinite;
+}
+
+.animate-candle-drift {
+  animation: candle-drift 3.5s ease-in-out infinite;
+}
+
+.animate-beacon-pulse {
+  animation: beacon-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes humanoid-head-pan {
+  0%, 100% {
+    transform: rotate(0deg) translateX(0px);
+  }
+  25% {
+    transform: rotate(-3.5deg) translateX(-3px) translateY(-1px);
+  }
+  50% {
+    transform: rotate(0.5deg) translateX(1px);
+  }
+  75% {
+    transform: rotate(4deg) translateX(4px) translateY(-1px);
+  }
+}
+
+@keyframes humanoid-optic-scan {
+  0%, 100% {
+    transform: translateX(-12px);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateX(12px);
+    opacity: 1;
+  }
+}
+
+@keyframes humanoid-left-hand {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-5px) rotate(-1.5deg);
+  }
+  60% {
+    transform: translateY(2px) rotate(1deg);
+  }
+  85% {
+    transform: translateY(-3px) rotate(-0.5deg);
+  }
+}
+
+@keyframes humanoid-right-hand {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  20% {
+    transform: translateY(3px) rotate(1.5deg);
+  }
+  55% {
+    transform: translateY(-4px) rotate(-1deg);
+  }
+  80% {
+    transform: translateY(-2px) rotate(0.5deg);
+  }
+}
+
+@keyframes humanoid-core-pulse {
+  0%, 100% {
+    box-shadow: 0 0 14px rgba(6, 182, 212, 0.4), inset 0 0 10px rgba(6, 182, 212, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(6, 182, 212, 0.85), inset 0 0 18px rgba(6, 182, 212, 0.95);
+  }
+}
+
+@keyframes holo-scan-line {
+  0% {
+    top: 0%;
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.9;
+  }
+  85% {
+    opacity: 0.9;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes holo-data-stream {
+  0% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.8;
+  }
+  80% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+}
+
+.animate-humanoid-head {
+  animation: humanoid-head-pan 9s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+
+.animate-humanoid-optic {
+  animation: humanoid-optic-scan 3.2s ease-in-out infinite;
+}
+
+.animate-humanoid-left-hand {
+  animation: humanoid-left-hand 4.8s ease-in-out infinite;
+  transform-origin: 30% 20%;
+}
+
+.animate-humanoid-right-hand {
+  animation: humanoid-right-hand 5.2s ease-in-out infinite;
+  transform-origin: 70% 20%;
+}
+
+.animate-humanoid-core {
+  animation: humanoid-core-pulse 3s ease-in-out infinite;
+}
+
+.animate-holo-scan {
+  animation: holo-scan-line 3.5s linear infinite;
+}
+
+.animate-holo-stream {
+  animation: holo-data-stream 4s linear infinite;
+}
+
+@keyframes assistant-head-bob {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-2px) rotate(1.2deg);
+  }
+}
+
+@keyframes assistant-visor-sweep {
+  0%, 100% {
+    transform: translateX(-16px);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateX(16px);
+    opacity: 1;
+  }
+}
+
+@keyframes assistant-core-pulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+.animate-assistant-head {
+  animation: assistant-head-bob 4.5s ease-in-out infinite;
+  transform-origin: 50% 85%;
+}
+
+.animate-assistant-visor {
+  animation: assistant-visor-sweep 2.4s ease-in-out infinite;
+}
+
+.animate-assistant-core {
+  animation: assistant-core-pulse 2.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-robot-float,
+  .animate-robot-eyes,
+  .animate-radar-sweep,
+  .animate-candle-drift,
+  .animate-beacon-pulse,
+  .animate-humanoid-head,
+  .animate-humanoid-optic,
+  .animate-humanoid-left-hand,
+  .animate-humanoid-right-hand,
+  .animate-humanoid-core,
+  .animate-holo-scan,
+  .animate-holo-stream,
+  .animate-assistant-head,
+  .animate-assistant-visor,
+  .animate-assistant-core {
+    animation: none !important;
+  }
+}
+
+/* ========================================================
+   GLOBAL PREMIUM SURFACE LAYER (applies to the whole app)
+   Dark: frosted-glass cards over a deep canvas with soft teal/cyan light.
+   Light: clean white cards with layered soft shadows.
+   ======================================================== */
+
+/* let the canvas show through the page shell */
+html.dark .min-h-screen.bg-slate-950 { background-color: transparent; }
+
+/* Header: black with a grey hairline */
+html.dark header.sticky {
+  background-color: rgba(0,0,0,.94);
+  border-bottom-color: #2b2b2b;
+  box-shadow: none;
+}
+
+
+/* Slim, quiet scrollbars */
+html.dark { scrollbar-color: rgba(255,255,255,.22) transparent; }
+
+/* Light theme: soft layered depth instead of flat white boxes */
+html.light .min-h-screen.bg-slate-950 { background-color: transparent !important; }
+
+html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody) {
+  box-shadow: 0 1px 2px rgba(15,23,42,.05), 0 14px 34px -16px rgba(15,23,42,.14);
+  border-color: rgba(15,23,42,.08) !important;
+}
+
+
+/* ========================================================
+   LANDING: reveal-on-scroll, surfaces, buttons, flow lines
+   ======================================================== */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1);
+  transition-delay: var(--reveal-delay, 0ms);
+  will-change: opacity, transform;
+}
+.reveal.is-in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+
+/* Landing surface: crisp white card (light) / frosted glass (dark) */
+.surface {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid rgba(15,23,42,.08);
+  box-shadow: 0 1px 2px rgba(15,23,42,.05), 0 18px 40px -20px rgba(15,23,42,.18);
+}
+.surface-hover { transition: transform .35s cubic-bezier(.2,.7,.2,1), box-shadow .35s ease; }
+.surface-hover:hover { transform: translateY(-4px); }
+html.dark .surface-hover:hover { box-shadow: inset 0 0 0 1px #4a4a4a; }
+
+/* Featured plan: gradient edge */
+.edge-gradient::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: linear-gradient(140deg, #fb7185, #c084fc 40%, #6b86ff 72%, #38bdf8);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+/* Primary button with a slow sheen on hover */
+.btn-primary {
+  position: relative;
+  overflow: hidden;
+  background-image: var(--g-primary);
+  background-size: 160% 160%;
+  color: #ffffff;
+  box-shadow: 0 14px 32px -12px rgba(79,70,229,.65), inset 0 1px 0 rgba(255,255,255,.35);
+  transition: transform .25s ease, box-shadow .25s ease, filter .25s ease, background-position .6s ease;
+}
+.btn-primary::after { /* glossy upper half */
+  content: '';
+  position: absolute;
+  inset: 0 0 50% 0;
+  background: linear-gradient(180deg, rgba(255,255,255,.26), rgba(255,255,255,0));
+  pointer-events: none;
+}
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.4) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform .8s ease;
+}
+.btn-primary:hover { transform: translateY(-2px); background-position: 100% 50%; filter: saturate(1.12); box-shadow: 0 20px 40px -14px rgba(79,70,229,.8), inset 0 1px 0 rgba(255,255,255,.4); }
+.btn-primary:hover::before { transform: translateX(120%); }
+.btn-primary:active { transform: translateY(0); }
+.btn-ruby { background-image: var(--g-ruby); box-shadow: 0 14px 32px -12px rgba(225,29,72,.6), inset 0 1px 0 rgba(255,255,255,.35); }
+.btn-ruby:hover { box-shadow: 0 20px 40px -14px rgba(225,29,72,.75), inset 0 1px 0 rgba(255,255,255,.4); }
+
+.btn-ghost {
+  background: rgba(255,255,255,.7);
+  color: #1e3a8a;
+  border: 1px solid rgba(37,99,235,.25);
+  transition: transform .25s ease, background .25s ease, border-color .25s ease;
+}
+.btn-ghost:hover { transform: translateY(-2px); background: #fff; border-color: rgba(37,99,235,.5); }
+html.dark .btn-ghost { background: transparent; color: #ffffff; border-color: #3d3d3d; box-shadow: none; }
+html.dark .btn-ghost:hover { background: rgba(255,255,255,.06); border-color: #ffffff; box-shadow: none; }
+
+/* Gradient text that also reads on a light page */
+.text-electric-soft {
+  background-image: linear-gradient(100deg, #059669 0%, #0d9488 45%, #0891b2 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+html.dark .text-electric-soft { background-image: none; color: #ffffff; -webkit-text-fill-color: #ffffff; filter: none; }
+
+/* Flow line between the three nodes in the hero diagram */
+@keyframes flow-dash { to { stroke-dashoffset: -40; } }
+.flow-dash { stroke-dasharray: 3 9; }
+@keyframes node-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(45,212,191,.35); } 50% { box-shadow: 0 0 0 10px rgba(45,212,191,0); } }
+.node-pulse { box-shadow: 0 0 0 5px rgba(45,212,191,.14); }
+
+
+/* Smooth page transition when switching between Client / Referral / Admin */
+@keyframes page-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* fill-mode backwards: nothing (no transform) is left behind afterwards, so fixed pop-ups and the mobile drawer inside still position against the screen */
+.page-enter { animation: page-enter .45s cubic-bezier(.2,.7,.2,1) backwards; }
+@media (prefers-reduced-motion: reduce) { .page-enter { animation: none; } }
+
+
+/* ========================================================
+   MULTICOLOUR BRAND SYSTEM v2
+   ruby (highlight) · royal/electric (trading core) · violet (premium)
+   sky/cyan/turquoise (fresh + status) · gold & silver (finishing)
+   ======================================================== */
+.text-grad-flame, .text-grad-aqua, .text-grad-gold {
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  background-size: 125% 125%;
+}
+.text-grad-flame { background-image: var(--g-flame-ink); }
+.text-grad-aqua { background-image: var(--g-aqua-ink); }
+.text-grad-gold { background-image: var(--g-gold-ink); }
+html.dark .text-grad-flame { background-image: none; color: #ffffff; -webkit-text-fill-color: #ffffff; filter: none; }
+html.dark .text-grad-aqua { background-image: none; color: #ffffff; -webkit-text-fill-color: #ffffff; filter: none; }
+html.dark .text-grad-gold { background-image: none; color: #ffffff; -webkit-text-fill-color: #ffffff; filter: none; }
+.animate-gradient-pan.text-grad-flame, .animate-gradient-pan.text-grad-aqua { animation: gradient-pan 9s ease-in-out infinite; }
+
+/* coloured rim on landing surfaces */
+.surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(145deg, rgba(var(--rim-accent), .45) 0%, rgba(var(--rim-accent), 0) 36%, rgba(var(--rim-accent), 0) 64%, rgba(var(--rim-accent), .28) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+html.dark .surface::before {
+  background: linear-gradient(145deg, rgba(255,255,255,.30) 0%, rgba(255,255,255,.07) 22%, rgba(255,255,255,0) 48%, rgba(var(--rim-accent), 0) 66%, rgba(var(--rim-accent), .34) 100%);
+}
+
+/* silver + gold finishing details */
+.hairline-gold { height: 1px; background: linear-gradient(90deg, transparent, #e4c35e 30%, #fff3c4 50%, #e4c35e 70%, transparent); opacity: .85; }
+.hairline-silver { height: 1px; background: linear-gradient(90deg, transparent, #c3c9d4 30%, #ffffff 50%, #c3c9d4 70%, transparent); opacity: .6; }
+.badge-gold {
+  background-image: var(--g-gold);
+  color: #3b2a00;
+  box-shadow: 0 6px 16px -6px rgba(212,175,55,.6), inset 0 1px 0 rgba(255,255,255,.55);
+}
+
+/* Existing green "primary" buttons across the app adopt the brand blue-violet gradient.
+   (Status badges and success messages keep green: green now only ever means "OK / active".) */
+html button[class*="from-emerald-5"],
+html button[class~="bg-emerald-500"][class*="text-slate-950"],
+html button[class~="bg-emerald-600"][class*="text-white"] {
+  background-image: var(--g-primary) !important;
+  background-color: #4f46e5 !important;
+  color: #ffffff !important;
+  box-shadow: 0 12px 28px -12px rgba(79,70,229,.6), inset 0 1px 0 rgba(255,255,255,.3);
+  transition: filter .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+html button[class*="from-emerald-5"]:hover,
+html button[class~="bg-emerald-500"][class*="text-slate-950"]:hover,
+html button[class~="bg-emerald-600"][class*="text-white"]:hover { filter: brightness(1.1) saturate(1.1); }
+html button[class*="from-emerald-5"]:disabled,
+html button[class~="bg-emerald-500"][class*="text-slate-950"]:disabled { filter: grayscale(.4); opacity: .6; }
+
+
+/* ========================================================
+   v3: FLOWING SURFACES — no grid, no outlines, depth from colour + light
+   Dark = midnight navy with luminous accents. Light = pearl with coloured washes.
+   ======================================================== */
+/* Dark: pure black, no ambient colour. */
+html.dark body { background-color: #000000; color: #eaeaea; background-image: none; }
+html.dark::before { content: none; }
+/* Light: pearl white with luminous washes of sky, cyan, magenta and a touch of champagne. */
+html.light body { background-color: #F8FAFF !important; background-image: none !important; }
+html.light::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image:
+    radial-gradient(1000px 560px at 0% -8%, rgba(var(--c-magenta), .16), transparent 60%),
+    radial-gradient(900px 560px at 100% 0%, rgba(var(--c-sky), .30), transparent 62%),
+    radial-gradient(900px 560px at 50% 112%, rgba(var(--c-cyan), .20), transparent 60%),
+    radial-gradient(620px 420px at 100% 100%, rgba(var(--c-crimson), .08), transparent 60%),
+    radial-gradient(560px 380px at 8% 62%, rgba(var(--c-gold), .12), transparent 65%);
+}
+
+/* Soft glow blobs behind cards: a masked gradient disc, so there is no blur filter to re-run */
+.bloom {
+  -webkit-mask-image: radial-gradient(closest-side, #000 15%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 15%, transparent 100%);
+}
+
+/* Artwork keeps its drop shadow while still; pieces that float all the time drop it (a filter on a moving layer is re-run every frame) */
+.art.animate-float-a, .art.animate-float-b, .art.animate-float-c { filter: none !important; }
+
+/* Cards: soft rounded surfaces. Dark = flat black with a grey hairline; light = soft white depth. */
+html.dark :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) {
+  background: #000000;
+  box-shadow: inset 0 0 0 1px #2b2b2b;
+}
+html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) {
+  background:
+    radial-gradient(130% 100% at 100% 0%, rgba(var(--rim-accent), .11), transparent 55%),
+    linear-gradient(160deg, #ffffff, #f6f7ff);
+  box-shadow: 0 1px 2px rgba(30,41,100,.05), 0 22px 46px -24px rgba(var(--rim-accent), .40);
+}
+html.dark :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass)::before, html.light :is(.rounded-xl, .rounded-2xl, .rounded-3xl):is(.bg-slate-900, [class*="dark:bg-slate-900"], [class*="bg-slate-900/"]):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass)::before { content: none; }
+
+/* Quiet every outline: panels lose their borders, dividers become barely-there tints */
+html:is(.dark, .light) :is(.rounded-xl, .rounded-2xl, .rounded-3xl):not(button, input, select, textarea, .keep-border)[class*="border"] { border-color: transparent !important; }
+html.dark :not(input, select, textarea, button, svg, path)[class*="border-slate-"] { border-color: #2b2b2b !important; }
+html.light :not(input, select, textarea, button, svg, path)[class*="border-slate-"] { border-color: rgba(30,41,100,.07) !important; }
+html.dark [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) { border-color: #2b2b2b !important; }
+html.light [class*="divide-slate"] > :not([hidden]) ~ :not([hidden]) { border-color: rgba(30,41,100,.06) !important; }
+
+/* Landing surfaces follow the same soft-depth language */
+.surface {
+  background: linear-gradient(160deg, #ffffff, #f6f7ff);
+  border: 0;
+  box-shadow: 0 1px 2px rgba(30,41,100,.05), 0 24px 50px -26px rgba(var(--rim-accent), .42);
+}
+html.dark .surface {
+  background: #000000;
+  box-shadow: inset 0 0 0 1px #2b2b2b;
+}
+.surface::before, html.dark .surface::before, .edge-gradient::after { content: none; display: none; }
+.edge-gradient { box-shadow: 0 30px 80px -34px rgba(244,63,94,.55), 0 0 70px -24px rgba(139,92,246,.45) !important; }
+.hairline-gold, .hairline-silver { display: none; }
+
+/* Animated aurora: the dashboard welcome banner */
+@keyframes aurora { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+/* Dark edition: black → royal → violet → crimson, edge-lit with glow and a metallic top rim. */
+.aurora {
+  background-image:
+    radial-gradient(60% 80% at 92% 100%, rgba(var(--c-cyan), .26), transparent 62%),
+    radial-gradient(50% 70% at 70% 0%, rgba(var(--c-magenta), .28), transparent 65%),
+    linear-gradient(120deg, #050505, #1746d2 30%, #5d2ad8 62%, #b5122c 92%, #08090c);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.28),
+    inset 0 0 0 1px rgba(255,255,255,.06),
+    0 40px 80px -36px rgba(var(--c-electric), .75),
+    0 20px 60px -28px rgba(var(--c-crimson), .55);
+}
+/* Light edition: luminous electric blue → violet → crimson, brightened by a sky/cyan bloom and a glossy top sheen. */
+html.light .aurora {
+  background-image:
+    radial-gradient(55% 75% at 96% 100%, rgba(var(--c-cyan), .34), transparent 62%),
+    radial-gradient(45% 65% at 72% -6%, rgba(var(--c-sky), .36), transparent 65%),
+    linear-gradient(120deg, #1746d2, #176bff 30%, #853bff 62%, #d90f2b 96%, #1746d2);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.55),
+    0 36px 70px -34px rgba(var(--c-electric), .6),
+    0 18px 50px -28px rgba(var(--c-crimson), .42);
+}
+.aurora::after { /* soft light sweep */
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(60% 90% at 85% 0%, rgba(255,255,255,.22), transparent 60%);
+}
+html.light .aurora::after { background: linear-gradient(180deg, rgba(255,255,255,.22), transparent 38%), radial-gradient(60% 90% at 85% 0%, rgba(255,255,255,.26), transparent 60%); }
+
+
+/* Active sidebar item: full gradient pill */
+.nav-active { background-image: var(--g-primary); box-shadow: 0 12px 26px -12px rgba(var(--c-electric), .75), inset 0 1px 0 rgba(255,255,255,.3); }
+html:is(.dark, .light) .nav-active, html:is(.dark, .light) .nav-active * { color: #ffffff !important; }
+/* count/plan badges inside the active pill become frosted glass so their white text stays readable in both themes */
+html:is(.dark, .light) .nav-active [class*="bg-"] { background-color: rgba(255,255,255,.22) !important; border-color: transparent !important; }
+
+/* Branded loader + shimmer */
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.shimmer { background-image: linear-gradient(110deg, rgba(148,163,184,.10) 30%, rgba(148,163,184,.30) 50%, rgba(148,163,184,.10) 70%); background-size: 200% 100%; animation: shimmer 1.6s linear infinite; }
+.loader-ring {
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, #F52236, #E83EFF, #853BFF, #176BFF, #06D6E9, #F52236);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 6px), #000 calc(100% - 5px));
+  animation: spin 1.2s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Smooth light/dark switch (class is added for a moment by the theme toggle) */
+html.theme-switching, html.theme-switching *, html.theme-switching *::before, html.theme-switching *::after {
+  transition: background-color .45s ease, color .35s ease, border-color .45s ease, box-shadow .45s ease, fill .35s ease, stroke .35s ease !important;
+}
+
+/* White text on the gradient welcome banner (beats the light theme's text remapping) */
+html:is(.dark, .light) .on-aurora, html:is(.dark, .light) .on-aurora * { color: #ffffff !important; }
+html:is(.dark, .light) .on-aurora .on-aurora-soft { color: rgba(255,255,255,.82) !important; }
+html:is(.dark, .light) .on-aurora .keep-ink, html:is(.dark, .light) .on-aurora .keep-ink * { color: #0f172a !important; }
+
+
+/* ========================================================
+   v5: DEEP-GOLD AND RICH-RED BUTTONS (both themes) + PURE BLACK DARK REFINEMENTS (dark only)
+   Gold = main calls to action. Red = removing, rejecting, disconnecting and other important functions.
+   Flat colour, thin edge, smooth hover brightness, no glow. Everything else keeps its existing style.
+   ======================================================== */
+.btn-gold,
+.btn-red {
+  transition: filter .2s ease, background-color .2s ease, border-color .2s ease;
+}
+/* The edge is drawn with an inset shadow so these buttons keep exactly the size of the ones they replace. */
+.btn-gold {
+  background-color: #e6a700;
+  color: #16120a;
+  border-color: #c58b00;
+  box-shadow: inset 0 0 0 1px #c58b00, inset 0 1px 0 rgba(255, 255, 255, .38);
+}
+.btn-red {
+  background-color: #b91c2c;
+  color: #ffffff;
+  border-color: #8f1421;
+  box-shadow: inset 0 0 0 1px #8f1421, inset 0 1px 0 rgba(255, 255, 255, .16);
+}
+.btn-gold:hover,
+.btn-red:hover { filter: brightness(1.08); }
+.btn-gold:active,
+.btn-red:active { filter: brightness(.95); }
+.btn-gold:focus-visible,
+.btn-red:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.btn-gold:disabled,
+.btn-red:disabled { opacity: .55; cursor: not-allowed; filter: none; }
+/* on black, the gold needs no edge and the red gets a fine light one so it reads as a button */
+html.dark .btn-gold { border-color: transparent; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .38); }
+html.dark .btn-red { border-color: rgba(255, 255, 255, .16); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16), inset 0 1px 0 rgba(255, 255, 255, .14); }
+
+/* ---- Dark only ---- */
+html.dark ::selection { background: rgba(255, 255, 255, .22); color: #ffffff; }
+html.dark :is(h1, h2, h3, h4, h5, h6):not([class*="text-rose"], [class*="text-red"], [class*="text-amber"], [class*="text-yellow"], [class*="text-orange"], [class*="text-emerald"], [class*="text-teal"], [class*="text-cyan"], [class*="text-sky"], [class*="text-blue"], [class*="text-indigo"], [class*="text-violet"], [class*="text-purple"], [class*="text-fuchsia"], [class*="text-pink"]) { color: #ffffff; }
+/* pop-up backdrops dim the page to black */
+html.dark .fixed.inset-0[class*="bg-slate-950/"] { background-color: rgba(0, 0, 0, .82); }
+/* chart tile */
+html.dark [class*="bg-[#090D16]"] { background-color: #000000; border-color: #2b2b2b; }
+/* fields: grey edge, white when focused (no glow) */
+html.dark :is(input, select, textarea):focus,
+html.dark :is(input, select, textarea):focus-visible { outline: none; border-color: #ffffff; box-shadow: none; }
+/* the featured plan carries a fine gold edge instead of a coloured glow */
+html.dark .edge-gradient { box-shadow: inset 0 0 0 1px rgba(230, 167, 0, .6) !important; }
+/* welcome banner keeps its colour artwork; only the heavy outer glow is dropped */
+html.dark .aurora { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2); }
+/* active navigation item: dark grey with a white marker instead of a gradient pill */
+html.dark .nav-active { background-image: none; background-color: #141414; box-shadow: inset 2px 0 0 #ffffff; }
+/* the app's remaining green "primary" classes (now blue-violet in light) become quiet outlined buttons in dark */
+html.dark button[class*="from-emerald-5"]:not(.btn-gold, .btn-red, .is-selected),
+html.dark button[class~="bg-emerald-500"][class*="text-slate-950"]:not(.btn-gold, .btn-red, .is-selected),
+html.dark button[class~="bg-emerald-600"][class*="text-white"]:not(.btn-gold, .btn-red, .is-selected) {
+  background-image: none !important;
+  background-color: transparent !important;
+  color: #ffffff !important;
+  border: 1px solid #3d3d3d;
+  box-shadow: none;
+}
+html.dark button[class*="from-emerald-5"]:not(.btn-gold, .btn-red, .is-selected):hover,
+html.dark button[class~="bg-emerald-500"][class*="text-slate-950"]:not(.btn-gold, .btn-red, .is-selected):hover,
+html.dark button[class~="bg-emerald-600"][class*="text-white"]:not(.btn-gold, .btn-red, .is-selected):hover {
+  background-color: rgba(255, 255, 255, .07) !important;
+  border-color: #ffffff;
+  filter: none;
+}
+/* a selected tab or toggle is solid white */
+html.dark .is-selected { background-image: none !important; background-color: #ffffff !important; color: #000000 !important; box-shadow: none; }
+/* dashboard quick-link tiles are buttons, so they get the same grey hairline as the cards (hover ring comes from the .surface-hover rule) */
+html.dark button.surface-hover:not(:hover) { box-shadow: inset 0 0 0 1px #2b2b2b; }
+
+/* ordinary actions that used a saturated fill: quiet grey-outlined buttons in dark (light keeps its original colour) */
+html.dark .btn-quiet { background-image: none !important; background-color: transparent !important; color: #ffffff !important; box-shadow: inset 0 0 0 1px #3d3d3d; }
+html.dark .btn-quiet:hover { background-color: rgba(255, 255, 255, .07) !important; box-shadow: inset 0 0 0 1px #ffffff; }
+
+/* ---- Referral network (landing): gold on both themes; everything is scoped to .ref-universe ---- */
+.ref-universe {
+  --rf-l1: #c08400; --rf-l2: #a98b43; --rf-l3: #9a8a5e;
+  --rf-dash: #ffe9a0; --rf-disc: #e6a700; --rf-speck: #c08400;
+  --rf-ink: #4a3200; --rf-rim: rgba(110, 72, 0, .55);
+  --rf-chip-bg: #fffaf0; --rf-chip-edge: rgba(192, 132, 0, .75); --rf-chip-l: #8a6a2a; --rf-chip-p: #4a3200;
+}
+html.dark .ref-universe {
+  --rf-l1: #f2bd2c; --rf-l2: #ecd9a4; --rf-l3: #cdbb8a;
+  --rf-dash: #fff3c4; --rf-disc: #f0b90b; --rf-speck: #f6d56b;
+  --rf-ink: #3a2700; --rf-rim: rgba(255, 255, 255, .55);
+  --rf-chip-bg: #0b0a05; --rf-chip-edge: rgba(242, 189, 44, .7); --rf-chip-l: #cdbb8a; --rf-chip-p: #ffe7a0;
+}
+.ref-universe .rf-l1 { stroke: var(--rf-l1); }
+.ref-universe .rf-l2 { stroke: var(--rf-l2); }
+.ref-universe .rf-l3 { stroke: var(--rf-l3); }
+.ref-universe .rf-line { fill: none; }
+.ref-universe .rf-line.rf-dash { stroke: var(--rf-dash); stroke-dasharray: 2 14; stroke-opacity: .9; animation: rf-dash 2.8s linear infinite; }
+.ref-universe .rf-disc { fill: var(--rf-disc); }
+.ref-universe .rf-speck { fill: var(--rf-speck); }
+.ref-universe .rf-orbit { fill: none; stroke-width: 1.1; stroke-dasharray: 2 7; stroke-linecap: round; stroke-opacity: .34; }
+.ref-universe .rf-rim { stroke: var(--rf-rim); stroke-width: 1.2; }
+.ref-universe .rf-ink { fill: var(--rf-ink); fill-opacity: .95; }
+.ref-universe .rf-coin { stroke: var(--rf-rim); stroke-width: 1; }
+.ref-universe .rf-coin-in { stroke: #8a6a12; stroke-opacity: .55; stroke-width: 1; }
+.ref-universe .rf-node { cursor: pointer; outline: none; }
+.ref-universe .rf-body { transform-box: fill-box; transform-origin: center; transition: transform .22s cubic-bezier(.2, .8, .2, 1); }
+.ref-universe .rf-node:hover .rf-body,
+.ref-universe .rf-you:focus-visible .rf-body { transform: scale(1.18); }
+.ref-universe .rf-ring { fill: none; stroke-width: 1.6; opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+.ref-universe .rf-node:hover .rf-ring,
+.ref-universe .rf-you:focus-visible .rf-ring,
+.ref-universe .rf-node.is-on .rf-ring { opacity: .95; }
+.ref-universe .rf-chip-bg { fill: var(--rf-chip-bg); stroke: var(--rf-chip-edge); stroke-width: 1.2; transform-box: fill-box; transform-origin: center; transition: transform .2s ease, fill .2s ease; }
+.ref-universe .rf-chip:hover .rf-chip-bg { transform: scale(1.08); }
+.ref-universe .rf-chip:focus-visible .rf-chip-bg { stroke: var(--rf-l1); stroke-width: 2.5; }
+.ref-universe .rf-chip.is-on .rf-chip-bg { fill: var(--rf-l1); stroke: var(--rf-l1); }
+.ref-universe .rf-chip-l { font-size: 9px; font-weight: 700; letter-spacing: .08em; fill: var(--rf-chip-l); }
+.ref-universe .rf-chip-p { font-size: 13px; font-weight: 800; fill: var(--rf-chip-p); }
+.ref-universe .rf-chip.is-on .rf-chip-l,
+.ref-universe .rf-chip.is-on .rf-chip-p { fill: #1a1200; }
+.ref-universe .rf-float { animation: rf-float var(--rf-dur, 6s) ease-in-out var(--rf-del, 0s) infinite; }
+.ref-universe .rf-pulse { transform-box: fill-box; transform-origin: center; opacity: 0; animation: rf-pulse 4.2s ease-out infinite; }
+.ref-universe .rf-pulse-b { animation-delay: 2.1s; }
+@keyframes rf-float { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(0, -3px); } }
+@keyframes rf-pulse { 0% { transform: scale(.92); opacity: .55; } 70% { opacity: 0; } 100% { transform: scale(1.9); opacity: 0; } }
+@keyframes rf-dash { to { stroke-dashoffset: -32; } }
+.ref-universe.is-paused * { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) {
+  .ref-universe * { animation: none !important; transition: none !important; }
+}
+
+/* ---- Landing hero ---- */
+/* the headline's accent words: brand violet into gold (deeper tones on the light theme for contrast) */
+.hero-accent { background-image: linear-gradient(95deg, #8b5cf6 0%, #c084fc 38%, #f59e0b 100%); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
+html.light .hero-accent { background-image: linear-gradient(95deg, #6b21a8 0%, #7c3aed 42%, #d97706 100%); }
+/* hero buttons rise a little on hover and the gold one carries a soft glow */
+.hero-cta { transition: filter .3s ease, background-color .3s ease, border-color .3s ease, translate .3s ease, box-shadow .3s ease; }
+.hero-cta:hover { translate: 0 -2px; }
+.btn-gold.hero-cta { box-shadow: inset 0 0 0 1px #c58b00, inset 0 1px 0 rgba(255, 255, 255, .38), 0 10px 28px -12px rgba(245, 158, 11, .6); }
+html.dark .btn-gold.hero-cta { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .38), 0 10px 30px -10px rgba(245, 158, 11, .5); }
+.btn-gold.hero-cta:hover { box-shadow: inset 0 0 0 1px #c58b00, inset 0 1px 0 rgba(255, 255, 255, .38), 0 14px 34px -10px rgba(245, 158, 11, .75); }
+html.dark .btn-gold.hero-cta:hover { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .38), 0 14px 36px -10px rgba(245, 158, 11, .7); }
+@media (prefers-reduced-motion: reduce) { .hero-cta { transition: none; } .hero-cta:hover { translate: none; } }
+
+/* Phones: form fields at 16px, so iPhones do not zoom the page in when one is tapped. */
+@media (max-width: 639px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  select,
+  textarea { font-size: 16px; }
+}
+
+/* The notification pop-ups inside the welcome banner: the banner forces white text, so on the light theme
+   (where the pop-up is a white card) they need dark text. */
+html.light .on-aurora .notif-pop, html.light .on-aurora .notif-pop * { color: #0f172a !important; }
