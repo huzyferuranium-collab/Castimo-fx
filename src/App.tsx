@@ -14,7 +14,20 @@ import { referralRatesLabel } from './utils/format';
 
 // The signed-in screens are big, so each is fetched only when it is opened. Visitors on the landing page never download them.
 const ClientDashboard = lazy(() => import('./components/dashboard/ClientDashboard').then((m) => ({ default: m.ClientDashboard })));
-const AdminDashboard = lazy(() => import('./components/dashboard/AdminDashboard').then((m) => ({ default: m.AdminDashboard })));
+const loadAdminDashboard = () => import('./components/dashboard/AdminDashboard');
+const AdminDashboard = lazy(() => loadAdminDashboard().then((m) => ({ default: m.AdminDashboard })));
+
+/**
+ * The admin hub's code is downloaded early for whoever was an administrator last time on this device: while sign-in and the
+ * profile are still loading, not only once the hub is about to be drawn. This is a download hint only; being an
+ * administrator is still decided by the role stored in the database (and checked again by the server on every request).
+ */
+const ADMIN_HINT_KEY = 'castimo_admin_hint';
+try {
+  if (typeof window !== 'undefined' && window.localStorage.getItem(ADMIN_HINT_KEY) === '1') void loadAdminDashboard().catch(() => undefined);
+} catch {
+  // storage unavailable: the hub simply downloads when it is opened
+}
 const ReferralCommissionView = lazy(() => import('./components/referrals/ReferralCommissionView').then((m) => ({ default: m.ReferralCommissionView })));
 const YieldPoolSection = lazy(() => import('./components/dashboard/YieldPoolSection').then((m) => ({ default: m.YieldPoolSection })));
 import {
@@ -53,14 +66,24 @@ type ActivePortalTab = 'client' | 'referrals' | 'yield_pool' | 'admin';
 const MainContent: React.FC = () => {
   const { userProfile, loading } = useAuth();
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<ActivePortalTab>('client');
+  // null = not chosen yet: admins land on the Admin Console, everyone else on the client terminal. Working it out here (not
+  // in an effect after the first paint) means an admin never sees the client dashboard drawn, and loading, first.
+  const [chosenTab, setActiveTab] = useState<ActivePortalTab | null>(null);
 
   const isAdmin = userProfile?.role === 'admin';
+  const activeTab: ActivePortalTab = chosenTab ?? (isAdmin ? 'admin' : 'client');
 
-  // Admins land on the Admin Console when they sign in; everyone else never sees the admin tab.
+  // A different account (or a role change) starts again from its own landing tab, and remembers the download hint.
   React.useEffect(() => {
-    setActiveTab(userProfile?.role === 'admin' ? 'admin' : 'client');
-  }, [userProfile?.role]);
+    setActiveTab(null);
+    try {
+      if (isAdmin) window.localStorage.setItem(ADMIN_HINT_KEY, '1');
+      else if (userProfile) window.localStorage.removeItem(ADMIN_HINT_KEY);
+    } catch {
+      // ignore
+    }
+    if (isAdmin) void loadAdminDashboard().catch(() => undefined);
+  }, [userProfile?.uid, userProfile?.role]);
 
   // Each page gets its own colour mood from the shared palette.
   const pageMood: BackdropVariant = !userProfile ? 'landing' : activeTab === 'admin' && isAdmin ? 'admin' : activeTab === 'referrals' ? 'referrals' : 'client';

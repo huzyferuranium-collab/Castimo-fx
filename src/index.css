@@ -1230,10 +1230,9 @@ html:is(.dark, .light) .nav-active [class*="bg-"] { background-color: rgba(255,2
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Smooth light/dark switch (class is added for a moment by the theme toggle) */
-html.theme-switching, html.theme-switching *, html.theme-switching *::before, html.theme-switching *::after {
-  transition: background-color .45s ease, color .35s ease, border-color .45s ease, box-shadow .45s ease, fill .35s ease, stroke .35s ease !important;
-}
+/* Smooth light/dark switch: one cross-fade of the whole screen (View Transitions, started by the theme toggle). */
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration: .22s; animation-timing-function: ease; }
 
 /* White text on the gradient welcome banner (beats the light theme's text remapping) */
 html:is(.dark, .light) .on-aurora, html:is(.dark, .light) .on-aurora * { color: #ffffff !important; }
