@@ -1,6 +1,6 @@
-# Hosting the verifying server (Render, step by step)
+# Hosting the verifying server (Google Cloud Run, step by step)
 
-The website, the broker check and the copier control all run from `server.ts`, which needs a Node host. Cloudflare sits in front only as a proxy.
+The website, the broker check and the copier control all run from `server.ts`, which needs a Node host. Cloudflare manages the domain's DNS.
 This repo has a Dockerfile, so any Docker host works (Render, Railway, Google Cloud Run).
 
 CASTIMOFx uses **Duplikium** (trade-copier.com) to copy trades. Duplikium logs in to each client's MT5 account and copies the master
@@ -19,7 +19,89 @@ Duplikium's API may need their Trade Copier API add-on (their documentation says
 4. Ask Duplikium support, in writing: how many client accounts one cockpit may hold, whether there is an account limit or per-account price,
    and how they store and protect the MT5 passwords clients give.
 
-## Render
+## Google Cloud Run (low-cost hosting)
+Cloud Run runs the same Docker container, in the same Google Cloud project as Firebase (`castimo-fx`). It is set up to **sleep when nobody is
+using the site**, so a small site stays within or close to Google's free monthly allowance. Because the server sleeps, its own billing timers cannot
+run; **Cloud Scheduler** wakes it on a schedule instead (`SCHEDULED_JOBS=external`, see `src/backend/scheduledJobs.ts`). After waking, the server
+restores every client's connection from Firestore and Duplikium, and holds back anyone overdue, before a scheduled job runs.
+
+Wherever the rest of this guide says "set on Render", set it on the Cloud Run service instead (step 4).
+
+### 1. Turn on billing and a budget alert (do this first)
+1. console.cloud.google.com -> choose project **castimo-fx** -> **Billing** -> link a billing account (Cloud Run needs one even inside the free allowance).
+2. **Billing -> Budgets & alerts -> Create budget**: amount **$5**, alerts at 50%, 90% and 100%. You are emailed before any surprise.
+
+### 2. Turn on the services
+**APIs & Services -> Enable APIs**: Cloud Run Admin API, Cloud Build API, Artifact Registry API, Cloud Scheduler API, Secret Manager API.
+
+### 3. A place for the images
+**Artifact Registry -> Create repository**: name `castimofx`, format Docker, region **europe-west1** (Belgium; it supports custom domains, step 7).
+Then open the repository -> **Cleanup policies**: keep the **3** most recent images and delete older ones, so stored images stay inside the free storage.
+
+### 4. Secrets
+**Security -> Secret Manager -> Create secret**, one for each (the free allowance covers 6):
+- `DUPLIKIUM_API_TOKEN` = the Duplikium API password.
+- `FIREBASE_SERVICE_ACCOUNT` = the whole JSON of the Firebase service-account key.
+- `CRON_SECRET` = a long random password, **at least 24 characters** (for example from a password manager). Only Cloud Scheduler and the server know it.
+- `RESEND_API_KEY` if you use email codes and reminder emails.
+
+### 5. Automatic deploys from GitHub (like Render)
+**Cloud Build -> Triggers -> Connect repository** -> GitHub -> `huzyferuranium-collab/Castimo-fx`. Then **Create trigger**:
+- Event: **Push to a branch**, branch `^main$`.
+- Configuration: **Cloud Build configuration file**, location `cloudbuild.yaml` (in this repository).
+- Substitution variable: `_TREASURY_ADDRESS` = your public TRC20 USDT address (the same as `TREASURY_ADDRESS`).
+- Service account: the default Cloud Build one. In **IAM**, give it the roles **Cloud Run Admin** and **Service Account User** (it deploys the service).
+
+Click **Run** on the trigger once. The first run builds the image and deploys the service `castimofx` (it can take about 5 minutes).
+
+### 6. Service settings (once; later deploys keep them)
+**Cloud Run -> castimofx -> Edit & deploy new revision**:
+- **Container**: port `8080` (Cloud Run sets `PORT`; the server reads it). Memory **512 MiB**, CPU **1**. If the logs ever say the memory ran out, raise it to 1 GiB.
+- **Billing: Request-based** (CPU only while a request is open). This is what keeps it cheap. Turn on **Startup CPU boost**.
+- **Request timeout: 900** seconds (a billing run waits for the copier service).
+- **Autoscaling: minimum 0, maximum 1 instance.** Maximum 1 matters: the server keeps the client connections in memory, and two copies would each run billing.
+- **Variables & Secrets -> Environment variables**:
+  - `SCHEDULED_JOBS` = `external`
+  - `DUPLIKIUM_API_USER`, `DUPLIKIUM_MASTER_ID`, `DUPLIKIUM_TEMPLATE_ID` (as on Render)
+  - `TREASURY_ADDRESS` = your TRC20 USDT address
+  - `TRUST_PROXY_HOPS` = `1` (Cloud Run's front end only; set `2` only if Cloudflare's orange-cloud proxy is in front)
+  - `EMAIL_FROM` and any optional settings you used on Render
+- **Variables & Secrets -> Reference a secret**: expose each secret from step 4 as an environment variable with the same name, version `latest`.
+  Accept the offer to grant the service's account access to the secrets.
+- **Security / Networking -> Authentication: Allow unauthenticated invocations** (it is a public website).
+
+Deploy, then open the service's `https://castimofx-....run.app/api/health`. It must say `UP` and show the commit as `version`.
+
+### 7. Your domain (castimofx.com)
+**Cloud Run -> Manage custom domains -> Add mapping** -> service `castimofx` -> `castimofx.com` (and again for `www.castimofx.com` if you use it).
+Google shows DNS records (A and AAAA for `castimofx.com`, a CNAME for `www`). In **Cloudflare -> DNS**: delete the old records that pointed at Render,
+add Google's records, and set them to **DNS only (grey cloud)**. Google then issues the certificate by itself (from 15 minutes to a few hours).
+Keep them grey: Google renews the certificate only while the domain points straight at it.
+
+Then add the domain everywhere sign-in needs it:
+- Firebase console -> Authentication -> Settings -> **Authorized domains**: `castimofx.com` is already there; also add the `….run.app` address.
+- Google Cloud -> APIs & Services -> Credentials -> the **Browser key** -> Website restrictions: add `https://castimofx.com/*` (and the run.app address).
+
+### 8. The two scheduled jobs
+**Cloud Scheduler -> Create job** (3 jobs are free per billing account), region europe-west1, time zone UTC:
+
+| Name | Frequency | URL |
+|---|---|---|
+| `castimofx-sweep` | `*/10 * * * *` (every 10 minutes) | `https://castimofx.com/api/internal/jobs/sweep` |
+| `castimofx-reminders` | `5 * * * *` (every hour) | `https://castimofx.com/api/internal/jobs/reminders` |
+
+For both: target **HTTP**, method **POST**, header `X-Cron-Secret` = the `CRON_SECRET` value. Under **Configure optional settings** set the
+**attempt deadline to 15m**. Click **Force run** on each: its status must turn to **Success**. A **403** means the header and `CRON_SECRET` differ.
+(You can use the run.app address instead of castimofx.com until the domain works.)
+
+Every finished job is logged as `[JOBS] sweep finished in N s` under Cloud Run -> castimofx -> Logs.
+
+### What to expect
+- The first visit after a quiet spell waits a few seconds while the server wakes. The sweep every 10 minutes keeps it warm most of the time.
+- Use **only** the Cloud Build trigger above for the live site. AI Studio's own "Deploy" button creates a separate service without these settings and secrets.
+- Cost: with request-based billing and one small instance, a site this size usually stays within the free allowance (a few dollars at most). The $5 budget alert tells you if it does not.
+
+## Render (the earlier host; any always-on Docker host works the same way)
 1. render.com -> New -> Web Service -> connect `huzyferuranium-collab/Castimo-fx`, branch `main`.
 2. Runtime: Docker. Instance type: the smallest paid one (free sleeps and drops connections).
 3. Environment variables:

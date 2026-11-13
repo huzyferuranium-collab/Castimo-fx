@@ -17,6 +17,7 @@ import { emailCodeRouter } from './src/backend/EMAIL_CODE_ROUTES';
 import { assistantRouter } from './src/backend/ASSISTANT_ROUTES';
 import { Mt5ConnectionManager } from './src/backend/MT5_CONNECTION_MANAGER';
 import { BillingService, billingEnabled } from './src/backend/billing';
+import { createJobsRouter, cronSecret, usesExternalScheduler } from './src/backend/scheduledJobs';
 import { buildAssetLinks } from './src/backend/assetLinks';
 import { securityHeaders } from './src/backend/securityHeaders';
 import { rateLimit, trustProxyHops, isReadOnly } from './src/backend/rateLimit';
@@ -40,6 +41,16 @@ process.on('uncaughtException', (err: any) => {
 
 async function startServer() {
   const app = express();
+
+  // Settles once the MT5 connections are restored and billing has started (below, after the server starts listening).
+  let markReady!: () => void;
+  let markFailed!: (e: unknown) => void;
+  const serverReady = new Promise<void>((resolve, reject) => {
+    markReady = resolve;
+    markFailed = reject;
+  });
+  serverReady.catch(() => undefined); // a failed start-up is reported by the job that waits for it
+  const externalScheduler = usesExternalScheduler();
 
   // Do not announce which software runs the server, and add the browser security headers to every answer.
   app.disable('x-powered-by');
@@ -67,8 +78,24 @@ async function startServer() {
   app.use('/api/email-code', emailCodeRouter);
   app.use('/api/assistant', assistantRouter);
 
-  // Which build is running: Render sets the commit of the deploy. Opening /api/health shows it, so "is my latest change live?" can be checked.
-  const version = (process.env.RENDER_GIT_COMMIT || '').slice(0, 7) || 'unknown';
+  // On a host that sleeps between visits (Cloud Run), Cloud Scheduler runs billing here instead of the server's own timers.
+  if (externalScheduler) {
+    const secret = cronSecret();
+    if (!secret) console.error('❌ [SERVER] SCHEDULED_JOBS=external but CRON_SECRET is missing or shorter than 24 characters: billing will not run.');
+    const billing = BillingService.getInstance();
+    app.use(
+      '/api/internal/jobs',
+      createJobsRouter({
+        secret,
+        ready: () => serverReady,
+        jobs: { sweep: () => billing.runScheduledJob('sweep'), reminders: () => billing.runScheduledJob('reminders') },
+      })
+    );
+  }
+
+  // Which build is running (Render sets RENDER_GIT_COMMIT; the Cloud Run build sets APP_VERSION). Opening /api/health shows it,
+  // so "is my latest change live?" can be checked.
+  const version = (process.env.RENDER_GIT_COMMIT || process.env.APP_VERSION || '').slice(0, 7) || 'unknown';
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {
@@ -148,10 +175,12 @@ async function startServer() {
         connectionManager.holdCopyingUntilBillingKnown = billingEnabled();
         await connectionManager.initialize();
 
-        BillingService.getInstance().start();
+        BillingService.getInstance().start({ timers: !externalScheduler });
         console.log('✅ [SERVER] CastimoFX connection manager initialized.');
+        markReady();
       } catch (err: any) {
         console.warn('⚠️ [SERVER] Background MT5 connection manager initialization deferred:', err?.message || err);
+        markFailed(err);
       }
     })();
   });

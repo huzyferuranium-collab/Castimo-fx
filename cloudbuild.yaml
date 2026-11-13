@@ -1,0 +1,41 @@
+# Google Cloud Build: builds the Docker image and deploys it to Cloud Run.
+# A Cloud Build trigger on pushes to main runs this file, so every merge goes live by itself (see DEPLOY.md).
+# Set _TREASURY_ADDRESS on the trigger (your public TRC20 USDT address); it is baked into the website at build time.
+substitutions:
+  _REGION: europe-west1
+  _SERVICE: castimofx
+  _REPO: castimofx
+  _TREASURY_ADDRESS: ''
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - VITE_TREASURY_ADDRESS=${_TREASURY_ADDRESS}
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: [push, '${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA']
+
+  # Only the image and the version change on each deploy: every other setting (memory, instances, secrets) stays as set on the service.
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA
+      - --region=${_REGION}
+      - --update-env-vars=APP_VERSION=$SHORT_SHA
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPO}/${_SERVICE}:$SHORT_SHA
+
+options:
+  logging: CLOUD_LOGGING_ONLY

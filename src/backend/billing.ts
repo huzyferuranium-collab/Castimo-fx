@@ -172,6 +172,8 @@ function uniqueVerifiedClients(manager: Mt5ConnectionManager): ClientConnectionR
   return out;
 }
 
+export type ScheduledJob = 'sweep' | 'reminders';
+
 export class BillingService {
   private static instance: BillingService | null = null;
   private manager = Mt5ConnectionManager.getInstance();
@@ -310,9 +312,12 @@ export class BillingService {
     if (r === 'failed') console.warn(`⚠️ [BILLING] A reminder email for ${userId.slice(0, 8)}… could not be sent.`);
   }
 
-  /** Starts the periodic sweep. Safe to call when billing is not configured (it then does nothing). */
-  start(): void {
-    if (isFirestoreAdminConfigured()) {
+  /**
+   * Starts billing. Safe to call when billing is not configured (it then does nothing). With `timers: false` (a host that
+   * sleeps between visits, like Cloud Run) nothing runs on a clock: an outside scheduler calls runScheduledJob instead.
+   */
+  start({ timers = true }: { timers?: boolean } = {}): void {
+    if (timers && isFirestoreAdminConfigured()) {
       const run = () => {
         void this.weeklyEquityPass().catch((e) => console.warn('[REFERRALS] weekly:', e?.message));
         void this.subscriptionCommissionPass().catch((e) => console.warn('[REFERRALS] plan:', e?.message));
@@ -336,12 +341,32 @@ export class BillingService {
       })().catch((e) => console.warn('[BILLING] ledger:', e?.message));
     // Hold back anyone who is overdue right away (a restart must not give them copying back while the first full sweep waits).
     void this.blockingPass().catch((e) => console.warn('[BILLING] first check:', e?.message));
+    if (!timers) {
+      console.log('💰 [BILLING] Profit-share billing is ON (runs when the scheduler calls).');
+      return;
+    }
     this.firstSweepTimer = setTimeout(() => void this.sweep(), 60_000);
     this.timer = setInterval(() => void this.sweep(), 10 * 60_000);
     this.reminderTimer = setInterval(() => void this.reminderPass().catch((e) => console.warn('[BILLING] reminders:', e?.message)), 60 * 60_000);
     (this.reminderTimer as any).unref?.();
     setTimeout(() => void this.reminderPass().catch(() => undefined), 120_000).unref?.();
     console.log('💰 [BILLING] Profit-share billing is ON.');
+  }
+
+  /**
+   * One scheduled job, run to the end before it returns (a sleeping host only keeps working while a request is open).
+   * 'sweep': the referral commission passes and the billing sweep, every 10 minutes. 'reminders': payment reminders, hourly.
+   */
+  async runScheduledJob(job: ScheduledJob): Promise<void> {
+    if (job === 'reminders') {
+      if (billingEnabled()) await this.reminderPass();
+      return;
+    }
+    if (isFirestoreAdminConfigured()) {
+      await this.weeklyEquityPass().catch((e) => console.warn('[REFERRALS] weekly:', e?.message));
+      await this.subscriptionCommissionPass().catch((e) => console.warn('[REFERRALS] plan:', e?.message));
+    }
+    await this.sweep();
   }
 
   /** Stops the periodic sweep (used by tests; the server never needs it). */

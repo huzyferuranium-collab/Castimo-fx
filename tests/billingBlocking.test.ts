@@ -204,6 +204,24 @@ test('the first check on start-up (before the first full sweep) already holds ba
   billing.stop();
 });
 
+test('without its own timers (Cloud Run), start-up still holds back an unpaid client and a scheduled sweep runs to the end', async () => {
+  const { fake, db, m } = await world();
+  db.docs.set('profit_invoices/inv-u1', { id: 'inv-u1', userId: 'u1', status: 'pending', amountDueUsdt: 40, dueAt: new Date(Date.now() - HOUR).toISOString() });
+  const billing = BillingService.forTests(m);
+  billing.start({ timers: false });
+  await sleep(80);
+  assert.equal(fake.copier.get('D1'), -1, 'the start-up check still runs');
+  const b = billing as any;
+  assert.equal(b.timer, null, 'no sweep timer');
+  assert.equal(b.reminderTimer, null, 'no reminder timer');
+  assert.equal(b.firstSweepTimer, null, 'no first-sweep timer');
+  assert.equal(b.lastSweepAt, null);
+  await billing.runScheduledJob('sweep');
+  assert.notEqual(b.lastSweepAt, null, 'the scheduled call ran a full sweep before returning');
+  await billing.runScheduledJob('reminders');
+  billing.stop();
+});
+
 test('the hourly watcher writes one reminder per hour, emails only at 6, 3 and 1 hours and once when overdue', async () => {
   const { db, billing } = await world();
   const sent: Array<{ uid: string; subject: string }> = [];
