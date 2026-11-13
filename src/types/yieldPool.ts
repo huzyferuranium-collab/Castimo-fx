@@ -7,8 +7,10 @@ export interface UserYieldAllocation {
   allocatedAmountUsdt: number;
   walletBalanceUsdt: number;
   totalYieldEarnedUsdt: number;
-  dailyRatePct: number; // e.g. 1.25% (up to 2.0%)
-  status: 'active' | 'paused' | 'pending';
+  dailyRatePct: number; // Fixed 2.0% per business day (Mon-Fri)
+  businessDaysCompleted: number; // 0..100 business days completed
+  termBusinessDays: number; // Fixed 100 business days
+  status: 'active' | 'paused' | 'pending' | 'completed';
   lastDistributionAt?: string; // ISO string
   createdAt: string; // ISO string
   updatedAt: string; // ISO string
@@ -32,6 +34,7 @@ export interface YieldLedgerEntry {
     distributionDate?: string;
     tradingDay?: boolean;
     marketCondition?: string;
+    submittedAt?: string;
   };
   createdAt: string;
   confirmedAt?: string;
@@ -42,6 +45,8 @@ export interface YieldPoolSummary {
   totalYieldEarnedUsdt: number;
   walletBalanceUsdt: number;
   currentDailyRatePct: number;
+  businessDaysCompleted: number;
+  termBusinessDays: number;
   nextDistributionMs: number;
   isTradingDay: boolean;
   activeDepositsCount: number;

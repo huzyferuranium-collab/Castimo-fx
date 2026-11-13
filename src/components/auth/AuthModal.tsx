@@ -225,9 +225,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div className="flex-1 space-y-1">
                   <div className="text-[11px] text-rose-200/90 leading-snug">{error}</div>
                   {(diagnosticAdvice || lastErrorCode) && (
-                    <Collapsible variant="plain" title="Details" openLabel="Show" closeLabel="Hide" className="text-rose-200/90">
-                      {diagnosticAdvice && <p>{diagnosticAdvice}</p>}
-                      {lastErrorCode && <p className="font-mono text-[10px] opacity-80">{lastErrorCode}</p>}
+                    <Collapsible
+                      key={lastErrorCode || 'auth-error'}
+                      variant="plain"
+                      title="Details"
+                      openLabel="Show"
+                      closeLabel="Hide"
+                      defaultOpen={Boolean(
+                        lastErrorCode &&
+                          (lastErrorCode.includes('requests-from-referer') ||
+                            lastErrorCode === 'auth/unauthorized-domain' ||
+                            lastErrorCode === 'auth/operation-not-allowed' ||
+                            lastErrorCode.includes('identity-toolkit'))
+                      )}
+                      className="text-rose-200/90"
+                    >
+                      {diagnosticAdvice && <p className="break-words">{diagnosticAdvice}</p>}
+                      {lastErrorCode && <p className="font-mono text-[10px] opacity-80 break-all">{lastErrorCode}</p>}
                     </Collapsible>
                   )}
                 </div>

@@ -53,7 +53,7 @@ const TickerBar: React.FC = () => {
         <span>•</span>
         <span>REFERRALS: {referralRatesLabel()}</span>
         <span>•</span>
-        <span>YIELD POOL: UP TO 2% DAILY</span>
+        <span>YIELD POOL: 2% DAILY (100 DAYS)</span>
         <span>•</span>
         <span>INVOICES DUE BEFORE MIDNIGHT GMT</span>
       </div>
@@ -160,7 +160,7 @@ const MainContent: React.FC = () => {
             </button>
             <button
               onClick={() => handleSelectTab('referrals')}
-              className={`px-3 sm:px-3.5 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+              className={`px-3 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap ${
                 activeTab === 'referrals'
                   ? 'bg-rose-500/15 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200 border border-rose-500/30 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -168,22 +168,22 @@ const MainContent: React.FC = () => {
             >
               <Share2 className="w-3.5 h-3.5 text-rose-400" />
               <span>Referral Hub</span>
-              <span className={`${isAdmin ? 'hidden sm:inline' : ''} text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-gradient-to-r from-rose-500/20 via-violet-500/20 to-blue-500/20 text-rose-700 dark:text-rose-200 border border-rose-500/30`}>
+              <span className="hidden sm:inline text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-gradient-to-r from-rose-500/20 via-violet-500/20 to-blue-500/20 text-rose-700 dark:text-rose-200 border border-rose-500/30">
                 {referralRatesLabel('•')}
               </span>
             </button>
             <button
               onClick={() => handleSelectTab('yield_pool')}
-              className={`px-3 sm:px-3.5 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+              className={`px-3 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap ${
                 activeTab === 'yield_pool'
                   ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               <Flame className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Yield Pool Hub</span>
-              <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                Up to 2%
+              <span>Yield Pool</span>
+              <span className="hidden sm:inline text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                2% · 100d
               </span>
             </button>
 

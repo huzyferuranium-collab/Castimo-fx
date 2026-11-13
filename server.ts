@@ -15,8 +15,10 @@ import { tradeRouter } from './src/backend/WEBHOOK_ROUTES';
 import { referralRouter } from './src/backend/REFERRAL_ROUTES';
 import { emailCodeRouter } from './src/backend/EMAIL_CODE_ROUTES';
 import { assistantRouter } from './src/backend/ASSISTANT_ROUTES';
+import { yieldPoolRouter } from './src/backend/YIELD_POOL_ROUTES';
 import { Mt5ConnectionManager } from './src/backend/MT5_CONNECTION_MANAGER';
 import { BillingService, billingEnabled } from './src/backend/billing';
+import { YieldPoolScheduler } from './src/backend/yieldPoolService';
 import { buildAssetLinks } from './src/backend/assetLinks';
 import { securityHeaders } from './src/backend/securityHeaders';
 import { rateLimit, trustProxyHops, isReadOnly } from './src/backend/rateLimit';
@@ -55,6 +57,7 @@ async function startServer() {
   app.use('/api', rateLimit({ max: 600, windowMs: 60_000 }));
   app.use('/api/trade', rateLimit({ max: 60, windowMs: TEN_MINUTES, skip: isReadOnly }));
   app.use('/api/referrals', rateLimit({ max: 60, windowMs: TEN_MINUTES, skip: isReadOnly }));
+  app.use('/api/yield-pool', rateLimit({ max: 60, windowMs: TEN_MINUTES, skip: isReadOnly }));
   app.use('/api/email-code', rateLimit({ max: 30, windowMs: TEN_MINUTES, skip: isReadOnly }));
 
   // Middleware for body parsing
@@ -64,6 +67,7 @@ async function startServer() {
   // Mount Trade & Webhook API routes
   app.use('/api/trade', tradeRouter);
   app.use('/api/referrals', referralRouter);
+  app.use('/api/yield-pool', yieldPoolRouter);
   app.use('/api/email-code', emailCodeRouter);
   app.use('/api/assistant', assistantRouter);
 
@@ -149,6 +153,7 @@ async function startServer() {
         await connectionManager.initialize();
 
         BillingService.getInstance().start();
+        YieldPoolScheduler.getInstance().start();
         console.log('✅ [SERVER] CastimoFX connection manager initialized.');
       } catch (err: any) {
         console.warn('⚠️ [SERVER] Background MT5 connection manager initialization deferred:', err?.message || err);

@@ -749,7 +749,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                   ? [{ tone: 'ruby' as Tone, art: 'network' as ArtName, icon: <Share2 className="w-5 h-5" />, title: 'Referral Hub', hint: 'Earn across three levels', onClick: onNavigateToReferrals }]
                   : []),
                 ...(onNavigateToYieldPool
-                  ? [{ tone: 'mint' as Tone, art: 'coins' as ArtName, icon: <Flame className="w-5 h-5" />, title: 'Yield Pool Hub', hint: 'Variable performance pool up to 2%', onClick: onNavigateToYieldPool }]
+                  ? [{ tone: 'mint' as Tone, art: 'coins' as ArtName, icon: <Flame className="w-5 h-5" />, title: 'Yield Pool', hint: 'Fixed 2% daily (Mon–Fri) · 100 days', onClick: onNavigateToYieldPool }]
                   : []),
                 { tone: 'magenta', art: 'badge', icon: <ShieldCheck className="w-5 h-5" />, title: 'Profile', hint: 'Your account details', onClick: () => setActiveSection('profile') },
               ];

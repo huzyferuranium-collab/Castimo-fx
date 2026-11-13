@@ -1,4 +1,5 @@
 import { AdminWithdrawalsPanel } from '../admin/AdminWithdrawalsPanel';
+import { AdminYieldPoolPanel } from '../admin/AdminYieldPoolPanel';
 import { AdminIncomePanel } from '../admin/AdminIncomePanel';
 import { AdminConnectLogPanel } from '../admin/AdminConnectLogPanel';
 import { AdminTerminalsPanel } from '../admin/AdminTerminalsPanel';
@@ -28,6 +29,7 @@ import {
   ChevronDown,
   CheckCircle2,
   Layers,
+  TrendingUp,
 } from 'lucide-react';
 
 /** A compact summary card: a small label, one figure, and an optional short note. */
@@ -203,6 +205,7 @@ export const AdminDashboard: React.FC = () => {
           badgeVariant: 'warning',
         },
         { id: 'withdrawals', label: 'Withdrawals', icon: Wallet },
+        { id: 'yield_pool', label: 'Yield Pool', icon: TrendingUp },
         { id: 'income', label: 'Income', icon: DollarSign },
         {
           id: 'governance',
@@ -682,6 +685,12 @@ export const AdminDashboard: React.FC = () => {
         {activeTab === 'withdrawals' && (
           <div className="space-y-4 animate-in fade-in duration-150">
             <AdminWithdrawalsPanel />
+          </div>
+        )}
+
+        {activeTab === 'yield_pool' && (
+          <div className="space-y-4 animate-in fade-in duration-150">
+            <AdminYieldPoolPanel />
           </div>
         )}
 

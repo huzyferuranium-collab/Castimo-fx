@@ -1,24 +1,20 @@
 import {
   collection,
   doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  addDoc,
   query,
   where,
-  orderBy,
-  limit,
   onSnapshot,
-  serverTimestamp,
-  updateDoc,
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
+import { authHeaders } from './apiAuth';
 import {
   UserYieldAllocation,
   YieldLedgerEntry,
-  YieldPoolSummary,
 } from '../types/yieldPool';
+
+export const YIELD_POOL_DAILY_RATE_PCT = 2.0;
+export const YIELD_POOL_TERM_BUSINESS_DAYS = 100;
+export const YIELD_POOL_MIN_ALLOCATION_USDT = 200;
 
 enum OperationType {
   CREATE = 'create',
@@ -58,11 +54,10 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 /** Check if current UTC day is an active FX market trading day (Monday to Friday) */
 export function isFxTradingDay(date: Date = new Date()): boolean {
   const day = date.getUTCDay();
-  // 0 = Sunday, 6 = Saturday
   return day >= 1 && day <= 5;
 }
 
-/** Calculate milliseconds until next performance distribution (midnight 00:00 UTC) */
+/** Calculate milliseconds until next payout cycle (midnight 00:00 UTC) */
 export function getMsUntilNextDistribution(): number {
   const now = new Date();
   const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0));
@@ -70,22 +65,14 @@ export function getMsUntilNextDistribution(): number {
 }
 
 /**
- * Calculates a dynamic, market-driven daily yield rate for active trading days.
- * Defaults between 0.6% and 1.95% (up to 2.0%), simulating real quantitative alpha performance.
- * On weekends, rate defaults to 0% (markets closed).
+ * Fixed daily yield rate: 2.0% on active business days (Monday to Friday),
+ * and 0.0% on weekends (markets closed).
  */
-export function computeDailyMarketYieldRate(date: Date = new Date(), baseSeed = 1.35): number {
-  if (!isFxTradingDay(date)) return 0.0;
-  // Deterministic daily jitter based on day of year
-  const dayOfYear = Math.floor((date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000);
-  const cycle = Math.sin(dayOfYear * 0.45) * 0.35 + Math.cos(dayOfYear * 0.15) * 0.2;
-  const rate = Math.min(2.0, Math.max(0.4, Number((baseSeed + cycle).toFixed(2))));
-  return rate;
+export function computeDailyMarketYieldRate(date: Date = new Date()): number {
+  return isFxTradingDay(date) ? YIELD_POOL_DAILY_RATE_PCT : 0.0;
 }
 
-/**
- * Subscribe to the real-time user yield allocation state in Firestore
- */
+/** Subscribe to the real-time user yield allocation state in Firestore */
 export function subscribeUserYieldAllocation(
   userId: string,
   onData: (data: UserYieldAllocation | null) => void,
@@ -105,7 +92,9 @@ export function subscribeUserYieldAllocation(
           allocatedAmountUsdt: Number(d.allocatedAmountUsdt || 0),
           walletBalanceUsdt: Number(d.walletBalanceUsdt || 0),
           totalYieldEarnedUsdt: Number(d.totalYieldEarnedUsdt || 0),
-          dailyRatePct: Number(d.dailyRatePct || 1.35),
+          dailyRatePct: Number(d.dailyRatePct || YIELD_POOL_DAILY_RATE_PCT),
+          businessDaysCompleted: Number(d.businessDaysCompleted || 0),
+          termBusinessDays: Number(d.termBusinessDays || YIELD_POOL_TERM_BUSINESS_DAYS),
           status: d.status || 'active',
           lastDistributionAt: d.lastDistributionAt,
           createdAt: d.createdAt || new Date().toISOString(),
@@ -124,45 +113,44 @@ export function subscribeUserYieldAllocation(
 }
 
 /**
- * Subscribe to the user's yield ledger entries (audit logs, distributions, allocations)
+ * Subscribe to the user's yield ledger entries (single-field query sorted client-side
+ * so no manual Firestore composite index is required).
  */
 export function subscribeUserYieldLedger(
   userId: string,
   onData: (entries: YieldLedgerEntry[]) => void,
   onError?: (err: Error) => void,
-  entryLimit = 30
+  entryLimit = 40
 ): () => void {
   const path = 'yield_ledger';
-  const q = query(
-    collection(db, 'yield_ledger'),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc'),
-    limit(entryLimit)
-  );
+  const q = query(collection(db, 'yield_ledger'), where('userId', '==', userId));
 
   return onSnapshot(
     q,
     (snapshot) => {
-      const items: YieldLedgerEntry[] = snapshot.docs.map((docSnap) => {
-        const d = docSnap.data();
-        return {
-          id: docSnap.id,
-          userId: d.userId,
-          allocationId: d.allocationId,
-          type: d.type,
-          amount: Number(d.amount || 0),
-          netAmount: Number(d.netAmount ?? d.amount ?? 0),
-          feeAmount: Number(d.feeAmount || 0),
-          txHash: d.txHash,
-          status: d.status || 'pending',
-          description: d.description || '',
-          network: d.network || 'TRC20',
-          recipientAddress: d.recipientAddress,
-          metadata: d.metadata || {},
-          createdAt: d.createdAt || new Date().toISOString(),
-          confirmedAt: d.confirmedAt,
-        };
-      });
+      const items: YieldLedgerEntry[] = snapshot.docs
+        .map((docSnap) => {
+          const d = docSnap.data();
+          return {
+            id: docSnap.id,
+            userId: d.userId,
+            allocationId: d.allocationId,
+            type: d.type,
+            amount: Number(d.amount || 0),
+            netAmount: Number(d.netAmount ?? d.amount ?? 0),
+            feeAmount: Number(d.feeAmount || 0),
+            txHash: d.txHash,
+            status: d.status || 'pending',
+            description: d.description || '',
+            network: d.network || 'TRC20',
+            recipientAddress: d.recipientAddress,
+            metadata: d.metadata || {},
+            createdAt: d.createdAt || new Date().toISOString(),
+            confirmedAt: d.confirmedAt,
+          };
+        })
+        .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+        .slice(0, entryLimit);
       onData(items);
     },
     (error) => {
@@ -173,164 +161,221 @@ export function subscribeUserYieldLedger(
   );
 }
 
+export interface ServerYieldPosition {
+  id: string;
+  userId: string;
+  principalUsdt: number;
+  dailyRatePct: number;
+  dailyPayoutUsdt: number;
+  businessDaysCompleted: number;
+  termBusinessDays: number;
+  totalEarnedUsdt: number;
+  txHash: string;
+  status: 'active' | 'completed' | 'paused';
+  startedAt: string;
+  completedAt?: string;
+}
+
+export interface ServerYieldSummary {
+  enabled: boolean;
+  treasuryAddress: string;
+  allocation: UserYieldAllocation | null;
+  positions: ServerYieldPosition[];
+  ledger: YieldLedgerEntry[];
+}
+
+export async function fetchYieldPoolSummary(): Promise<{ ok: boolean; data?: ServerYieldSummary; error?: string }> {
+  try {
+    const res = await fetch('/api/yield-pool/summary', { headers: await authHeaders() });
+    const d = await res.json().catch(() => null);
+    if (res.ok && d?.success) return { ok: true, data: d as ServerYieldSummary };
+    return { ok: false, error: d?.error || `Error (${res.status})` };
+  } catch {
+    return { ok: false, error: 'Could not reach the server.' };
+  }
+}
+
 /**
- * Submit a new performance pool allocation deposit via TRC20 USDT TxID
+ * Verifies a TRC20 USDT transfer on the TRON blockchain via the backend and activates
+ * the client's 100-business-day 2.0% position immediately upon confirmation.
  */
 export async function submitYieldPoolAllocation(params: {
   userId: string;
   amountUsdt: number;
   txHash: string;
   recipientAddress: string;
-}): Promise<{ success: boolean; entryId?: string; error?: string }> {
-  const path = 'yield_ledger';
+}): Promise<{ success: boolean; entryId?: string; creditedUsdt?: number; error?: string }> {
   const cleanedTx = params.txHash.trim();
-
-  if (params.amountUsdt < 200) {
-    return { success: false, error: 'Minimum allocation deposit is $200 USDT.' };
+  if (params.amountUsdt < YIELD_POOL_MIN_ALLOCATION_USDT) {
+    return { success: false, error: `Minimum allocation deposit is $${YIELD_POOL_MIN_ALLOCATION_USDT} USDT.` };
   }
-  if (!cleanedTx || cleanedTx.length < 32) {
-    return { success: false, error: 'Please enter a valid TRON TRC20 transaction hash (TxID).' };
+  if (!/^[0-9a-fA-F]{64}$/.test(cleanedTx)) {
+    return { success: false, error: 'Please enter a valid 64-character TRON TRC20 transaction hash (TxID).' };
   }
 
   try {
-    const entryData = {
-      userId: params.userId,
-      type: 'allocation',
-      amount: params.amountUsdt,
-      netAmount: params.amountUsdt,
-      feeAmount: 0,
-      txHash: cleanedTx,
-      status: 'pending',
-      description: `Strategy pool allocation deposit ($${params.amountUsdt.toLocaleString()} USDT)`,
-      network: 'TRC20',
-      recipientAddress: params.recipientAddress,
-      metadata: {
-        submittedAt: new Date().toISOString(),
-      },
-      createdAt: new Date().toISOString(),
-      serverTimestamp: serverTimestamp(),
-    };
-
-    const docRef = await addDoc(collection(db, 'yield_ledger'), entryData);
-
-    // Ensure the user's root allocation document exists or update status to pending review
-    const allocRef = doc(db, 'user_yield_allocations', params.userId);
-    const allocSnap = await getDoc(allocRef);
-
-    if (!allocSnap.exists()) {
-      await setDoc(allocRef, {
-        userId: params.userId,
-        allocatedAmountUsdt: 0, // credited upon confirmation by verification engine
-        walletBalanceUsdt: 0,
-        totalYieldEarnedUsdt: 0,
-        dailyRatePct: computeDailyMarketYieldRate(new Date()),
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
+    const res = await fetch('/api/yield-pool/allocate', {
+      method: 'POST',
+      headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amountUsdt: params.amountUsdt, txHash: cleanedTx }),
+    });
+    const d = await res.json().catch(() => null);
+    if (res.ok && d?.success) {
+      return {
+        success: true,
+        entryId: d.ledgerId,
+        creditedUsdt: Number(d.position?.principalUsdt || params.amountUsdt),
+      };
     }
-
-    return { success: true, entryId: docRef.id };
-  } catch (err) {
-    handleFirestoreError(err, OperationType.CREATE, path);
+    return { success: false, error: d?.error || `Verification failed (${res.status}).` };
+  } catch {
+    return { success: false, error: 'Could not reach the server to verify your TRC20 deposit.' };
   }
 }
 
 /**
- * Request a withdrawal from the user's performance pool wallet
+ * Requests a TRC20 withdrawal from the client's server-verified yield wallet balance.
  */
 export async function submitYieldPoolWithdrawal(params: {
   userId: string;
   amountUsdt: number;
   destinationAddress: string;
 }): Promise<{ success: boolean; entryId?: string; error?: string }> {
-  const path = 'yield_ledger';
   const addr = params.destinationAddress.trim();
-
   if (!/^T[1-9A-HJ-NP-Za-km-z]{33}$/.test(addr)) {
     return { success: false, error: 'Invalid TRON TRC20 destination wallet address.' };
   }
-
-  if (params.amountUsdt <= 0) {
-    return { success: false, error: 'Withdrawal amount must be greater than zero.' };
+  if (params.amountUsdt < 10) {
+    return { success: false, error: 'Minimum withdrawal is $10 USDT.' };
   }
 
   try {
-    const allocRef = doc(db, 'user_yield_allocations', params.userId);
-    const allocSnap = await getDoc(allocRef);
-
-    if (!allocSnap.exists()) {
-      return { success: false, error: 'No active yield allocation found for this account.' };
-    }
-
-    const alloc = allocSnap.data();
-    const available = Number(alloc.walletBalanceUsdt || 0);
-
-    if (params.amountUsdt > available) {
-      return {
-        success: false,
-        error: `Insufficient yield wallet balance ($${available.toFixed(2)} available).`,
-      };
-    }
-
-    // Deduct available wallet balance atomically & record withdrawal ledger entry
-    const newBalance = Math.max(0, available - params.amountUsdt);
-    await updateDoc(allocRef, {
-      walletBalanceUsdt: newBalance,
-      updatedAt: new Date().toISOString(),
+    const res = await fetch('/api/yield-pool/withdraw', {
+      method: 'POST',
+      headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amountUsdt: params.amountUsdt, destinationAddress: addr }),
     });
-
-    const entryData = {
-      userId: params.userId,
-      type: 'withdrawal_request',
-      amount: params.amountUsdt,
-      netAmount: params.amountUsdt,
-      feeAmount: 0,
-      status: 'pending',
-      description: `USDT TRC20 Yield Payout to ${addr.slice(0, 6)}...${addr.slice(-4)}`,
-      network: 'TRC20',
-      recipientAddress: addr,
-      createdAt: new Date().toISOString(),
-      serverTimestamp: serverTimestamp(),
-    };
-
-    const docRef = await addDoc(collection(db, 'yield_ledger'), entryData);
-    return { success: true, entryId: docRef.id };
-  } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, path);
+    const d = await res.json().catch(() => null);
+    if (res.ok && d?.success) {
+      return { success: true, entryId: d.ledgerId };
+    }
+    return { success: false, error: d?.error || `Withdrawal request failed (${res.status}).` };
+  } catch {
+    return { success: false, error: 'Could not reach the server to submit withdrawal.' };
   }
 }
 
+// ---------- Admin API Helpers ----------
+
+export interface AdminYieldPoolOverview {
+  enabled: boolean;
+  treasuryAddress: string;
+  stats: {
+    totalActiveCapitalUsdt: number;
+    totalWalletLiabilityUsdt: number;
+    totalYieldPaidUsdt: number;
+    activePositionsCount: number;
+    completedPositionsCount: number;
+    pendingWithdrawalsCount: number;
+  };
+  positions: ServerYieldPosition[];
+  withdrawals: YieldLedgerEntry[];
+  recentLedger: YieldLedgerEntry[];
+}
+
+export async function adminGetYieldPoolOverview() {
+  const res = await fetch('/api/yield-pool/admin/overview', { headers: await authHeaders() });
+  const d = await res.json().catch(() => null);
+  return res.ok && d?.success ? { ok: true as const, data: d as AdminYieldPoolOverview } : { ok: false as const, error: d?.error || `Error (${res.status})` };
+}
+
+export async function adminRunYieldPoolPayout(dateKey?: string) {
+  const res = await fetch('/api/yield-pool/admin/run-payout', {
+    method: 'POST',
+    headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+    body: JSON.stringify(dateKey ? { dateKey } : {}),
+  });
+  const d = await res.json().catch(() => null);
+  return res.ok && d?.success ? { ok: true as const, data: d } : { ok: false as const, error: d?.error || `Error (${res.status})` };
+}
+
+export async function adminManualCreditYieldAllocation(params: {
+  userId: string;
+  amountUsdt: number;
+  txHash?: string;
+  note?: string;
+}) {
+  const res = await fetch('/api/yield-pool/admin/credit-allocation', {
+    method: 'POST',
+    headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  const d = await res.json().catch(() => null);
+  return res.ok && d?.success ? { ok: true as const, data: d } : { ok: false as const, error: d?.error || `Error (${res.status})` };
+}
+
+export async function adminCompleteYieldPoolWithdrawal(id: string, txHash: string) {
+  const res = await fetch(`/api/yield-pool/admin/withdrawals/${encodeURIComponent(id)}/complete`, {
+    method: 'POST',
+    headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ txHash }),
+  });
+  const d = await res.json().catch(() => null);
+  return res.ok && d?.success ? { ok: true as const, data: d } : { ok: false as const, error: d?.error || `Error (${res.status})` };
+}
+
+export async function adminRejectYieldPoolWithdrawal(id: string, reason: string) {
+  const res = await fetch(`/api/yield-pool/admin/withdrawals/${encodeURIComponent(id)}/reject`, {
+    method: 'POST',
+    headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason }),
+  });
+  const d = await res.json().catch(() => null);
+  return res.ok && d?.success ? { ok: true as const, data: d } : { ok: false as const, error: d?.error || `Error (${res.status})` };
+}
+
 /**
- * Computes forward compound yield projection based on allocation, timeframe in days, and daily rate.
- * Only compounds on active market days (Mon-Fri).
+ * Computes fixed capital return projection:
+ * 2.0% daily (Monday–Friday) across 100 business days (+200% total return on fixed principal).
  */
 export function projectPerformanceGrowth(
   principalUsdt: number,
-  tradingDays: number,
-  dailyRatePct: number
-): { finalAmount: number; totalYield: number; dataPoints: { day: number; equity: number }[] } {
-  if (principalUsdt <= 0 || tradingDays <= 0) {
-    return { finalAmount: principalUsdt, totalYield: 0, dataPoints: [{ day: 0, equity: principalUsdt }] };
+  businessDays = YIELD_POOL_TERM_BUSINESS_DAYS,
+  dailyRatePct = YIELD_POOL_DAILY_RATE_PCT
+): {
+  dailyPayout: number;
+  finalAmount: number;
+  totalYield: number;
+  totalRoiPct: number;
+  dataPoints: { day: number; equity: number }[];
+} {
+  if (principalUsdt <= 0 || businessDays <= 0) {
+    return {
+      dailyPayout: 0,
+      finalAmount: principalUsdt,
+      totalYield: 0,
+      totalRoiPct: 0,
+      dataPoints: [{ day: 0, equity: principalUsdt }],
+    };
   }
 
-  const rate = Math.max(0, dailyRatePct / 100);
-  let current = principalUsdt;
-  const points: { day: number; equity: number }[] = [{ day: 0, equity: Number(current.toFixed(2)) }];
+  const dailyPayout = principalUsdt * (dailyRatePct / 100);
+  const totalYield = dailyPayout * businessDays;
+  const finalAmount = principalUsdt + totalYield;
+  const totalRoiPct = dailyRatePct * businessDays;
+  const points: { day: number; equity: number }[] = [
+    { day: 0, equity: Number(principalUsdt.toFixed(2)) },
+    { day: 25, equity: Number((principalUsdt + dailyPayout * 25).toFixed(2)) },
+    { day: 50, equity: Number((principalUsdt + dailyPayout * 50).toFixed(2)) },
+    { day: 75, equity: Number((principalUsdt + dailyPayout * 75).toFixed(2)) },
+    { day: businessDays, equity: Number(finalAmount.toFixed(2)) },
+  ];
 
-  const step = Math.max(1, Math.floor(tradingDays / 12));
-
-  for (let i = 1; i <= tradingDays; i++) {
-    current = current * (1 + rate);
-    if (i % step === 0 || i === tradingDays) {
-      points.push({ day: i, equity: Number(current.toFixed(2)) });
-    }
-  }
-
-  const totalYield = Math.max(0, current - principalUsdt);
   return {
-    finalAmount: Number(current.toFixed(2)),
+    dailyPayout: Number(dailyPayout.toFixed(2)),
+    finalAmount: Number(finalAmount.toFixed(2)),
     totalYield: Number(totalYield.toFixed(2)),
+    totalRoiPct: Number(totalRoiPct.toFixed(0)),
     dataPoints: points,
   };
 }

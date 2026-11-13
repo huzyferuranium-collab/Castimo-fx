@@ -40,10 +40,32 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // Older versions kept a browser-only "quick" session here. It is no longer used and is cleared on start.
 const OLD_SESSION_KEY = 'castimofx_auth_session';
 
+function getCurrentOriginInfo(): { origin: string; host: string } {
+  if (typeof window !== 'undefined' && window.location) {
+    return { origin: window.location.origin, host: window.location.hostname };
+  }
+  return { origin: 'this origin', host: 'this domain' };
+}
+
+function isRefererBlockedError(code?: string, message?: string): boolean {
+  const c = (code || '').toLowerCase();
+  const m = (message || '').toLowerCase();
+  return (
+    c.includes('requests-from-referer') ||
+    m.includes('requests-from-referer') ||
+    m.includes('api_key_http_referrer_blocked') ||
+    (m.includes('referer') && m.includes('are blocked'))
+  );
+}
+
 function getDiagnosticAdvice(code?: string, message?: string): string {
   const c = code || '';
   const m = message || '';
+  const { origin, host } = getCurrentOriginInfo();
 
+  if (isRefererBlockedError(c, m)) {
+    return `HTTP referrer restrictions on the browser API key in Google Cloud project "${firebaseConfigJson.projectId}" are blocking "${origin}". Open Google Cloud Console → APIs & Services → Credentials → Browser API key → Website restrictions and add "${origin}/*" (and ensure Identity Toolkit API is allowed and "${host}" is in Firebase Console → Authentication → Settings → Authorized domains).`;
+  }
   if (c.includes('identity-toolkit') || m.includes('identity-toolkit') || m.includes('identitytoolkit.googleapis.com')) {
     return 'Sign-in is not switched on for this Firebase project yet. Please contact support.';
   }
@@ -51,7 +73,7 @@ function getDiagnosticAdvice(code?: string, message?: string): string {
     return 'Email/Password sign-in method is not enabled in Firebase Console. Go to Firebase Console > Build > Authentication > Sign-in method to turn on Email/Password.';
   }
   if (c === 'auth/user-not-found' || c === 'auth/invalid-credential') {
-    return 'No registered account found with these credentials. If you are a new user, switch to the "Register Client" tab to create your account.';
+    return 'No registered account found with these credentials. If you are a new user, switch to the "Register" tab to create your account.';
   }
   if (c === 'auth/wrong-password') {
     return 'Incorrect password entered. Please check your password or reset credentials.';
@@ -63,12 +85,20 @@ function getDiagnosticAdvice(code?: string, message?: string): string {
     return 'The password is too weak. Please use at least 6 characters.';
   }
   if (c === 'auth/unauthorized-domain') {
-    return 'This web domain is not authorized in Firebase Console > Authentication > Settings > Authorized domains.';
+    return `This web domain ("${host}") is not authorized in Firebase Console > Authentication > Settings > Authorized domains.`;
   }
   if (c === 'auth/network-request-failed') {
     return 'Network request failed. Please check internet connection or browser ad-blockers.';
   }
   return 'Review the Firebase error code and console details to verify configuration.';
+}
+
+function formatAuthError(code?: string, message?: string): string {
+  if (isRefererBlockedError(code, message)) {
+    const { origin } = getCurrentOriginInfo();
+    return `Sign-in blocked for ${origin} due to Firebase API key referrer restrictions.`;
+  }
+  return message || 'Authentication failed.';
 }
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
@@ -192,7 +222,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.groupEnd();
 
       setLastErrorCode(code);
-      setError(message);
+      setError(formatAuthError(code, message));
       setDiagnosticAdvice(advice);
 
 
@@ -267,7 +297,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.groupEnd();
 
       setLastErrorCode(code);
-      setError(message);
+      setError(formatAuthError(code, message));
       setDiagnosticAdvice(advice);
 
 
@@ -312,10 +342,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await sendEmailVerification(current);
       return { success: true };
     } catch (err: any) {
+      const code = err?.code || 'unknown';
+      const message = err?.message || 'Could not send the verification email.';
       const msg =
-        err?.code === 'auth/too-many-requests'
+        code === 'auth/too-many-requests'
           ? 'Too many requests. Please wait a few minutes and try again.'
-          : err?.message || 'Could not send the verification email.';
+          : isRefererBlockedError(code, message)
+          ? `${formatAuthError(code, message)} ${getDiagnosticAdvice(code, message)}`
+          : message;
       return { success: false, error: msg };
     }
   };
@@ -329,10 +363,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await sendPasswordResetEmail(auth, address);
       return { success: true };
     } catch (err: any) {
+      const code = err?.code || 'unknown';
+      const message = err?.message || String(err);
       // An unknown address is reported as success, so nobody can use this to find out who has an account.
-      if (err?.code === 'auth/user-not-found' || err?.code === 'auth/invalid-email') return { success: true };
-      if (err?.code === 'auth/too-many-requests') {
+      if (code === 'auth/user-not-found' || code === 'auth/invalid-email') return { success: true };
+      if (code === 'auth/too-many-requests') {
         return { success: false, error: 'Too many requests. Please wait a few minutes and try again.' };
+      }
+      if (isRefererBlockedError(code, message)) {
+        return { success: false, error: `${formatAuthError(code, message)} ${getDiagnosticAdvice(code, message)}` };
       }
       return { success: false, error: 'We could not send the link just now. Please try again in a moment.' };
     }

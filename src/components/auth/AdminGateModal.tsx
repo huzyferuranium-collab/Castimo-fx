@@ -14,7 +14,7 @@ interface AdminGateModalProps {
  * can give themselves, so this window cannot unlock anything on its own.
  */
 export const AdminGateModal: React.FC<AdminGateModalProps> = ({ isOpen, onClose, onSuccess }) => {
-  const { signInWithEmail } = useAuth();
+  const { signInWithEmail, error, diagnosticAdvice, clearError } = useAuth();
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -25,6 +25,7 @@ export const AdminGateModal: React.FC<AdminGateModalProps> = ({ isOpen, onClose,
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    clearError();
     setErrorMsg(null);
     setIsVerifying(true);
     try {
@@ -75,10 +76,15 @@ export const AdminGateModal: React.FC<AdminGateModalProps> = ({ isOpen, onClose,
             </div>
           ) : (
             <>
-              {errorMsg && (
-                <div className="p-2.5 text-xs rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-                  <span>{errorMsg}</span>
+              {(error || errorMsg) && (
+                <div className="p-2.5 text-xs rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 space-y-1.5">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                    <span className="break-words">{error || errorMsg}</span>
+                  </div>
+                  {diagnosticAdvice && (
+                    <p className="text-[11px] text-rose-200/80 pl-6 break-words">{diagnosticAdvice}</p>
+                  )}
                 </div>
               )}
 
