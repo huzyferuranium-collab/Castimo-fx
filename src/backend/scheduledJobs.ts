@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { timingSafeEqual } from 'node:crypto';
+import { rateLimit } from './rateLimit.ts';
 
 /**
  * Scheduled work (billing sweeps, payment reminders) for a host that sleeps between visits, like Google Cloud Run.
@@ -42,7 +43,10 @@ export function createJobsRouter<J extends string>({ jobs, ready, secret, log = 
   const router = Router();
   const running = new Set<string>();
 
-  router.post('/:job', async (req, res) => {
+  // The scheduler calls about 7 times in 10 minutes; anything far beyond that is someone guessing the secret.
+  const limit = rateLimit({ max: 30, windowMs: 10 * 60_000 });
+
+  router.post('/:job', limit, async (req, res) => {
     if (!cronAuthorized(req.get(CRON_SECRET_HEADER), secret)) return res.status(403).json({ error: 'Forbidden' });
     const name = req.params.job;
     if (!Object.prototype.hasOwnProperty.call(jobs, name)) return res.status(404).json({ error: 'Unknown job' });
