@@ -29,7 +29,7 @@ const GLOW: Record<Tone, string> = {
 };
 
 export const IconTile: React.FC<{ tone: Tone; children: React.ReactNode; size?: string }> = ({ tone, children, size = 'w-11 h-11' }) => (
-  <span className={`${size} shrink-0 rounded-2xl bg-gradient-to-br ${TONES[tone]} text-white flex items-center justify-center shadow-lg ring-1 ring-white/30 relative overflow-hidden`}>
+  <span className={`icon-tile ${size} shrink-0 rounded-2xl bg-gradient-to-br ${TONES[tone]} text-white flex items-center justify-center shadow-lg ring-1 ring-white/30 relative overflow-hidden`}>
     <span className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
     <span className="relative [&_*]:!text-white">{children}</span>
   </span>
