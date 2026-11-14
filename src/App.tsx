@@ -116,8 +116,8 @@ const MainContent: React.FC = () => {
 
       {/* Top Navbar */}
       <header className="sticky top-0 z-40 bg-slate-950/85 border-b border-slate-800">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-0 sm:h-16 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-4">
-          <div className="flex items-center justify-between w-full sm:w-auto">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 xl:py-0 xl:h-16 flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 xl:gap-4">
+          <div className="flex items-center justify-between w-full xl:w-auto">
             {/* Logo & Brand */}
             <div className="flex items-center gap-2.5">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 via-violet-600 to-rose-500 flex items-center justify-center text-white font-black shadow-lg shadow-violet-500/30 ring-1 ring-white/30 shrink-0">
@@ -137,7 +137,7 @@ const MainContent: React.FC = () => {
             </div>
 
             {/* Mobile Right Controls: Theme & UserMenu */}
-            <div className="flex sm:hidden items-center gap-1.5">
+            <div className="flex xl:hidden items-center gap-1.5">
               <ThemeToggle showLabel={false} />
               <UserMenu
                 onOpenAuth={() => setAuthModalOpen(true)}
@@ -146,10 +146,10 @@ const MainContent: React.FC = () => {
           </div>
 
           {/* Center Navigation Toggle: ONLY SHOWS RELEVANT CLIENT/ADMIN TABS */}
-          <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800 shadow-inner overflow-x-auto no-scrollbar w-full sm:w-auto justify-start sm:justify-center">
+          <div className="flex flex-wrap sm:flex-nowrap gap-1 sm:gap-0 min-w-0 bg-slate-900 p-1 rounded-xl border border-slate-800 shadow-inner overflow-x-auto no-scrollbar w-full xl:w-auto justify-start">
             <button
               onClick={() => handleSelectTab('client')}
-              className={`px-3 sm:px-3.5 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+              className={`px-3 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap flex-1 sm:flex-none justify-center ${
                 activeTab === 'client'
                   ? 'bg-blue-500/15 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200 border border-blue-500/30 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -160,7 +160,7 @@ const MainContent: React.FC = () => {
             </button>
             <button
               onClick={() => handleSelectTab('referrals')}
-              className={`px-3 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap ${
+              className={`px-3 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap flex-1 sm:flex-none justify-center ${
                 activeTab === 'referrals'
                   ? 'bg-rose-500/15 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200 border border-rose-500/30 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -168,13 +168,13 @@ const MainContent: React.FC = () => {
             >
               <Share2 className="w-3.5 h-3.5 text-rose-400" />
               <span>Referral Hub</span>
-              <span className="hidden sm:inline text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-gradient-to-r from-rose-500/20 via-violet-500/20 to-blue-500/20 text-rose-700 dark:text-rose-200 border border-rose-500/30">
+              <span className="hidden xl:inline text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-gradient-to-r from-rose-500/20 via-violet-500/20 to-blue-500/20 text-rose-700 dark:text-rose-200 border border-rose-500/30">
                 {referralRatesLabel('•')}
               </span>
             </button>
             <button
               onClick={() => handleSelectTab('yield_pool')}
-              className={`px-3 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap ${
+              className={`px-3 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap flex-1 sm:flex-none justify-center ${
                 activeTab === 'yield_pool'
                   ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
@@ -182,7 +182,7 @@ const MainContent: React.FC = () => {
             >
               <Flame className="w-3.5 h-3.5 text-emerald-400" />
               <span>Yield Pool</span>
-              <span className="hidden sm:inline text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              <span className="hidden xl:inline text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                 2% · 100d
               </span>
             </button>
@@ -191,7 +191,7 @@ const MainContent: React.FC = () => {
             {isAdmin && (
               <button
                 onClick={() => handleSelectTab('admin')}
-                className={`px-3 sm:px-3.5 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                className={`px-3 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap flex-1 sm:flex-none justify-center ${
                   activeTab === 'admin'
                     ? 'bg-purple-500/25 text-purple-200 border border-purple-500/40 shadow-sm'
                     : 'text-purple-400 hover:text-purple-300'
@@ -205,7 +205,7 @@ const MainContent: React.FC = () => {
           </div>
 
           {/* Desktop Right Action / Profile Menu */}
-          <div className="hidden sm:flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="hidden xl:flex items-center gap-2 sm:gap-3 shrink-0">
             <ThemeToggle showLabel={false} />
             <UserMenu
               onOpenAuth={() => setAuthModalOpen(true)}
