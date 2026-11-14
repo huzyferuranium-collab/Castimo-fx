@@ -25,7 +25,7 @@ import { RobotConsole } from './RobotConsole';
 import { AuthModal } from '../auth/AuthModal';
 import { ServicePlanPage } from './ServicePlanPage';
 import { getPlanView, PlanView } from '../../services/servicePlanApi';
-import { WelcomeHero, StatCard, ProgressRing, ActionCard, IconTile, SectionBanner, Tone } from './DashboardVisuals';
+import { WelcomeHero, StatCard, ProgressRing, ActionCard, IconTile, SectionBanner, DashGroup, Tone } from './DashboardVisuals';
 import { ART, ArtName } from './Illustrations';
 import { TradePerformance } from './TradeCharts';
 import { AnimatedNumber } from '../common/AnimatedNumber';
@@ -471,7 +471,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
         )}
 
         {activeSection === 'overview' && (
-          <div className="space-y-4 animate-in fade-in duration-150">
+          <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-150">
+            {/* The banner and anything that needs the client's attention read as one block */}
+            <div className="space-y-4">
             {/* 1. WELCOME BANNER: who you are, where things stand, what to do next (all real status) */}
             <WelcomeHero
               name={(userProfile?.displayName || 'Trader').split(' ')[0]}
@@ -603,9 +605,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                 </button>
               </div>
             )}
+            </div>
 
-            {/* 3. LIVE ACCOUNT FIGURES (real broker data; hidden until an account is linked) */}
+            {/* 2. YOUR ACCOUNT: live figures (real broker data; hidden until an account is linked) */}
             {(isConnected || isUserAdmin) && (
+              <DashGroup title="Your account" hint="Live figures from your broker">
               <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
                 <StatCard
                   tone="royal"
@@ -672,89 +676,21 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                   }
                 />
               </div>
+              </DashGroup>
             )}
 
-            {/* 4. PERFORMANCE beside PLAN and RECENT ACTIVITY on wide screens; one column on phones.
+            {/* 3. TRADING: what the master is doing now, how your copied trades have done, and the latest ones.
                 The charts are drawn only from your real trades and are absent until there are some. */}
-            <div className={`grid grid-cols-1 gap-4 ${hasClosedTrades ? 'xl:grid-cols-3' : trades.length > 0 ? 'lg:grid-cols-2 items-start' : ''}`}>
-              {hasClosedTrades && (
-                <div className="xl:col-span-2 min-w-0 [&>div]:h-full">
-                  <TradePerformance trades={trades} />
-                </div>
-              )}
-              <div className={hasClosedTrades ? 'space-y-4 min-w-0' : 'contents'}>
-                {/* YOUR PLAN AT A GLANCE (clients only: an admin account has no plan to show) */}
-                {!isUserAdmin && (
-                <div>
-                  <div
-                    className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-4 sm:p-6 border border-transparent"
-                    style={{ ['--rim-accent' as string]: '168,85,247' }}
-                  >
-                    <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-fuchsia-400 via-violet-500 to-indigo-500 opacity-35 bloom" />
-                    {planView === undefined ? (
-                      <div className="relative flex items-center gap-4">
-                        <div className="w-24 h-24 rounded-full shimmer" />
-                        <div className="flex-1 space-y-2">
-                          <div className="h-4 w-1/2 rounded-full shimmer" />
-                          <div className="h-3 w-2/3 rounded-full shimmer" />
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="relative flex items-center gap-3 sm:gap-5">
-                        {isSubscriber ? (
-                          <ProgressRing value={(planView?.subscription?.daysLeft ?? 0) / (planView?.price.periodDays || 30)} size={92}>
-                            <AnimatedNumber value={planView?.subscription?.daysLeft ?? 0} decimals={0} prefix="" className="font-display font-extrabold text-2xl text-slate-900 dark:text-white" />
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">days left</span>
-                          </ProgressRing>
-                        ) : (
-                          (() => {
-                            const PlanArt = hasPendingShare ? ART.clock : ART.medal;
-                            return <PlanArt size={96} className="shrink-0 animate-float-a w-16 h-16 sm:w-24 sm:h-24" />;
-                          })()
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Your plan</div>
-                          <div className="font-display font-extrabold text-lg sm:text-xl text-slate-900 dark:text-white mt-0.5">
-                            {isSubscriber ? 'Monthly Subscription' : planView?.model === 'profit_share' ? '50% Profit Share' : planView?.available ? 'No plan chosen yet' : 'Service plan'}
-                          </div>
-                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                            {isSubscriber
-                              ? subscriptionRunning
-                                ? 'Active. Nothing is owed on your profits while it runs.'
-                                : 'Not active. Pay for the plan to resume copying.'
-                              : planView?.model === 'profit_share'
-                                ? hasPendingShare
-                                  ? `$${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT is due on your latest invoice.`
-                                  : 'All settled. You pay 50% of new profit only.'
-                                : planView?.available
-                                  ? 'Choose Monthly or 50% Profit Share to get started.'
-                                  : 'Open the plan page to see how you pay.'}
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {hasPendingShare && (
-                              <button
-                                type="button"
-                                onClick={() => setShowPaymentModal(true)}
-                                className="btn-gold px-4 py-2 rounded-xl font-extrabold text-xs cursor-pointer"
-                              >
-                                Pay ${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setActiveSection('plan')}
-                              className="px-4 py-2 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 text-violet-700 dark:text-violet-200 font-bold text-xs transition cursor-pointer"
-                            >
-                              {planView?.model ? 'Manage plan' : planView?.available ? 'Choose plan' : 'Open plan page'}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+            <DashGroup title="Trading" hint="The master account now, and your copied trades">
+              <RobotConsole />
+              {trades.length > 0 && (
+              <div className={`grid grid-cols-1 gap-4 ${hasClosedTrades ? 'xl:grid-cols-3' : ''}`}>
+                {hasClosedTrades && (
+                  <div className="xl:col-span-2 min-w-0 [&>div]:h-full">
+                    <TradePerformance trades={trades} />
                   </div>
-                </div>
                 )}
-
+                <div className="min-w-0 [&>div]:h-full">
                 {/* RECENT ACTIVITY (your real mirrored trades; nothing is shown until there are some) */}
                 {trades.length > 0 && (
                   <div className="rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-4 sm:p-5 border border-transparent" style={{ ['--rim-accent' as string]: '79,125,255' }}>
@@ -767,11 +703,11 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                     <ul className="divide-y divide-slate-100 dark:divide-slate-800">
                       {[...trades]
                         .sort((a, b) => Date.parse(b.openTime) - Date.parse(a.openTime))
-                        .slice(0, 5)
-                        .map((t) => {
+                        .slice(0, 7)
+                        .map((t, i) => {
                           const pnl = t.pnl || 0;
                           return (
-                            <li key={t.id} className="flex items-center gap-3 py-2.5">
+                            <li key={t.id} className={`${i >= 5 ? 'hidden xl:flex' : 'flex'} items-center gap-3 py-2.5`}>
                               <span
                                 className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center ${
                                   t.direction === 'SELL' ? 'bg-violet-500/15 text-violet-600 dark:text-violet-300' : 'bg-sky-500/15 text-sky-600 dark:text-sky-300'
@@ -800,12 +736,85 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                     </ul>
                   </div>
                 )}
+                </div>
               </div>
-            </div>
+              )}
+            </DashGroup>
 
-            <RobotConsole />
+            {/* 4. PLAN & BILLING: your plan at a glance (clients only: an admin account has no plan to show) */}
+            {!isUserAdmin && (
+            <DashGroup title="Plan & billing" hint="How you pay for copying">
+              <div
+                className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-4 sm:p-6 border border-transparent"
+                style={{ ['--rim-accent' as string]: '168,85,247' }}
+              >
+                <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-fuchsia-400 via-violet-500 to-indigo-500 opacity-35 bloom" />
+                {planView === undefined ? (
+                  <div className="relative flex items-center gap-4">
+                    <div className="w-24 h-24 rounded-full shimmer" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-1/2 rounded-full shimmer" />
+                      <div className="h-3 w-2/3 rounded-full shimmer" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative flex items-center gap-3 sm:gap-5">
+                    {isSubscriber ? (
+                      <ProgressRing value={(planView?.subscription?.daysLeft ?? 0) / (planView?.price.periodDays || 30)} size={92}>
+                        <AnimatedNumber value={planView?.subscription?.daysLeft ?? 0} decimals={0} prefix="" className="font-display font-extrabold text-2xl text-slate-900 dark:text-white" />
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">days left</span>
+                      </ProgressRing>
+                    ) : (
+                      (() => {
+                        const PlanArt = hasPendingShare ? ART.clock : ART.medal;
+                        return <PlanArt size={96} className="shrink-0 animate-float-a w-16 h-16 sm:w-24 sm:h-24" />;
+                      })()
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Your plan</div>
+                      <div className="font-display font-extrabold text-lg sm:text-xl text-slate-900 dark:text-white mt-0.5">
+                        {isSubscriber ? 'Monthly Subscription' : planView?.model === 'profit_share' ? '50% Profit Share' : planView?.available ? 'No plan chosen yet' : 'Service plan'}
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                        {isSubscriber
+                          ? subscriptionRunning
+                            ? 'Active. Nothing is owed on your profits while it runs.'
+                            : 'Not active. Pay for the plan to resume copying.'
+                          : planView?.model === 'profit_share'
+                            ? hasPendingShare
+                              ? `$${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT is due on your latest invoice.`
+                              : 'All settled. You pay 50% of new profit only.'
+                            : planView?.available
+                              ? 'Choose Monthly or 50% Profit Share to get started.'
+                              : 'Open the plan page to see how you pay.'}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {hasPendingShare && (
+                          <button
+                            type="button"
+                            onClick={() => setShowPaymentModal(true)}
+                            className="btn-gold px-4 py-2 rounded-xl font-extrabold text-xs cursor-pointer"
+                          >
+                            Pay ${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setActiveSection('plan')}
+                          className="px-4 py-2 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 text-violet-700 dark:text-violet-200 font-bold text-xs transition cursor-pointer"
+                        >
+                          {planView?.model ? 'Manage plan' : planView?.available ? 'Choose plan' : 'Open plan page'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </DashGroup>
+            )}
 
-            {/* 4. QUICK ACTIONS: each with its own illustration; spans are arranged so the last row is never left with a hole */}
+            {/* 5. SHORTCUTS: each with its own illustration; spans are arranged so the last row is never left with a hole */}
+            <DashGroup title="Shortcuts">
             {(() => {
               const actions: Array<{ tone: Tone; art: ArtName; icon: React.ReactNode; title: string; hint: string; onClick: () => void }> = [
                 { tone: 'violet', art: 'medal', icon: <Wallet className="w-5 h-5" />, title: 'Service plan', hint: 'Choose or manage how you pay', onClick: () => setActiveSection('plan') },
@@ -830,6 +839,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                 </div>
               );
             })()}
+            </DashGroup>
 
           </div>
         )}
