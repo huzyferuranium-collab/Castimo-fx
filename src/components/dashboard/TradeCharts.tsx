@@ -64,18 +64,20 @@ export const DayBars: React.FC<{ trades: CopiedTrade[]; endMs: number; days: num
         </div>
       </div>
 
-      <div className="relative mt-2 h-20 flex items-stretch justify-evenly gap-1 sm:gap-1.5" role="img" aria-label={`Net result for each trading day of the last ${days} days, ${money(sum)} in total`}>
+      <div className="relative mt-3 h-28 sm:h-32 xl:h-52 flex items-stretch justify-evenly gap-1 sm:gap-1.5" role="img" aria-label={`Net result for each trading day of the last ${days} days, ${money(sum)} in total`}>
+        {/* the zero line every bar grows from */}
+        <div aria-hidden className="absolute inset-x-0 h-px bg-slate-300 dark:bg-slate-600" style={{ top: `${baseTop}%` }} />
         {rows.map((r, i) => {
           const up = r.sum >= 0;
           const h = r.n === 0 || total === 0 ? 0 : Math.max(4, (Math.abs(r.sum) / total) * 100);
           return (
-            <div key={r.key} className="relative flex-1 min-w-0 max-w-[40px] group" title={`${r.key} · ${r.n} trade${r.n === 1 ? '' : 's'} · ${money(r.sum)}`}>
+            <div key={r.key} className="relative flex-1 min-w-0 max-w-[44px] group" title={`${r.key} · ${r.n} trade${r.n === 1 ? '' : 's'} · ${money(r.sum)}`}>
               {r.n === 0 ? (
-                <div className="absolute inset-x-[30%] rounded-full bg-slate-300/60 dark:bg-slate-600/60 h-1" style={{ top: `calc(${baseTop}% - 2px)` }} />
+                <div className="absolute inset-x-[35%] rounded-full bg-slate-300 dark:bg-slate-600 h-1" style={{ top: `calc(${baseTop}% - 2px)` }} />
               ) : (
                 <div
-                  className={`absolute inset-x-0 rounded-full transition-[height] duration-[900ms] ease-out ${
-                    up ? 'bg-gradient-to-t from-brand-turquoise to-brand-cyan shadow-[0_8px_18px_-6px_rgba(8,201,181,.7)]' : 'bg-gradient-to-b from-brand-crimson to-brand-magenta shadow-[0_8px_18px_-6px_rgba(245,34,54,.6)]'
+                  className={`absolute inset-x-[12%] transition-[height] duration-[900ms] ease-out ${
+                    up ? 'rounded-t-md bg-gradient-to-t from-emerald-500 to-emerald-400' : 'rounded-b-md bg-gradient-to-b from-rose-500 to-rose-400'
                   } group-hover:brightness-110`}
                   style={up ? { bottom: `${100 - baseTop}%`, height: on ? `${h}%` : '0%', transitionDelay: `${i * 30}ms` } : { top: `${baseTop}%`, height: on ? `${h}%` : '0%', transitionDelay: `${i * 30}ms` }}
                 />
@@ -84,9 +86,17 @@ export const DayBars: React.FC<{ trades: CopiedTrade[]; endMs: number; days: num
           );
         })}
       </div>
-      <div className="mt-1.5 flex justify-evenly gap-1 sm:gap-1.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+      <div className="mt-1.5 flex justify-evenly gap-1 sm:gap-1.5 text-[10px] font-semibold text-slate-500 dark:text-slate-400">
         {rows.map((r, i) => (
-          <span key={r.key} className="flex-1 min-w-0 max-w-[40px] text-center truncate">{rows.length <= 31 || i % 5 === 0 ? label(r.ms) : ''}</span>
+          <span key={r.key} className="flex-1 min-w-0 max-w-[44px] text-center">
+            <span className="block truncate">{rows.length <= 31 || i % 5 === 0 ? label(r.ms) : ''}</span>
+            {/* the day's own figure, where there is room for it */}
+            {rows.length <= 7 && r.n > 0 && (
+              <span className={`block font-mono tabular-nums text-[9.5px] ${r.sum >= 0 ? '!text-emerald-600 dark:!text-emerald-300' : '!text-rose-600 dark:!text-rose-300'}`}>
+                {`${r.sum >= 0 ? '+' : '-'}${Math.abs(r.sum).toFixed(0)}`}
+              </span>
+            )}
+          </span>
         ))}
       </div>
 
@@ -98,8 +108,8 @@ export const DayBars: React.FC<{ trades: CopiedTrade[]; endMs: number; days: num
 const Tile: React.FC<{ label: string; value: React.ReactNode; sub?: string; tone?: 'up' | 'down' | 'plain' }> = ({ label, value, sub, tone = 'plain' }) => (
   <div className="rounded-xl bg-slate-50/80 dark:bg-slate-800/60 px-3 py-2 min-w-0">
     <div className="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">{label}</div>
-    <div className={`mt-0.5 font-mono text-sm sm:text-base font-extrabold truncate ${tone === 'up' ? '!text-emerald-600 dark:!text-emerald-300' : tone === 'down' ? '!text-rose-600 dark:!text-rose-300' : 'text-slate-900 dark:text-white'}`}>{value}</div>
-    {sub && <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">{sub}</div>}
+    <div className={`mt-0.5 font-mono tabular-nums text-sm sm:text-base font-extrabold truncate ${tone === 'up' ? '!text-emerald-600 dark:!text-emerald-300' : tone === 'down' ? '!text-rose-600 dark:!text-rose-300' : 'text-slate-900 dark:text-white'}`}>{value}</div>
+    {sub && <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 leading-snug">{sub}</div>}
   </div>
 );
 
@@ -187,7 +197,7 @@ export const TradePerformance: React.FC<{ trades: CopiedTrade[] }> = ({ trades }
             <Tile label="Net result" value={money(net)} sub={closed.length ? `Average ${money(avg)} per trade` : undefined} tone={net > 0 ? 'up' : net < 0 ? 'down' : 'plain'} />
           </div>
 
-          <div className="relative flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
+          <div className="relative flex flex-col md:flex-row md:items-center gap-4 md:gap-8">
             <DayBars trades={closed.filter((t) => Number.isFinite(closedMs(t)))} endMs={nowMs} days={barDays} />
             {closed.length > 0 && (
               <div className="flex items-center gap-3 shrink-0">

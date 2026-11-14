@@ -49,7 +49,7 @@ export interface WelcomeHeroProps {
 }
 
 export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail, chips, primary, secondary, topRight }) => (
-  <section className="aurora on-aurora relative overflow-hidden rounded-[24px] sm:rounded-[34px] p-4 sm:p-9">
+  <section className="aurora on-aurora relative overflow-hidden rounded-[24px] sm:rounded-[28px] p-4 sm:p-7">
     {/* floating 3D-style shapes: a full scene from sm up, a small cluster beside the bell on phones */}
     <div aria-hidden className="pointer-events-none absolute inset-0 hidden sm:block">
       <Orb size={118} from="#ffe1e7" mid="#ff5a6b" to="#a00a1f" className="absolute right-[34%] -top-5 animate-float-a" />
@@ -91,7 +91,7 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail
       </div>
 
       {(primary || secondary) && (
-        <div className="mt-4 sm:mt-6 flex flex-col sm:flex-row gap-2 sm:gap-3">
+        <div className="mt-4 sm:mt-5 flex flex-col sm:flex-row gap-2 sm:gap-3">
           {primary && (
             <button
               type="button"
@@ -143,7 +143,7 @@ export const StatCard: React.FC<{
   const row = !!rowOnPhone;
   return (
   <div
-    className={`group relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-3.5 sm:p-5 border border-transparent surface-hover flex flex-col ${
+    className={`group relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-3.5 sm:p-5 border border-transparent surface-hover flex flex-col sm:justify-start ${
       row ? 'max-sm:grid max-sm:grid-cols-[2.75rem_minmax(0,1fr)] max-sm:items-center max-sm:gap-x-3 max-sm:py-3' : ''
     }`}
     style={{ ['--rim-accent' as string]: GLOW[tone] }}
@@ -153,7 +153,7 @@ export const StatCard: React.FC<{
       {Art ? (
         <Art
           size={60}
-          className={`shrink-0 -ml-1 -my-0.5 w-10 h-10 sm:w-[60px] sm:h-[60px] sm:-ml-1.5 group-hover:animate-float-c ${row ? 'max-sm:w-11 max-sm:h-11 max-sm:col-start-1 max-sm:row-start-1 max-sm:row-span-3' : ''}`}
+          className={`shrink-0 -ml-1 -my-0.5 w-10 h-10 sm:w-12 sm:h-12 sm:-ml-1 group-hover:animate-float-c ${row ? 'max-sm:w-11 max-sm:h-11 max-sm:col-start-1 max-sm:row-start-1 max-sm:row-span-3' : ''}`}
         />
       ) : (
         <IconTile tone={tone} size={`w-8 h-8 sm:w-10 sm:h-10 ${row ? 'max-sm:col-start-1 max-sm:row-start-1 max-sm:row-span-3' : ''}`}>{icon}</IconTile>
@@ -161,7 +161,7 @@ export const StatCard: React.FC<{
       <span className={`text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.1em] sm:tracking-[0.14em] text-slate-500 dark:text-slate-400 ${row ? 'max-sm:col-start-2 max-sm:row-start-1' : ''}`}>{label}</span>
     </div>
     <div
-      className={`relative mt-auto pt-2 sm:pt-0 sm:mt-4 font-display font-extrabold tracking-tight text-xl sm:text-3xl text-slate-900 dark:text-white ${
+      className={`relative mt-auto pt-2 sm:pt-0 sm:mt-3 font-display font-extrabold tracking-tight tabular-nums text-xl sm:text-[1.7rem] sm:leading-9 text-slate-900 dark:text-white ${
         row ? 'max-sm:col-start-2 max-sm:row-start-2 max-sm:mt-0 max-sm:pt-0' : ''
       } ${valueClass}`}
     >
@@ -172,7 +172,7 @@ export const StatCard: React.FC<{
         <div className={`h-full rounded-full bg-gradient-to-r ${TONES[tone]} transition-[width] duration-1000`} style={{ width: `${Math.max(2, Math.min(100, share * 100))}%` }} />
       </div>
     )}
-    {footer && <div className={`relative mt-1.5 sm:mt-3 text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 ${row ? 'max-sm:col-start-2' : ''}`}>{footer}</div>}
+    {footer && <div className={`relative mt-1.5 sm:mt-2 text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 ${row ? 'max-sm:col-start-2' : ''}`}>{footer}</div>}
   </div>
   );
 };
