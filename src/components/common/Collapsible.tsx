@@ -56,13 +56,13 @@ export const Collapsible: React.FC<CollapsibleProps> = ({
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls={id}
-        className={`w-full flex items-center justify-between gap-3 text-left cursor-pointer rounded-2xl ${variant === 'card' ? 'px-4 py-3' : 'py-1.5'}`}
+        className={`w-full min-h-[48px] flex items-center justify-between gap-3 text-left cursor-pointer rounded-2xl ${variant === 'card' ? 'px-3.5 sm:px-4 py-3' : 'py-1.5'}`}
       >
         <span className="min-w-0">
-          <span className={`block text-xs sm:text-sm font-semibold ${titleCls}`}>{title}</span>
-          {summary && !open && <span className={`block text-[11px] truncate mt-0.5 ${summaryCls}`}>{summary}</span>}
+          <span className={`block font-display text-xs sm:text-sm font-bold tracking-tight ${titleCls}`}>{title}</span>
+          {summary && !open && <span className={`block text-[11px] font-mono tabular-nums truncate mt-0.5 ${summaryCls}`}>{summary}</span>}
         </span>
-        <span className={`flex items-center gap-1 shrink-0 text-[11px] font-medium ${summaryCls}`}>
+        <span className={`flex items-center gap-1 shrink-0 font-display text-[11px] font-semibold tracking-tight ${summaryCls}`}>
           <span>{open ? closeLabel : openLabel}</span>
           <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
         </span>

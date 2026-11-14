@@ -125,8 +125,8 @@ const MainContent: React.FC = () => {
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h1 className="text-sm sm:text-base font-black tracking-wider text-white">Castimofx</h1>
-                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-700 dark:text-sky-200 border border-sky-500/40">
+                  <h1 className="font-display text-sm sm:text-base font-extrabold tracking-tight text-white">Castimofx</h1>
+                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-700 dark:text-sky-200 border border-sky-500/40">
                     MT5
                   </span>
                 </div>
@@ -146,43 +146,49 @@ const MainContent: React.FC = () => {
           </div>
 
           {/* Center Navigation Toggle: ONLY SHOWS RELEVANT CLIENT/ADMIN TABS */}
-          <div className="flex min-w-0 bg-slate-900 p-1 rounded-xl border border-slate-800 shadow-inner overflow-x-auto no-scrollbar w-full sm:w-auto justify-start sm:justify-center-safe">
+          <nav
+            aria-label="Portal sections"
+            className="flex items-center gap-0.5 sm:gap-1 min-w-0 bg-slate-900 p-1 rounded-xl border border-slate-800 shadow-inner overflow-x-auto no-scrollbar w-full sm:w-auto justify-between sm:justify-center-safe"
+          >
             <button
+              type="button"
               onClick={() => handleSelectTab('client')}
-              className={`px-3 sm:px-3.5 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+              className={`flex-auto sm:flex-initial px-2 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 font-display text-[11px] sm:text-xs font-semibold tracking-tight rounded-lg transition flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shrink-0 whitespace-nowrap ${
                 activeTab === 'client'
                   ? 'bg-blue-500/15 text-blue-700 dark:bg-blue-500/20 dark:text-blue-200 border border-blue-500/30 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <TrendingUp className="w-3.5 h-3.5" />
+              <TrendingUp className="hidden min-[360px]:block w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
               <span>Client Terminal</span>
             </button>
             <button
+              type="button"
               onClick={() => handleSelectTab('referrals')}
-              className={`px-3 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap ${
+              className={`flex-auto sm:flex-initial px-2 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 font-display text-[11px] sm:text-xs font-semibold tracking-tight rounded-lg transition flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shrink-0 whitespace-nowrap ${
                 activeTab === 'referrals'
                   ? 'bg-rose-500/15 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200 border border-rose-500/30 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Share2 className="w-3.5 h-3.5 text-rose-400" />
+              <Share2 className="hidden min-[360px]:block w-3 h-3 sm:w-3.5 sm:h-3.5 text-rose-400 shrink-0" />
               <span>Referral Hub</span>
-              <span className="hidden sm:inline text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-gradient-to-r from-rose-500/20 via-violet-500/20 to-blue-500/20 text-rose-700 dark:text-rose-200 border border-rose-500/30">
+              <span className="hidden md:inline text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-gradient-to-r from-rose-500/20 via-violet-500/20 to-blue-500/20 text-rose-700 dark:text-rose-200 border border-rose-500/30">
                 {referralRatesLabel('•')}
               </span>
             </button>
             <button
+              type="button"
               onClick={() => handleSelectTab('yield_pool')}
-              className={`px-3 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 whitespace-nowrap ${
+              className={`flex-auto sm:flex-initial px-2 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 font-display text-[11px] sm:text-xs font-semibold tracking-tight rounded-lg transition flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shrink-0 whitespace-nowrap ${
                 activeTab === 'yield_pool'
-                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm'
+                  ? 'bg-amber-500/15 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-500/30 shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Flame className="w-3.5 h-3.5 text-emerald-400" />
+              <Flame className="hidden min-[360px]:block w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 dark:text-amber-400 shrink-0" />
               <span>Yield Pool</span>
-              <span className="hidden sm:inline text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              <span className="hidden md:inline text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
                 2% · 100d
               </span>
             </button>
@@ -190,19 +196,19 @@ const MainContent: React.FC = () => {
             {/* ONLY DISPLAYED TO VERIFIED ADMINISTRATORS */}
             {isAdmin && (
               <button
+                type="button"
                 onClick={() => handleSelectTab('admin')}
-                className={`px-3 sm:px-3.5 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                className={`flex-auto sm:flex-initial px-2 sm:px-3.5 py-2 sm:py-1.5 min-h-[40px] sm:min-h-0 font-display text-[11px] sm:text-xs font-semibold tracking-tight rounded-lg transition flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shrink-0 whitespace-nowrap ${
                   activeTab === 'admin'
                     ? 'bg-purple-500/25 text-purple-200 border border-purple-500/40 shadow-sm'
                     : 'text-purple-400 hover:text-purple-300'
                 }`}
               >
-                <Server className="w-3.5 h-3.5 text-purple-400" />
+                <Server className="hidden min-[360px]:block w-3 h-3 sm:w-3.5 sm:h-3.5 text-purple-400 shrink-0" />
                 <span>Admin Console</span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
               </button>
             )}
-          </div>
+          </nav>
 
           {/* Desktop Right Action / Profile Menu */}
           <div className="hidden sm:flex items-center gap-2 sm:gap-3 shrink-0">
