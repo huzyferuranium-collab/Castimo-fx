@@ -120,6 +120,23 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail
   </section>
 );
 
+/* ------------------------------------------------------------------ a titled group of related cards */
+export const DashGroup: React.FC<{ title: string; hint?: string; right?: React.ReactNode; children: React.ReactNode }> = ({ title, hint, right, children }) => {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className="space-y-3 sm:space-y-4">
+      <div className="flex items-end justify-between gap-3 px-1">
+        <div className="min-w-0">
+          <h2 id={id} className="font-display font-extrabold tracking-tight text-base sm:text-lg text-slate-900 dark:text-white">{title}</h2>
+          {hint && <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">{hint}</p>}
+        </div>
+        {right && <div className="shrink-0">{right}</div>}
+      </div>
+      {children}
+    </section>
+  );
+};
+
 /* ------------------------------------------------------------------ stat card */
 export const StatCard: React.FC<{
   tone: Tone;
