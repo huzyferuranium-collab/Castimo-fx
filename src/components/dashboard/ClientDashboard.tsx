@@ -29,7 +29,6 @@ import { WelcomeHero, StatCard, ProgressRing, ActionCard, IconTile, SectionBanne
 import { ART, ArtName } from './Illustrations';
 import { TradePerformance } from './TradeCharts';
 import { AnimatedNumber } from '../common/AnimatedNumber';
-import '../../styles/neon-dark.css';
 
 import {
   Wallet,
@@ -351,7 +350,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   ];
 
   return (
-    <div className="neo flex flex-col lg:flex-row items-start gap-1 lg:gap-6 max-w-7xl mx-auto pb-12">
+    <div className="flex flex-col lg:flex-row items-start gap-1 lg:gap-6 max-w-7xl mx-auto pb-12">
       {/* Clean, Minimal Sidebar Navigation */}
       <SidebarNav
         groups={navGroups}
@@ -477,7 +476,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
             <div className="space-y-4">
             {/* 1. WELCOME BANNER: who you are, where things stand, what to do next (all real status) */}
             <WelcomeHero
-              shapes="neon"
               name={(userProfile?.displayName || 'Trader').split(' ')[0]}
               state={isConnected ? 'connected' : pending?.kind === 'working' ? 'connecting' : pending?.kind === 'failed' ? 'failed' : 'disconnected'}
               headline={
