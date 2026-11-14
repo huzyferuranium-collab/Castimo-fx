@@ -29,13 +29,27 @@ const GLOW: Record<Tone, string> = {
 };
 
 export const IconTile: React.FC<{ tone: Tone; children: React.ReactNode; size?: string }> = ({ tone, children, size = 'w-11 h-11' }) => (
-  <span className={`${size} shrink-0 rounded-2xl bg-gradient-to-br ${TONES[tone]} text-white flex items-center justify-center shadow-lg ring-1 ring-white/30 relative overflow-hidden`}>
+  <span className={`icon-tile ${size} shrink-0 rounded-2xl bg-gradient-to-br ${TONES[tone]} text-white flex items-center justify-center shadow-lg ring-1 ring-white/30 relative overflow-hidden`}>
     <span className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/35 to-transparent" />
     <span className="relative [&_*]:!text-white">{children}</span>
   </span>
 );
 
 /* ------------------------------------------------------------------ welcome banner */
+/** The floating shapes' colours. The coin stays gold in both, like the main buttons. */
+const SHAPES = {
+  brand: {
+    orb: { from: '#ffe1e7', mid: '#ff5a6b', to: '#a00a1f' },
+    cube: { top: '#f5d0fe', left: '#853bff', right: '#3a1590' },
+    smallOrb: { from: '#e0f2fe', mid: '#38bdf8', to: '#1746d2' },
+  },
+  neon: {
+    orb: { from: '#ffe0ff', mid: '#e83eff', to: '#6d1280' },
+    cube: { top: '#cffafe', left: '#06d6e9', right: '#0a6f7c' },
+    smallOrb: { from: '#e0fbff', mid: '#06d6e9', to: '#0b7c8a' },
+  },
+} as const;
+
 export interface WelcomeHeroProps {
   name: string;
   state: 'connected' | 'connecting' | 'failed' | 'disconnected';
@@ -46,21 +60,25 @@ export interface WelcomeHeroProps {
   secondary?: { label: string; onClick: () => void };
   /** Bell / notification control, rendered top-right. */
   topRight?: React.ReactNode;
+  /** Colours of the floating shapes: the brand set, or cyan and magenta. */
+  shapes?: keyof typeof SHAPES;
 }
 
-export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail, chips, primary, secondary, topRight }) => (
+export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail, chips, primary, secondary, topRight, shapes = 'brand' }) => {
+  const c = SHAPES[shapes];
+  return (
   <section className="aurora on-aurora relative overflow-hidden rounded-[24px] sm:rounded-[28px] p-4 sm:p-7">
     {/* floating 3D-style shapes: a full scene from sm up, a small cluster beside the bell on phones */}
     <div aria-hidden className="pointer-events-none absolute inset-0 hidden sm:block">
-      <Orb size={118} from="#ffe1e7" mid="#ff5a6b" to="#a00a1f" className="absolute right-[34%] -top-5 animate-float-a" />
-      <Cube size={112} top="#f5d0fe" left="#853bff" right="#3a1590" className="absolute right-[19%] top-[72px] animate-float-b" />
+      <Orb size={118} {...c.orb} className="absolute right-[34%] -top-5 animate-float-a" />
+      <Cube size={112} {...c.cube} className="absolute right-[19%] top-[72px] animate-float-b" />
       <Ring size={176} a="#06d6e9" b="#e83eff" className="absolute right-[3%] bottom-0 animate-float-c opacity-95" />
       <Coin size={60} className="absolute right-[44%] bottom-5 animate-float-a" />
-      <Orb size={42} from="#e0f2fe" mid="#38bdf8" to="#1746d2" className="absolute right-[2%] top-[42%] animate-float-c" />
+      <Orb size={42} {...c.smallOrb} className="absolute right-[2%] top-[42%] animate-float-c" />
     </div>
     <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-24 sm:hidden">
-      <Orb size={44} from="#ffe1e7" mid="#ff5a6b" to="#a00a1f" className="absolute right-[80px] top-3 animate-float-a" />
-      <Cube size={38} top="#f5d0fe" left="#853bff" right="#3a1590" className="absolute right-[126px] top-9 animate-float-b" />
+      <Orb size={44} {...c.orb} className="absolute right-[80px] top-3 animate-float-a" />
+      <Cube size={38} {...c.cube} className="absolute right-[126px] top-9 animate-float-b" />
       <Coin size={30} className="hidden min-[360px]:block absolute right-[166px] top-4 animate-float-c" />
     </div>
 
@@ -118,7 +136,8 @@ export const WelcomeHero: React.FC<WelcomeHeroProps> = ({ name, headline, detail
       )}
     </div>
   </section>
-);
+  );
+};
 
 /* ------------------------------------------------------------------ a titled group of related cards */
 export const DashGroup: React.FC<{ title: string; hint?: string; right?: React.ReactNode; children: React.ReactNode }> = ({ title, hint, right, children }) => {
@@ -200,7 +219,7 @@ export const ProgressRing: React.FC<{ value: number; size?: number; children?: R
   const v = Math.max(0, Math.min(1, value));
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
-      <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90" aria-hidden>
+      <svg viewBox="0 0 100 100" className="progress-ring w-full h-full -rotate-90" aria-hidden>
         <defs>
           <linearGradient id={`${id}g`} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stopColor="#f52236" />

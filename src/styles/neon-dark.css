@@ -1,0 +1,110 @@
+/* ========================================================
+   DARK THEME SAMPLE: deep black, cyan and magenta (gold buttons kept).
+   Applies only in the dark theme, inside an element with class "neo" (the client
+   dashboard), so the rest of the site and the whole light theme are untouched.
+
+   The rule of thumb: black and white carry the page, cyan is the working accent
+   (links, the selected page, icons), magenta is a spark (glows only, never text and
+   never beside a money figure). Green and red stay for profit and loss alone.
+   ======================================================== */
+
+html.dark .neo {
+  --neo-cyan: #06d6e9;
+  --neo-magenta: #e83eff;
+  --neo-card: #07080b;
+  --neo-line: #1c1f26;
+  --rim-accent: 6, 214, 233;
+}
+
+/* the page: one step deeper than the cards */
+html.dark:has(.neo) body {
+  background-color: #000000 !important;
+  background-image: none !important;
+}
+
+/* cards: near-black with a cool hairline */
+html.dark
+  .neo
+  :is(.rounded-xl, .rounded-2xl, .rounded-3xl, [class*='rounded-3xl'], [class*='rounded-2xl']):is(
+    .bg-slate-900,
+    [class*='dark:bg-slate-900'],
+    [class*='bg-slate-900/']
+  ):not(button, input, select, textarea, tr, td, th, thead, tbody, .absolute, .fixed, .sticky, .no-glass) {
+  background: var(--neo-card) !important;
+  box-shadow: inset 0 0 0 1px var(--neo-line) !important;
+}
+html.dark .neo button[class*='dark:bg-slate-900']:not(.nav-active) {
+  background: var(--neo-card) !important;
+  box-shadow: inset 0 0 0 1px var(--neo-line) !important;
+}
+html.dark .neo :not(input, select, textarea, button, svg, path)[class*='border-slate-'] {
+  border-color: var(--neo-line) !important;
+}
+html.dark .neo [class*='divide-slate'] > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--neo-line) !important;
+}
+
+/* glows: every card's corner glow runs cyan to magenta, kept soft */
+html.dark .neo .bloom {
+  background-image: linear-gradient(135deg, var(--neo-cyan), var(--neo-magenta)) !important;
+  opacity: 0.26 !important;
+}
+
+/* welcome banner: black, lit by a cyan glow below and a magenta glow above */
+html.dark .neo .aurora {
+  background-image:
+    radial-gradient(55% 95% at 92% -10%, rgba(232, 62, 255, 0.42), transparent 62%),
+    radial-gradient(60% 100% at 6% 115%, rgba(6, 214, 233, 0.36), transparent 62%),
+    linear-gradient(120deg, #04050a, #0a0c14 55%, #06070c) !important;
+  box-shadow: inset 0 0 0 1px rgba(6, 214, 233, 0.28), 0 30px 70px -44px rgba(6, 214, 233, 0.55), 0 30px 70px -50px rgba(232, 62, 255, 0.5) !important;
+}
+html.dark .neo .aurora::after {
+  background: radial-gradient(60% 90% at 85% 0%, rgba(255, 255, 255, 0.07), transparent 60%) !important;
+}
+
+/* cyan is the working accent: links and small buttons */
+html.dark .neo :is([class*='text-violet-'], [class*='text-sky-3'], [class*='text-blue-6'], .text-brand-electric) {
+  color: var(--neo-cyan) !important;
+}
+html.dark .neo :is([class*='bg-violet-500/'], [class*='bg-sky-500/']) {
+  background-color: rgba(6, 214, 233, 0.1) !important;
+}
+
+/* icon tiles: black with a cyan icon, where each had its own colour */
+html.dark .neo .icon-tile {
+  background-image: linear-gradient(160deg, #0d1a1f, #06090c) !important;
+  box-shadow: inset 0 0 0 1px rgba(6, 214, 233, 0.45), 0 0 18px -6px rgba(6, 214, 233, 0.6) !important;
+}
+html.dark .neo .icon-tile > span:first-child {
+  display: none;
+}
+html.dark .neo .icon-tile span svg,
+html.dark .neo .icon-tile span svg * {
+  color: var(--neo-cyan) !important;
+}
+
+/* the selected page in the menu: a cyan bar and icon */
+html.dark .neo .nav-active {
+  background-color: #0b1114 !important;
+  box-shadow: inset 2px 0 0 var(--neo-cyan) !important;
+}
+html.dark .neo .nav-active svg,
+html.dark .neo .nav-active svg * {
+  color: var(--neo-cyan) !important;
+}
+
+/* the win-rate ring runs cyan to magenta */
+html.dark .neo .progress-ring stop:nth-child(1) {
+  stop-color: var(--neo-magenta);
+}
+html.dark .neo .progress-ring stop:nth-child(2) {
+  stop-color: #7a8cff;
+}
+html.dark .neo .progress-ring stop:nth-child(3) {
+  stop-color: var(--neo-cyan);
+}
+
+/* the free-margin bar */
+html.dark .neo .h-1\.5 > [class*='bg-gradient-to-r'] {
+  background-image: linear-gradient(90deg, var(--neo-cyan), #7a8cff) !important;
+}
