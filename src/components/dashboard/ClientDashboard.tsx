@@ -62,6 +62,9 @@ interface ClientDashboardProps {
   onNavigateToYieldPool?: () => void;
 }
 
+/** Lots as the broker shows them: at most two decimals, no floating-point tail (0.15000000000000002 -> 0.15). */
+const formatLots = (v: number): string => String(Number((Number(v) || 0).toFixed(2)));
+
 export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   onNavigateToReferrals,
   onNavigateToYieldPool,
@@ -280,6 +283,8 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   const hasPendingShare = !isSubscriber && (account.unpaidProfitShareUsdt || 0) > 0;
   const openTrades = trades.filter((t) => t.status === 'OPEN');
   const openTradesCount = Math.max(openTrades.length, openReported);
+  // The performance card draws only closed trades, so the layout makes room for it only when there are some.
+  const hasClosedTrades = trades.some((t) => t.status === 'CLOSED');
   const openDetailsMissing = openReported > openTrades.length;
   // The total is only shown when every open trade's own profit was read. Otherwise a dash, never a made-up zero.
   const floatingKnown = !openDetailsMissing && openTrades.every((t) => t.pnlKnown !== false);
@@ -532,142 +537,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
               }
             />
 
-            {/* 2. LIVE ACCOUNT FIGURES (real broker data; hidden until an account is linked) */}
-            {(isConnected || isUserAdmin) && (
-              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
-                <StatCard tone="royal" art="coins" icon={<Wallet className="w-5 h-5" />} label="Balance" value={account.balance} />
-                <StatCard
-                  tone="violet"
-                  art="gem"
-                  icon={<TrendingUp className="w-5 h-5" />}
-                  label="Equity"
-                  value={account.equity}
-                  footer={
-                    isConnected ? (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setIsSavingEquity(true);
-                          try {
-                            await tradingEngine.refreshAccountFromBroker();
-                          } finally {
-                            setIsSavingEquity(false);
-                          }
-                        }}
-                        className="inline-flex items-center gap-1 font-bold text-violet-600 dark:text-violet-300 hover:underline cursor-pointer"
-                        title="Re-read balance and equity from your broker"
-                      >
-                        <RefreshCw className={`w-3 h-3 ${isSavingEquity ? 'animate-spin' : ''}`} />
-                        {isSavingEquity ? 'Refreshing…' : 'Refresh from broker'}
-                      </button>
-                    ) : undefined
-                  }
-                />
-                <StatCard
-                  tone="aqua"
-                  art="shield"
-                  icon={<Shield className="w-5 h-5" />}
-                  label="Free margin"
-                  value={account.freeMargin}
-                  share={account.equity > 0 ? account.freeMargin / account.equity : null}
-                  footer={account.equity > 0 ? 'Share of your equity that is free' : undefined}
-                />
-                <StatCard
-                  tone={floatingPnl === null || floatingPnl >= 0 ? 'mint' : 'ruby'}
-                  art="orbit"
-                  icon={<Activity className="w-5 h-5" />}
-                  label="Floating P/L"
-                  value={floatingPnl}
-                  signed
-                  valueClass={floatingPnl === null ? '' : floatingPnl >= 0 ? '!text-emerald-600 dark:!text-emerald-300' : '!text-rose-600 dark:!text-rose-300'}
-                  footer={
-                    <>
-                      {`${openTradesCount} open trade${openTradesCount === 1 ? '' : 's'}`}
-                      {floatingFromAccount !== null && (
-                        <span className="block">Worked out from your account: equity minus balance</span>
-                      )}
-                      {floatingPnl === null && openTradesCount > 0 && (
-                        <span className="block">Not available from the broker right now</span>
-                      )}
-                    </>
-                  }
-                />
-              </div>
-            )}
-
-            {/* 3. YOUR PLAN AT A GLANCE (clients only: an admin account has no plan to show) */}
-            {!isUserAdmin && (
-            <div>
-              <div
-                className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-4 sm:p-6 border border-transparent"
-                style={{ ['--rim-accent' as string]: '168,85,247' }}
-              >
-                <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-fuchsia-400 via-violet-500 to-indigo-500 opacity-35 bloom" />
-                {planView === undefined ? (
-                  <div className="relative flex items-center gap-4">
-                    <div className="w-24 h-24 rounded-full shimmer" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 w-1/2 rounded-full shimmer" />
-                      <div className="h-3 w-2/3 rounded-full shimmer" />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="relative flex items-center gap-3 sm:gap-5">
-                    {isSubscriber ? (
-                      <ProgressRing value={(planView?.subscription?.daysLeft ?? 0) / (planView?.price.periodDays || 30)} size={92}>
-                        <AnimatedNumber value={planView?.subscription?.daysLeft ?? 0} decimals={0} prefix="" className="font-display font-extrabold text-2xl text-slate-900 dark:text-white" />
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">days left</span>
-                      </ProgressRing>
-                    ) : (
-                      (() => {
-                        const PlanArt = hasPendingShare ? ART.clock : ART.medal;
-                        return <PlanArt size={96} className="shrink-0 animate-float-a w-16 h-16 sm:w-24 sm:h-24" />;
-                      })()
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Your plan</div>
-                      <div className="font-display font-extrabold text-lg sm:text-xl text-slate-900 dark:text-white mt-0.5">
-                        {isSubscriber ? 'Monthly Subscription' : planView?.model === 'profit_share' ? '50% Profit Share' : planView?.available ? 'No plan chosen yet' : 'Service plan'}
-                      </div>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-                        {isSubscriber
-                          ? subscriptionRunning
-                            ? 'Active. Nothing is owed on your profits while it runs.'
-                            : 'Not active. Pay for the plan to resume copying.'
-                          : planView?.model === 'profit_share'
-                            ? hasPendingShare
-                              ? `$${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT is due on your latest invoice.`
-                              : 'All settled. You pay 50% of new profit only.'
-                            : planView?.available
-                              ? 'Choose Monthly or 50% Profit Share to get started.'
-                              : 'Open the plan page to see how you pay.'}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {hasPendingShare && (
-                          <button
-                            type="button"
-                            onClick={() => setShowPaymentModal(true)}
-                            className="btn-gold px-4 py-2 rounded-xl font-extrabold text-xs cursor-pointer"
-                          >
-                            Pay ${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setActiveSection('plan')}
-                          className="px-4 py-2 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 text-violet-700 dark:text-violet-200 font-bold text-xs transition cursor-pointer"
-                        >
-                          {planView?.model ? 'Manage plan' : planView?.available ? 'Choose plan' : 'Open plan page'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            )}
-
-            {/* 2. COMPACT AI TRADING ASSISTANT (ESSENTIAL CENTERPIECE OF AI DASHBOARD) */}
+            {/* 2. ANYTHING THAT NEEDS THE CLIENT'S ATTENTION, straight under the banner */}
             {!planChosen && !isConnected && (
               <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <p className="text-xs">Choose a service plan (Monthly or 50% Profit Share) before connecting your MT5 account.</p>
@@ -734,8 +604,204 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
               </div>
             )}
 
-            {/* Performance charts: drawn only from your real trades, absent until there are some */}
-            <TradePerformance trades={trades} />
+            {/* 3. LIVE ACCOUNT FIGURES (real broker data; hidden until an account is linked) */}
+            {(isConnected || isUserAdmin) && (
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+                <StatCard
+                  tone="royal"
+                  art="coins"
+                  icon={<Wallet className="w-5 h-5" />}
+                  label="Balance"
+                  value={account.balance}
+                  footer={isConnected ? `MT5 #${account.accountNumber}` : undefined}
+                />
+                <StatCard
+                  tone="violet"
+                  art="gem"
+                  icon={<TrendingUp className="w-5 h-5" />}
+                  label="Equity"
+                  value={account.equity}
+                  footer={
+                    isConnected ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setIsSavingEquity(true);
+                          try {
+                            await tradingEngine.refreshAccountFromBroker();
+                          } finally {
+                            setIsSavingEquity(false);
+                          }
+                        }}
+                        className="inline-flex items-center gap-1 font-bold text-violet-600 dark:text-violet-300 hover:underline cursor-pointer"
+                        title="Re-read balance and equity from your broker"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isSavingEquity ? 'animate-spin' : ''}`} />
+                        {isSavingEquity ? 'Refreshing…' : 'Refresh from broker'}
+                      </button>
+                    ) : undefined
+                  }
+                />
+                <StatCard
+                  tone="aqua"
+                  art="shield"
+                  icon={<Shield className="w-5 h-5" />}
+                  label="Free margin"
+                  value={account.freeMargin}
+                  share={account.equity > 0 ? account.freeMargin / account.equity : null}
+                  footer={account.equity > 0 ? 'Share of your equity that is free' : undefined}
+                />
+                <StatCard
+                  tone={floatingPnl === null || floatingPnl >= 0 ? 'mint' : 'ruby'}
+                  art="orbit"
+                  icon={<Activity className="w-5 h-5" />}
+                  label="Floating P/L"
+                  value={floatingPnl}
+                  signed
+                  valueClass={floatingPnl === null ? '' : floatingPnl >= 0 ? '!text-emerald-600 dark:!text-emerald-300' : '!text-rose-600 dark:!text-rose-300'}
+                  footer={
+                    <>
+                      {`${openTradesCount} open trade${openTradesCount === 1 ? '' : 's'}`}
+                      {floatingFromAccount !== null && (
+                        <span className="block">Worked out from your account: equity minus balance</span>
+                      )}
+                      {floatingPnl === null && openTradesCount > 0 && (
+                        <span className="block">Not available from the broker right now</span>
+                      )}
+                    </>
+                  }
+                />
+              </div>
+            )}
+
+            {/* 4. PERFORMANCE beside PLAN and RECENT ACTIVITY on wide screens; one column on phones.
+                The charts are drawn only from your real trades and are absent until there are some. */}
+            <div className={`grid grid-cols-1 gap-4 ${hasClosedTrades ? 'xl:grid-cols-3' : trades.length > 0 ? 'lg:grid-cols-2 items-start' : ''}`}>
+              {hasClosedTrades && (
+                <div className="xl:col-span-2 min-w-0 [&>div]:h-full">
+                  <TradePerformance trades={trades} />
+                </div>
+              )}
+              <div className={hasClosedTrades ? 'space-y-4 min-w-0' : 'contents'}>
+                {/* YOUR PLAN AT A GLANCE (clients only: an admin account has no plan to show) */}
+                {!isUserAdmin && (
+                <div>
+                  <div
+                    className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-4 sm:p-6 border border-transparent"
+                    style={{ ['--rim-accent' as string]: '168,85,247' }}
+                  >
+                    <div aria-hidden className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-gradient-to-br from-fuchsia-400 via-violet-500 to-indigo-500 opacity-35 bloom" />
+                    {planView === undefined ? (
+                      <div className="relative flex items-center gap-4">
+                        <div className="w-24 h-24 rounded-full shimmer" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 w-1/2 rounded-full shimmer" />
+                          <div className="h-3 w-2/3 rounded-full shimmer" />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="relative flex items-center gap-3 sm:gap-5">
+                        {isSubscriber ? (
+                          <ProgressRing value={(planView?.subscription?.daysLeft ?? 0) / (planView?.price.periodDays || 30)} size={92}>
+                            <AnimatedNumber value={planView?.subscription?.daysLeft ?? 0} decimals={0} prefix="" className="font-display font-extrabold text-2xl text-slate-900 dark:text-white" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">days left</span>
+                          </ProgressRing>
+                        ) : (
+                          (() => {
+                            const PlanArt = hasPendingShare ? ART.clock : ART.medal;
+                            return <PlanArt size={96} className="shrink-0 animate-float-a w-16 h-16 sm:w-24 sm:h-24" />;
+                          })()
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Your plan</div>
+                          <div className="font-display font-extrabold text-lg sm:text-xl text-slate-900 dark:text-white mt-0.5">
+                            {isSubscriber ? 'Monthly Subscription' : planView?.model === 'profit_share' ? '50% Profit Share' : planView?.available ? 'No plan chosen yet' : 'Service plan'}
+                          </div>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
+                            {isSubscriber
+                              ? subscriptionRunning
+                                ? 'Active. Nothing is owed on your profits while it runs.'
+                                : 'Not active. Pay for the plan to resume copying.'
+                              : planView?.model === 'profit_share'
+                                ? hasPendingShare
+                                  ? `$${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT is due on your latest invoice.`
+                                  : 'All settled. You pay 50% of new profit only.'
+                                : planView?.available
+                                  ? 'Choose Monthly or 50% Profit Share to get started.'
+                                  : 'Open the plan page to see how you pay.'}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {hasPendingShare && (
+                              <button
+                                type="button"
+                                onClick={() => setShowPaymentModal(true)}
+                                className="btn-gold px-4 py-2 rounded-xl font-extrabold text-xs cursor-pointer"
+                              >
+                                Pay ${(account.unpaidProfitShareUsdt || 0).toFixed(2)} USDT
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setActiveSection('plan')}
+                              className="px-4 py-2 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 text-violet-700 dark:text-violet-200 font-bold text-xs transition cursor-pointer"
+                            >
+                              {planView?.model ? 'Manage plan' : planView?.available ? 'Choose plan' : 'Open plan page'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                )}
+
+                {/* RECENT ACTIVITY (your real mirrored trades; nothing is shown until there are some) */}
+                {trades.length > 0 && (
+                  <div className="rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-4 sm:p-5 border border-transparent" style={{ ['--rim-accent' as string]: '79,125,255' }}>
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                      <h3 className="font-display font-extrabold text-base text-slate-900 dark:text-white">Recent activity</h3>
+                      <button type="button" onClick={() => setActiveSection('history')} className="text-xs font-bold text-blue-600 dark:text-sky-300 hover:underline cursor-pointer">
+                        View all
+                      </button>
+                    </div>
+                    <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {[...trades]
+                        .sort((a, b) => Date.parse(b.openTime) - Date.parse(a.openTime))
+                        .slice(0, 5)
+                        .map((t) => {
+                          const pnl = t.pnl || 0;
+                          return (
+                            <li key={t.id} className="flex items-center gap-3 py-2.5">
+                              <span
+                                className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center ${
+                                  t.direction === 'SELL' ? 'bg-violet-500/15 text-violet-600 dark:text-violet-300' : 'bg-sky-500/15 text-sky-600 dark:text-sky-300'
+                                }`}
+                              >
+                                {t.direction === 'BUY' ? <ArrowUpRight className="w-4 h-4" /> : t.direction === 'SELL' ? <ArrowDownRight className="w-4 h-4" /> : <Activity className="w-4 h-4" />}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold text-slate-900 dark:text-white truncate">{t.symbol}</span>
+                                  {t.status === 'OPEN' && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">Open</span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                                  {t.direction ? `${t.direction === 'BUY' ? 'Buy' : 'Sell'} · ` : ''}
+                                  {formatLots(t.volume)} lots{t.status === 'CLOSED' ? ' · Closed' : ''}
+                                </div>
+                              </div>
+                              <div className={`font-mono tabular-nums text-sm font-extrabold shrink-0 ${t.pnlKnown === false ? 'text-slate-400' : pnl >= 0 ? '!text-emerald-600 dark:!text-emerald-300' : '!text-rose-600 dark:!text-rose-300'}`}>
+                                {t.pnlKnown === false ? '—' : `${pnl >= 0 ? '+' : '-'}$${Math.abs(pnl).toFixed(2)}`}
+                              </div>
+                            </li>
+                          );
+                        })}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
 
             <RobotConsole />
 
@@ -765,38 +831,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
               );
             })()}
 
-            {/* 5. RECENT ACTIVITY (your real mirrored trades; nothing is shown until there are some) */}
-            {trades.length > 0 && (
-              <div className="rounded-2xl sm:rounded-3xl bg-white dark:bg-slate-900 p-4 sm:p-6 border border-transparent" style={{ ['--rim-accent' as string]: '79,125,255' }}>
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <h3 className="font-display font-extrabold text-base text-slate-900 dark:text-white">Recent activity</h3>
-                  <button type="button" onClick={() => setActiveSection('history')} className="text-xs font-bold text-blue-600 dark:text-sky-300 hover:underline cursor-pointer">
-                    View all
-                  </button>
-                </div>
-                <ul className="space-y-1.5">
-                  {[...trades]
-                    .sort((a, b) => Date.parse(b.openTime) - Date.parse(a.openTime))
-                    .slice(0, 4)
-                    .map((t) => (
-                      <li key={t.id} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 hover:bg-indigo-500/[0.06] transition">
-                        <IconTile tone={t.direction === 'BUY' ? 'mint' : t.direction === 'SELL' ? 'ruby' : 'mint'} size="w-9 h-9">
-                          {t.direction === 'BUY' ? <ArrowUpRight className="w-4 h-4" /> : t.direction === 'SELL' ? <ArrowDownRight className="w-4 h-4" /> : <Activity className="w-4 h-4" />}
-                        </IconTile>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-bold text-slate-900 dark:text-white">{t.symbol}</div>
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                            {t.direction ? `${t.direction} · ` : ''}{t.volume} lots · {t.status === 'OPEN' ? 'Open' : 'Closed'}
-                          </div>
-                        </div>
-                        <div className={`font-mono text-sm font-extrabold ${(t.pnl || 0) >= 0 ? '!text-emerald-600 dark:!text-emerald-300' : '!text-rose-600 dark:!text-rose-300'}`}>
-                          {t.pnlKnown === false ? '—' : `${(t.pnl || 0) >= 0 ? '+' : ''}$${(t.pnl || 0).toFixed(2)}`}
-                        </div>
-                      </li>
-                    ))}
-                </ul>
-              </div>
-            )}
           </div>
         )}
 
