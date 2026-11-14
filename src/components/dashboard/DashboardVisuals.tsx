@@ -227,8 +227,8 @@ export const ActionCard: React.FC<{ tone: Tone; icon: React.ReactNode; title: st
       style={{ ['--rim-accent' as string]: GLOW[tone] }}
     >
       <div aria-hidden className={`absolute -right-6 -bottom-8 w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br ${TONES[tone]} opacity-35 bloom group-hover:opacity-60 transition-opacity`} />
-      {Art && <Art size={84} className="hidden sm:block absolute -right-2 -bottom-3 group-hover:animate-float-c pointer-events-none transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3" />}
-      {Art && <Art size={46} className="sm:hidden absolute right-1.5 top-1.5 pointer-events-none" />}
+      {Art && <Art size={68} className="hidden sm:block absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3" />}
+      {Art && <Art size={40} className="sm:hidden absolute right-2 top-2 pointer-events-none" />}
       {/* phones: icon above the words, so two cards fit side by side; sm and up: icon beside the words */}
       <div className="relative flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-3 sm:pr-20">
         <IconTile tone={tone} size="w-9 h-9 sm:w-11 sm:h-11">{icon}</IconTile>
